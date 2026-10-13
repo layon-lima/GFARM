@@ -254,6 +254,18 @@ Não alterar a linguagem visual inteira sem pedido do usuário.
 - Nas páginas principais de PC, usar praticamente toda a largura disponível da janela, com margens laterais pequenas e consistentes.
 - Não impor limites fixos de `max-width` a páginas operacionais completas (Pesquisa, Movimentos, Pesagem, Cadastros, Aplicação, Relatórios e Inventário).
 - Tabelas e listas devem distribuir colunas conforme a largura realmente disponível, sem scroll horizontal desnecessário.
+
+### Movimentos no PC — layout compacto aprovado
+
+- Preservar a largura integral já alcançada na página **Movimentos**.
+- Para **Entrada / Compra / Nota Fiscal**, manter na primeira linha **Tipo e finalidade (à esquerda)** e **Documento fiscal (à direita)**, incluindo Número da NF, Fornecedor e Chave de acesso.
+- Na segunda linha, manter **Produto (à esquerda, largo)** e **Quantidade (à direita, compacto)** como cartões lado a lado.
+- Logo abaixo, **Localização** com Depósito e Gaveta lado a lado, usando a largura principal.
+- **Observações** e ações de registro devem ocupar o menor espaço vertical adequado; manter o **Resumo da movimentação** na lateral direita.
+- Não voltar a exibir a lista **Movimentações recentes** abaixo do formulário; o histórico dos documentos permanece preservado no backend.
+- A reorganização é visual e também deve preservar os campos e validações necessários a Saída, Transferência, Estorno e Entrada Manual; nunca contornar o motor oficial.
+- Priorizar o formulário inteiro visível no desktop quando a altura da janela permitir, sem esconder conteúdo ou prejudicar acessibilidade.
+
 - Não ocultar colunas, dados, filtros ou ações só para reduzir a largura; scroll interno somente quando os dados realmente excederem o espaço.
 - Não afetar o shell mobile/PWA, formulários modais ou telas que justificadamente exijam leitura estreita.
 - Corrigir preferencialmente o contêiner compartilhado e as tabelas, evitando remendos isolados por tela.

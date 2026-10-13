@@ -139,19 +139,6 @@ const MOVIMENTO_SUBTIPOS = {
 };
 
 
-const MOVIMENTO_SUBTIPO_LABELS = {
-  ENTRADA_COMPRA: 'Compra / NF',
-  DEVOLUCAO_ENTRADA: 'Devolução de entrada',
-  AJUSTE_POSITIVO: 'Ajuste positivo',
-  ENTRADA_SALDO_ADMIN: 'Entrada Manual de Saldo',
-  SAIDA_CONSUMO: 'Consumo',
-  DEVOLUCAO_SAIDA: 'Devolução de saída',
-  AJUSTE_NEGATIVO: 'Ajuste negativo',
-  TRANSFERENCIA: 'Transferência',
-  ESTORNO: 'Estorno',
-};
-
-
 function subtipoPadrao(tipo) {
   if (tipo === 'entrada') {
     return 'ENTRADA_COMPRA';
@@ -162,32 +149,6 @@ function subtipoPadrao(tipo) {
   }
 
   return '';
-}
-
-
-function TipoBadge({ tipo, transferencia = false }) {
-  const cfg = transferencia
-    ? TIPO_CONFIG.transferencia
-    : TIPO_CONFIG[tipo] || TIPO_CONFIG.saida;
-
-  const Icon = cfg.Icon;
-
-  const classes = transferencia
-    ? 'bg-secondary text-secondary-foreground'
-    : tipo === 'entrada'
-      ? 'bg-primary/10 text-primary'
-      : tipo === 'estorno'
-        ? 'bg-accent text-accent-foreground'
-        : 'bg-destructive/10 text-destructive';
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold ${classes}`}
-    >
-      <Icon className="h-3 w-3" />
-      {cfg.label}
-    </span>
-  );
 }
 
 
@@ -544,81 +505,6 @@ export default function Movimentacoes() {
       (g) =>
         g.id === form.gaveta_destino_id
     );
-
-
-  const documentosTransferencia =
-    useMemo(() => {
-      const tipos = new Map();
-
-      for (const mov of movimentacoes) {
-        const id =
-          mov.documento_id
-          || String(mov.id || '').split(':')[0];
-
-        if (!id) continue;
-
-        if (!tipos.has(id)) {
-          tipos.set(id, new Set());
-        }
-
-        tipos.get(id).add(mov.tipo);
-      }
-
-      return new Set(
-        [...tipos.entries()]
-          .filter(
-            ([, tiposMov]) =>
-              tiposMov.has('entrada')
-              && tiposMov.has('saida')
-          )
-          .map(([id]) => id)
-      );
-    }, [movimentacoes]);
-
-
-  const movimentosRecentes =
-    useMemo(() => {
-      const vistos = new Set();
-      const resultado = [];
-
-      for (const mov of movimentacoes) {
-        const documentoId =
-          mov.documento_id
-          || String(mov.id || '').split(':')[0];
-
-        const chave =
-          documentoId
-          || mov.id;
-
-        if (
-          chave
-          && vistos.has(chave)
-        ) {
-          continue;
-        }
-
-        if (chave) {
-          vistos.add(chave);
-        }
-
-        resultado.push({
-          ...mov,
-          transferencia:
-            documentosTransferencia.has(
-              documentoId
-            ),
-        });
-
-        if (resultado.length >= 8) {
-          break;
-        }
-      }
-
-      return resultado;
-    }, [
-      movimentacoes,
-      documentosTransferencia,
-    ]);
 
 
   function depositoLabel(dep) {
@@ -1045,8 +931,8 @@ export default function Movimentacoes() {
       disabled={nfe.importing || modoEntradaManual}
     >
       <div className="w-full min-w-0 space-y-3 p-3 lg:px-4 xl:px-5">
-        <Card className="border-border/70 p-3 shadow-sm sm:p-4">
-          <header className="mb-3">
+        <Card className="border-border/70 p-3 shadow-sm">
+          <header className="mb-2">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Movimentos
             </p>
@@ -1055,7 +941,7 @@ export default function Movimentacoes() {
               Movimentos
             </h1>
 
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-0.5 text-sm text-muted-foreground">
               Registre entradas, saídas, transferências e estornos de produtos no seu estoque.
             </p>
           </header>
@@ -1130,18 +1016,24 @@ export default function Movimentacoes() {
           />
         ) : (
         <Card className="overflow-hidden border-border/70">
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="border-b p-4 sm:p-5 lg:border-b-0 lg:border-r">
+          <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0 border-b p-3 lg:border-b-0 lg:border-r">
               <form
                 onSubmit={handleSubmit}
-                className="space-y-5"
+                className="space-y-2.5"
               >
+                {(form.tipo === 'entrada' || form.tipo === 'saida') && (
+                  <div className={`grid min-w-0 items-stretch gap-2.5 ${
+                    form.tipo === 'entrada' && form.subtipo === 'ENTRADA_COMPRA'
+                      ? 'lg:grid-cols-[minmax(260px,35%)_minmax(0,1fr)]'
+                      : ''
+                  }`}>
                 {(
                   form.tipo === 'entrada'
                   || form.tipo === 'saida'
                 ) && (
-                  <section className="rounded-xl border bg-card p-4 shadow-sm">
-                    <div className="mb-4 flex items-start gap-3">
+                  <section className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
+                    <div className="mb-2 flex items-start gap-2">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
                         1
                       </div>
@@ -1198,6 +1090,92 @@ export default function Movimentacoes() {
                       </p>
                     </div>
                   </section>
+                )}
+
+
+                    {(
+                      form.tipo === 'entrada'
+                      && form.subtipo === 'ENTRADA_COMPRA'
+                    ) && (
+                      <section className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
+                        <div className="mb-2 flex items-start gap-2">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                            4
+                          </div>
+
+                          <div>
+                            <h2 className="text-sm font-semibold">
+                              Documento fiscal
+                            </h2>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Preencha os dados da nota fiscal ou documento de origem
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="mv-nf">
+                              Número da NF
+                            </Label>
+
+                            <Input
+                              id="mv-nf"
+                              value={form.numero_nf}
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  numero_nf:
+                                    e.target.value,
+                                })
+                              }
+                              placeholder="Ex.: 000123456"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label htmlFor="mv-forn">
+                              Fornecedor
+                            </Label>
+
+                            <FornecedorCombobox
+                              id="mv-forn"
+                              value={form.fornecedor}
+                              onChange={(v) =>
+                                setForm({
+                                  ...form,
+                                  fornecedor: v,
+                                })
+                              }
+                              suggestions={fornecedores}
+                              placeholder="Nome / CNPJ"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label htmlFor="mv-chave">
+                              Chave de acesso
+                            </Label>
+
+                            <Input
+                              id="mv-chave"
+                              value={form.chave_acesso}
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  chave_acesso:
+                                    e.target.value,
+                                })
+                              }
+                              placeholder="44 dígitos"
+                              className="font-mono text-xs"
+                            />
+                          </div>
+                        </div>
+                      </section>
+                    )}
+
+                  </div>
                 )}
 
                 {form.tipo === 'estorno' ? (
@@ -1273,9 +1251,10 @@ export default function Movimentacoes() {
                   </div>
                 ) : (
                   <>
-                    <section className="rounded-xl border bg-card p-4 shadow-sm">
-                      <div className="mb-4 flex items-start gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                    <div className="grid min-w-0 gap-2.5 md:grid-cols-[minmax(0,2fr)_minmax(215px,1fr)]">
+                    <section className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
+                      <div className="mb-2 flex items-start gap-2">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
                           {form.tipo === 'entrada' || form.tipo === 'saida' ? '2' : '1'}
                         </div>
 
@@ -1284,12 +1263,12 @@ export default function Movimentacoes() {
                             Produto
                           </h2>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            Selecione o produto e informe a quantidade
+                            Selecione o produto
                           </p>
                         </div>
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+
                         <div className="space-y-1.5">
                           <Label>
                             Produto *
@@ -1318,6 +1297,18 @@ export default function Movimentacoes() {
                           />
                         </div>
 
+
+                    </section>
+                    <section className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
+                      <div className="mb-2 flex items-start gap-2">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                          {form.tipo === 'entrada' || form.tipo === 'saida' ? '3' : '2'}
+                        </div>
+                        <div>
+                          <h2 className="text-sm font-semibold">Quantidade</h2>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Informe a quantidade</p>
+                        </div>
+                      </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="mv-qtd">
                             Quantidade *
@@ -1352,8 +1343,9 @@ export default function Movimentacoes() {
                             )}
                           </div>
                         </div>
-                      </div>
+
                     </section>
+                    </div>
 
 
                     {form.tipo === 'transferencia' ? (
@@ -1520,10 +1512,10 @@ export default function Movimentacoes() {
                         </div>
                       </div>
                     ) : (
-                      <section className="rounded-xl border bg-card p-4 shadow-sm">
-                        <div className="mb-4 flex items-start gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                            {form.tipo === 'entrada' || form.tipo === 'saida' ? '3' : '2'}
+                      <section className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
+                        <div className="mb-2 flex items-start gap-2">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                            {form.tipo === 'entrada' && form.subtipo === 'ENTRADA_COMPRA' ? '5' : form.tipo === 'entrada' || form.tipo === 'saida' ? '4' : '3'}
                           </div>
 
                           <div>
@@ -1536,7 +1528,7 @@ export default function Movimentacoes() {
                           </div>
                         </div>
 
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className="grid gap-2.5 md:grid-cols-2">
                           <div className="space-y-1.5">
                             <Label>
                               Depósito *
@@ -1672,109 +1664,16 @@ export default function Movimentacoes() {
                       )}
 
 
-                    {(
-                      form.tipo === 'entrada'
-                      && form.subtipo === 'ENTRADA_COMPRA'
-                    ) && (
-                      <section className="rounded-xl border bg-card p-4 shadow-sm">
-                        <div className="mb-4 flex items-start gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                            4
-                          </div>
-
-                          <div>
-                            <h2 className="text-sm font-semibold">
-                              Documento fiscal
-                            </h2>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              Preencha os dados da nota fiscal ou documento de origem
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 lg:grid-cols-3">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="mv-nf">
-                              Número da NF
-                            </Label>
-
-                            <Input
-                              id="mv-nf"
-                              value={form.numero_nf}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  numero_nf:
-                                    e.target.value,
-                                })
-                              }
-                              placeholder="Ex.: 000123456"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <Label htmlFor="mv-forn">
-                              Fornecedor
-                            </Label>
-
-                            <FornecedorCombobox
-                              id="mv-forn"
-                              value={form.fornecedor}
-                              onChange={(v) =>
-                                setForm({
-                                  ...form,
-                                  fornecedor: v,
-                                })
-                              }
-                              suggestions={fornecedores}
-                              placeholder="Nome / CNPJ"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <Label htmlFor="mv-chave">
-                              Chave de acesso
-                            </Label>
-
-                            <Input
-                              id="mv-chave"
-                              value={form.chave_acesso}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  chave_acesso:
-                                    e.target.value,
-                                })
-                              }
-                              placeholder="44 dígitos"
-                              className="font-mono text-xs"
-                            />
-                          </div>
-                        </div>
-                      </section>
-                    )}
                   </>
                 )}
 
 
-                <section className="rounded-xl border bg-card p-4 shadow-sm">
-                  <div className="mb-4 flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                      {form.tipo === 'entrada' && form.subtipo === 'ENTRADA_COMPRA'
-                        ? '5'
-                        : form.tipo === 'entrada' || form.tipo === 'saida'
-                          ? '4'
-                          : '3'}
-                    </div>
-
-                    <div>
-                      <h2 className="text-sm font-semibold">
-                        Observações
-                      </h2>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Informações adicionais complementares sobre esta movimentação
-                      </p>
-                    </div>
+                <section className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
+                  <div className="mb-2">
+                    <h2 className="text-sm font-semibold">Observações</h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Informações adicionais complementares sobre esta movimentação
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -1787,7 +1686,8 @@ export default function Movimentacoes() {
 
                     <Textarea
                       id="mv-obs"
-                      rows={3}
+                      rows={1}
+                      className="min-h-10 resize-y"
                       value={form.observacao}
                       onChange={(e) =>
                         setForm({
@@ -1802,7 +1702,7 @@ export default function Movimentacoes() {
                 </section>
 
 
-                <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-2 border-t pt-2.5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     {(
                       form.tipo === 'entrada'
@@ -1859,19 +1759,19 @@ export default function Movimentacoes() {
             </div>
 
 
-            <aside className="bg-muted/5 p-4 sm:p-5">
+            <aside className="min-w-0 bg-muted/5 p-3">
               <div className="lg:sticky lg:top-24">
                 <h2 className="text-sm font-semibold">
                   Resumo da movimentação
                 </h2>
 
-                <div className="mt-3 space-y-3">
+                <div className="mt-2 space-y-2">
                   {form.tipo === 'estorno' ? (
-                    <div className="rounded-xl border bg-card p-4">
+                    <div className="rounded-xl border bg-card p-3">
                       {movEstorno ? (
                         <>
                           <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                               <Undo2 className="h-5 w-5" />
                             </div>
 
@@ -1912,9 +1812,9 @@ export default function Movimentacoes() {
                     </div>
                   ) : (
                     <>
-                      <div className="rounded-xl border bg-card p-4">
+                      <div className="rounded-xl border bg-card p-3">
                         <div className="flex items-start gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                             <Package className="h-5 w-5" />
                           </div>
 
@@ -1935,7 +1835,7 @@ export default function Movimentacoes() {
 
 
                       {subtipoAtual && (
-                        <div className="rounded-xl border bg-card px-4 py-3">
+                        <div className="rounded-xl border bg-card px-3 py-2.5">
                           <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                             Finalidade
                           </div>
@@ -1989,7 +1889,7 @@ export default function Movimentacoes() {
                       </div>
 
 
-                      <div className="rounded-xl border bg-card p-4">
+                      <div className="rounded-xl border bg-card p-3">
                         <div className="text-xs font-medium text-muted-foreground">
                           Localização
                         </div>
@@ -2050,13 +1950,13 @@ export default function Movimentacoes() {
                       </div>
 
 
-                      <div className="rounded-xl border bg-card p-4">
+                      <div className="rounded-xl border bg-card p-3">
                         <div className="text-xs font-medium text-muted-foreground">
                           Impacto da movimentação
                         </div>
 
-                        <div className="mt-3 flex items-center gap-3">
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
                             form.tipo === 'entrada'
                               ? 'bg-primary/10 text-primary'
                               : form.tipo === 'saida'
@@ -2107,7 +2007,7 @@ export default function Movimentacoes() {
                   )}
 
 
-                  <div className={`rounded-xl border p-4 ${
+                  <div className={`rounded-xl border p-3 ${
                     camposPendentes.length === 0
                       ? 'bg-primary/5'
                       : 'bg-muted/15'
@@ -2153,149 +2053,6 @@ export default function Movimentacoes() {
           </div>
         </Card>
         )}
-
-
-        <Card className="overflow-hidden border-border/70">
-          <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
-            <div>
-              <h2 className="font-semibold">
-                Movimentações recentes
-              </h2>
-
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Últimos documentos carregados no módulo
-              </p>
-            </div>
-
-            <span className="text-xs text-muted-foreground">
-              {movimentosRecentes.length} exibida(s)
-            </span>
-          </div>
-
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[780px] text-sm">
-              <thead className="bg-muted/30 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5 font-semibold">
-                    Data
-                  </th>
-
-                  <th className="px-4 py-2.5 font-semibold">
-                    Tipo
-                  </th>
-
-                  <th className="px-4 py-2.5 font-semibold">
-                    Produto
-                  </th>
-
-                  <th className="px-4 py-2.5 text-right font-semibold">
-                    Quantidade
-                  </th>
-
-                  <th className="px-4 py-2.5 font-semibold">
-                    Depósito
-                  </th>
-
-                  <th className="px-4 py-2.5 font-semibold">
-                    Documento
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y">
-                {movimentosRecentes.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-10 text-center text-sm text-muted-foreground"
-                    >
-                      Nenhuma movimentação encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  movimentosRecentes.map(
-                    (mov) => {
-                      const dep =
-                        depositos.find(
-                          (d) =>
-                            d.id === mov.deposito_id
-                        );
-
-                      return (
-                        <tr
-                          key={mov.id}
-                          className="transition-colors hover:bg-muted/20"
-                        >
-                          <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                            {mov.data
-                              ? new Date(mov.data).toLocaleString(
-                                  'pt-BR',
-                                  {
-                                    dateStyle: 'short',
-                                    timeStyle: 'short',
-                                  }
-                                )
-                              : '—'
-                            }
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <TipoBadge
-                              tipo={mov.tipo}
-                              transferencia={
-                                mov.transferencia
-                              }
-                            />
-
-                            {mov.tipo_movimento && (
-                              <div className="mt-1 text-[10px] text-muted-foreground">
-                                {MOVIMENTO_SUBTIPO_LABELS[
-                                  mov.tipo_movimento
-                                ] || mov.tipo_movimento}
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="font-medium">
-                              {mov.nome_produto || '—'}
-                            </div>
-
-                            {mov.codigo && (
-                              <div className="text-xs text-muted-foreground">
-                                {mov.codigo}
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                            {formatQtd(
-                              mov.quantidade || 0
-                            )}
-                            {' '}
-                            {mov.unidade || ''}
-                          </td>
-
-                          <td className="px-4 py-3 text-xs">
-                            {depositoLabel(dep)}
-                          </td>
-
-                          <td className="px-4 py-3 font-mono text-xs">
-                            {mov.numero
-                              || mov.referencia_externa
-                              || '—'
-                            }
-                          </td>
-                        </tr>
-                      );
-                    }
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
 
 
         {nfe.preview && (
