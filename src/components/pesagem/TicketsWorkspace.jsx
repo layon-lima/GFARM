@@ -1475,7 +1475,8 @@ export default function TicketsWorkspace({
               {balancaConectada ? 'Balança conectada' : 'Balança desconectada'}
             </Badge>
           </div>
-          <div className="space-y-3 p-3">
+
+          <div className="flex flex-1 flex-col gap-2.5 p-3">
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
               <p className="mb-1 text-xs text-muted-foreground">Peso em tempo real</p>
               <div className="flex items-center gap-2">
@@ -1498,57 +1499,89 @@ export default function TicketsWorkspace({
                 <span className="text-sm text-muted-foreground">kg</span>
               </div>
             </div>
-            <div className="space-y-1.5 border-t pt-3">
-              <div className="flex justify-between gap-2 text-xs font-semibold">
-                <span>1ª Pesagem</span>
-                <span className="text-muted-foreground">
-                  {ticketAtivo ? 'Confirmada' : capturaPendente?.etapa === 1 ? 'Aguardando confirmação' : 'Aguardando'}
+
+            <button
+              type="button"
+              onClick={() => selecionarEtapa(1)}
+              disabled={saving || lendo}
+              aria-pressed={etapaCaptura === 1}
+              title="Selecionar primeira pesagem para capturar novamente"
+              className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 ${
+                etapaCaptura === 1
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border bg-muted/20 hover:border-primary/50'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-semibold">1ª Pesagem</span>
+                <span className={ticketAtivo ? 'text-emerald-700' : 'text-muted-foreground'}>
+                  {ticketAtivo ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
-              <div className="rounded-lg bg-muted/30 px-3 py-3 text-right">
-                <div className="text-xl font-semibold tabular-nums">
-                  {ticketAtivo ? formatKg(primeiraPesagem) : capturaPendente?.etapa === 1 ? formatKg(capturaPendente.peso) : '—'}
-                </div>
-                {capturaPendente?.etapa === 1 && (
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatDateTime(capturaPendente.capturadoEm)}
-                  </span>
-                )}
+              <div className="mt-1 text-right text-xl font-semibold tabular-nums">
+                {ticketAtivo ? formatKg(primeiraPesagem) : '—'}
               </div>
-            </div>
-            <div className="space-y-1.5 border-t pt-3">
-              <div className="flex justify-between gap-2 text-xs font-semibold">
-                <span>2ª Pesagem</span>
-                <span className="text-muted-foreground">
-                  {segundaPesagem > 0 ? 'Confirmada' : capturaPendente?.etapa === 2 ? 'Aguardando confirmação' : 'Aguardando'}
+              {ticketAtivo && (
+                <span className="block text-right text-[11px] text-muted-foreground">
+                  Clique para refazer
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selecionarEtapa(2)}
+              disabled={saving || lendo || !ticketAtivo}
+              aria-pressed={etapaCaptura === 2}
+              title="Selecionar segunda pesagem para capturar novamente"
+              className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 ${
+                etapaCaptura === 2
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border bg-muted/20 hover:border-primary/50'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-semibold">2ª Pesagem</span>
+                <span className={segundaPesagem > 0 ? 'text-emerald-700' : 'text-muted-foreground'}>
+                  {segundaPesagem > 0 ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
-              <div className="rounded-lg bg-muted/30 px-3 py-3 text-right">
-                <div className="text-xl font-semibold tabular-nums">
-                  {segundaPesagem > 0 ? formatKg(segundaPesagem) : capturaPendente?.etapa === 2 ? formatKg(capturaPendente.peso) : '—'}
-                </div>
-                {(segundaRegistradaEm || capturaPendente?.etapa === 2) && (
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatDateTime(segundaRegistradaEm || capturaPendente?.capturadoEm)}
-                  </span>
-                )}
+              <div className="mt-1 text-right text-xl font-semibold tabular-nums">
+                {segundaPesagem > 0 ? formatKg(segundaPesagem) : '—'}
+              </div>
+              {segundaPesagem > 0 && (
+                <span className="block text-right text-[11px] text-muted-foreground">
+                  Clique para refazer
+                </span>
+              )}
+            </button>
+
+            <div className="rounded-lg border bg-muted/25 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold">Peso Líquido</span>
+                <span className="text-xl font-bold tabular-nums text-primary">
+                  {segundaPesagem > 0 && ticketAtivo
+                    ? formatKg(liquido)
+                    : '—'}
+                </span>
               </div>
             </div>
+
             <Button
               type="button"
-              className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+              className="mt-auto h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
               disabled={saving || lendo || etapaCaptura === 0}
-              onClick={capturarOuConfirmar}
+              onClick={capturarPeso}
             >
-              {aguardaConfirmacao ? <CheckCircle2 className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+              <Play className="mr-2 h-4 w-4" />
               {saving || lendo
                 ? 'Aguarde...'
                 : etapaCaptura === 0
-                  ? 'Duas pesagens confirmadas'
-                  : `${aguardaConfirmacao ? 'Confirmar' : 'Capturar'} ${etapaCaptura}ª Pesagem`}
+                  ? 'Selecione a pesagem para refazer'
+                  : `Capturar ${etapaCaptura}ª Pesagem`}
             </Button>
             <p className="text-center text-[11px] text-muted-foreground">
-              Um botão para capturar e confirmar cada pesagem.
+              Um clique registra o peso. Para corrigir, selecione a pesagem acima.
             </p>
           </div>
         </Card>
