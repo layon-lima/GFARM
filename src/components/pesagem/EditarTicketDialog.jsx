@@ -72,7 +72,9 @@ export default function EditarTicketDialog({ ticket, pedidos = [], pessoas = [],
 
   const taraNum = parseQtd(form.peso_tara);
   const brutoNum = parseQtd(form.peso_bruto);
-  const liquido = calcLiquido(brutoNum, taraNum);
+  const liquido = round3(
+    calcLiquido(brutoNum, taraNum) + (Number(ticket?.correcao_peso_kg) || 0)
+  );
   const liquidoAntigo = round3(Number(ticket?.peso_liquido) || 0);
   const pesosMudaram = isVenda && isFechado && round3(liquido) !== liquidoAntigo;
 
