@@ -51,4 +51,4 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install -r requirements.txt
       - run: python -m compileall app alembic/versions
-      - run: python -m unittest tests.test_cadastros_mobile tests.test_entrada_saldo_admin tests.test_entrada_saldo_mobile tests.test_maquina_sem_deposito tests.test_lavouras tests.test_custo_produto tests.test_permissoes_usuarios tests.test_import_pesagem_legada tests.test_relatorios_mobile tests.test_abastecimento_offline
+      - run: python -m unittest tests.test_cadastros_mobile tests.test_entrada_saldo_admin tests.test_entrada_saldo_mobile tests.test_maquina_sem_deposito tests.test_lavouras tests.test_custo_produto tests.test_permissoes_usuarios tests.test_import_pesagem_legada tests.test_pesagem_correcao tests.test_relatorios_mobile tests.test_abastecimento_offline
