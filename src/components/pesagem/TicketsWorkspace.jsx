@@ -7,7 +7,6 @@ import {
   LockKeyhole,
   Package,
   Play,
-  RefreshCw,
   Search,
   ShoppingCart,
   Sprout,
@@ -207,13 +206,6 @@ export default function TicketsWorkspace({
     capturaPendente?.etapa === etapaCaptura && etapaCaptura !== 0;
 
   const leituraBalanca = Number(ultimaLeitura?.peso);
-  const pesoDisponivel =
-    parseQtd(pesoAtual) > 0
-      ? parseQtd(pesoAtual)
-      : Number.isFinite(leituraBalanca)
-        ? leituraBalanca
-        : 0;
-
   const displayPeso =
     pesoAtual ||
     (
@@ -227,13 +219,16 @@ export default function TicketsWorkspace({
   const abertos = useMemo(
     () =>
       tickets
-        .filter((t) => t.status === 'aberto')
+        .filter((ticket) =>
+          ['aberto', 'fechado'].includes(ticket.status)
+          && (filtroStatus === 'todos' || ticket.status === filtroStatus)
+        )
         .sort(
           (a, b) =>
             new Date(b.data_abertura || 0) -
             new Date(a.data_abertura || 0)
         ),
-    [tickets]
+    [tickets, filtroStatus]
   );
 
   const abertosFiltrados = useMemo(() => {
