@@ -255,6 +255,17 @@ Não alterar a linguagem visual inteira sem pedido do usuário.
 - Não impor limites fixos de `max-width` a páginas operacionais completas (Pesquisa, Movimentos, Pesagem, Cadastros, Aplicação, Relatórios e Inventário).
 - Tabelas e listas devem distribuir colunas conforme a largura realmente disponível, sem scroll horizontal desnecessário.
 
+### Pesagem rodoviária — captura e confirmação
+
+- O módulo Tickets na Pesagem desktop usa três áreas na primeira faixa: **Dados do Ticket**, **Resumo do Ticket** e **Pesagem/Balança**; a lista em tabela de tickets fica abaixo ocupando toda a largura.
+- Na área da balança deve existir **apenas um botão principal**: **Capturar 1ª** → **Confirmar 1ª** → **Capturar 2ª** → **Confirmar 2ª**.
+- Captura é provisória e confirmação trava o peso; a 1ª confirmação abre o ticket pelo fluxo existente, a 2ª habilita o fechamento.
+- **Fechar e Salvar Ticket** fica no Resumo, e nunca pode ser acionado antes da confirmação das duas pesagens.
+- Configurar **correção de peso** como valor assinado (kg) diretamente no Resumo, **sem novo botão**; aplicar só ao peso líquido final, nunca adulterar leituras capturadas.
+- Persistir a correção no ticket com rastreabilidade; a baixa de estoque de vendas continua usando exclusivamente o fluxo oficial do motor e o peso líquido final corrigido.
+- Se a balança estiver desconectada, somente pessoas já autorizadas à digitação manual podem realizar captura informando o peso; nunca reutilizar leitura antiga para capturar.
+- Preservar tickets anteriores e os módulos Pedidos, Pagamentos, PDF e edição.
+
 ### Movimentos no PC — layout compacto aprovado
 
 - Preservar a largura integral já alcançada na página **Movimentos**.
