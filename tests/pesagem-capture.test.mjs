@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  atualizarTipoTicket,
   etapaCapturaPesagem,
   recapturaPrimeiraValida,
 } from '../src/lib/pesagemCaptureFlow.js';
@@ -75,4 +76,46 @@ test('recaptura valida preserva o ticket aberto', () => {
     segundaRegistrada: true,
     segundaPeso: 1600,
   }), true);
+});
+
+test('trocar o tipo preserva dados preenchidos comuns', () => {
+  const original = {
+    tipo: 'compra',
+    pedido_id: '',
+    motorista: 'Motorista Teste',
+    placa: 'ABC1D23',
+    produto_id: 'produto-1',
+    cliente_id: 'cliente-1',
+    transportadora_id: 'transportadora-1',
+    origem: 'Sede',
+    destino: 'Armazém',
+    observacao: 'Conferido',
+  };
+  const novo = atualizarTipoTicket(original, 'entrada_saida');
+  assert.equal(novo.tipo, 'entrada_saida');
+  for (const key of [
+    'motorista', 'placa', 'produto_id', 'cliente_id',
+    'transportadora_id', 'origem', 'destino', 'observacao',
+  ]) {
+    assert.equal(novo[key], original[key], key);
+  }
+  assert.deepEqual(original, {
+    ...original,
+    tipo: 'compra',
+  });
+});
+
+test('pedido de venda não permanece vinculado quando muda para outro tipo', () => {
+  const original = {
+    tipo: 'venda',
+    pedido_id: 'pedido-123',
+    motorista: 'Motorista Teste',
+    placa: 'ABC1D23',
+  };
+  const outroTipo = atualizarTipoTicket(original, 'compra');
+  assert.equal(outroTipo.pedido_id, '');
+  assert.equal(outroTipo.motorista, original.motorista);
+  assert.equal(outroTipo.placa, original.placa);
+  const venda = atualizarTipoTicket(original, 'venda');
+  assert.equal(venda.pedido_id, 'pedido-123');
 });
