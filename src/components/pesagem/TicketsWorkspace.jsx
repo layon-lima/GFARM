@@ -105,8 +105,7 @@ export default function TicketsWorkspace({
   const [ticketAtivoId, setTicketAtivoId] = useState('');
   const [ticketLocal, setTicketLocal] = useState(null);
   const [pesoAtual, setPesoAtual] = useState('');
-  const [capturaPendente, setCapturaPendente] = useState(null);
-  const [correcaoPeso, setCorrecaoPeso] = useState('0,00');
+  const [etapaSelecionada, setEtapaSelecionada] = useState(0);
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [segundaPesagem, setSegundaPesagem] = useState(0);
   const [segundaRegistradaEm, setSegundaRegistradaEm] = useState('');
@@ -116,8 +115,8 @@ export default function TicketsWorkspace({
   const [excluirTicket, setExcluirTicket] = useState(null);
 
   const ticketAtivo =
-    tickets.find((ticket) => ticket.id === ticketAtivoId) ||
-    (ticketLocal?.id === ticketAtivoId ? ticketLocal : null);
+    (ticketLocal?.id === ticketAtivoId ? ticketLocal : null) ||
+    tickets.find((ticket) => ticket.id === ticketAtivoId);
 
   const motoristas = useMemo(
     () => pessoas.filter((p) => p.is_motorista),
@@ -168,8 +167,7 @@ export default function TicketsWorkspace({
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
     setPesoAtual('');
-    setCapturaPendente(null);
-    setCorrecaoPeso(formatQtd(ticketAtivo?.correcao_peso_kg || 0));
+    setEtapaSelecionada(0);
   }, [ticketAtivo?.id]);
 
   const primeiraPesagem = useMemo(() => {
@@ -188,22 +186,17 @@ export default function TicketsWorkspace({
     (Number(ticketAtivo.peso_bruto) || 0) > 0 &&
     (Number(ticketAtivo.peso_tara) || 0) === 0;
 
-  const pesoLiquidoBruto = useMemo(() => {
+  const liquido = useMemo(() => {
     if (!ticketAtivo || !(segundaPesagem > 0)) return 0;
     return isInverted
       ? calcLiquido(ticketAtivo.peso_bruto || 0, segundaPesagem)
       : calcLiquido(segundaPesagem, ticketAtivo.peso_tara || 0);
   }, [ticketAtivo, segundaPesagem, isInverted]);
 
-  // Correção assinada: positiva acrescenta, negativa desconta, sem
-  // modificar as leituras originais da balança.
-  const correcaoAtual = parseQtd(correcaoPeso);
-  const liquido = Math.round((pesoLiquidoBruto + correcaoAtual) * 1000) / 1000;
-  const etapaCaptura = ticketAtivo
-    ? (segundaPesagem > 0 ? 0 : 2)
-    : 1;
-  const aguardaConfirmacao =
-    capturaPendente?.etapa === etapaCaptura && etapaCaptura !== 0;
+  // Automaticamente 1ª → 2ª; após a segunda, clique no campo
+  // correspondente para refazer uma leitura incorreta.
+  const etapaCaptura = etapaSelecionada ||
+    (!ticketAtivo ? 1 : segundaPesagem > 0 ? 0 : 2);
 
   const leituraBalanca = Number(ultimaLeitura?.peso);
   const displayPeso =
@@ -312,8 +305,7 @@ export default function TicketsWorkspace({
     setTicketLocal(null);
     setForm(EMPTY_FORM);
     setPesoAtual('');
-    setCapturaPendente(null);
-    setCorrecaoPeso('0,00');
+    setEtapaSelecionada(0);
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
     setTransportadoraFechamento('');
@@ -323,8 +315,7 @@ export default function TicketsWorkspace({
     setTicketLocal(null);
     setTicketAtivoId(ticket.id);
     setPesoAtual('');
-    setCapturaPendente(null);
-    setCorrecaoPeso(formatQtd(ticket.correcao_peso_kg || 0));
+    setEtapaSelecionada(0);
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
   }
@@ -337,7 +328,7 @@ export default function TicketsWorkspace({
       tipo: value,
     });
     setPesoAtual('');
-    setCapturaPendente(null);
+    setEtapaSelecionada(0);
   }
 
   function escolherPedido(value) {
@@ -662,31 +653,21 @@ export default function TicketsWorkspace({
     return true;
   }
 
-  async function capturarOuConfirmar() {
-    if (saving || lendo || etapaCaptura === 0) return;
+  function selecionarEtapa(etapa) {
+    if (saving || lendo) return;
+    if (etapa === 2 && !ticketAtivo) return;
+    setEtapaSelecionada(etapa);
+    // Nunca reutilizar manualmente a leitura anterior numa nova captura.
+    setPesoAtual('');
+  }
 
-    if (aguardaConfirmacao) {
-      if (etapaCaptura === 1) {
-        const salvo = await registrarPrimeiraPesagem(
-          capturaPendente.peso,
-          capturaPendente.capturadoEm
-        );
-        if (salvo) setCapturaPendente(null);
-      } else if (
-        registrarSegundaPesagem(
-          capturaPendente.peso,
-          capturaPendente.capturadoEm
-        )
-      ) {
-        setCapturaPendente(null);
-      }
-      return;
-    }
+  async function capturarPeso() {
+    if (saving || lendo || etapaCaptura === 0) return;
 
     setSaving(true);
     try {
-      // Leitura manual somente para o perfil autorizado. Para os demais,
-      // a leitura fresca vem obrigatoriamente do contexto da balança.
+      // Peso manual apenas para usuário autorizado; caso contrário,
+      // captura uma leitura válida e recente da balança conectada.
       const manual = podeDigitar && pesoAtual.trim()
         ? parseQtd(pesoAtual)
         : null;
@@ -705,36 +686,71 @@ export default function TicketsWorkspace({
         return;
       }
 
-      if (
-        etapaCaptura === 2 &&
-        Math.abs(Number(valor) - primeiraPesagem) < 0.0001
-      ) {
+      const pesoLido = Number(valor);
+      const capturadoEm = new Date().toISOString();
+
+      if (etapaCaptura === 1 && ticketAtivo) {
+        if (
+          segundaPesagem > 0 &&
+          Math.abs(pesoLido - segundaPesagem) < 0.0001
+        ) {
+          toast({
+            variant: 'destructive',
+            title: 'Pesagens iguais',
+            description: 'A primeira e a segunda pesagem devem ser diferentes.',
+          });
+          return;
+        }
+
+        // Só permite corrigir a 1ª pesagem enquanto o ticket está aberto.
+        const campoPeso = isInverted ? 'peso_bruto' : 'peso_tara';
+        const atualizado = await api.entities.TicketPesagem.update(
+          ticketAtivo.id,
+          { [campoPeso]: pesoLido }
+        );
+        setTicketLocal({ ...ticketAtivo, ...atualizado, [campoPeso]: pesoLido });
+        setEtapaSelecionada(0);
+        setPesoAtual('');
         toast({
-          variant: 'destructive',
-          title: 'Pesagens iguais',
-          description: 'A segunda pesagem deve ser diferente da primeira.',
+          title: '1ª pesagem atualizada',
+          description: formatKg(pesoLido),
         });
+        await onReload?.();
         return;
       }
 
-      setCapturaPendente({
-        etapa: etapaCaptura,
-        peso: Number(valor),
-        capturadoEm: new Date().toISOString(),
+      if (etapaCaptura === 1) {
+        const criado = await registrarPrimeiraPesagem(
+          pesoLido,
+          capturadoEm
+        );
+        if (criado) {
+          setEtapaSelecionada(0);
+          setPesoAtual('');
+        }
+        return;
+      }
+
+      if (
+        etapaCaptura === 2 &&
+        registrarSegundaPesagem(pesoLido, capturadoEm)
+      ) {
+        setEtapaSelecionada(0);
+        setPesoAtual('');
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao capturar peso',
+        description: String(error?.message || error),
       });
-      setPesoAtual('');
     } finally {
       setSaving(false);
     }
   }
 
   async function fecharTicketAtual() {
-    if (!ticketAtivo || !(segundaPesagem > 0) || capturaPendente || !(liquido > 0)) {
-      return;
-    }
-
-    if (!/^[+\-]?[\d.,]+$/.test(String(correcaoPeso).trim())) {
-      toast({ variant: 'destructive', title: 'Correção de peso inválida' });
+    if (!ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)) {
       return;
     }
 
@@ -804,7 +820,7 @@ export default function TicketsWorkspace({
         pesoBruto: segundaPesagem,
         isInverted,
         liquido,
-        correcaoPesoKg: correcaoAtual,
+        correcaoPesoKg: 0,
         isVenda: ticketAtivo.tipo === 'venda',
         pedidoId: ticketAtivo.pedido_id || '',
         transportadoraId,
@@ -939,8 +955,8 @@ export default function TicketsWorkspace({
 
   return (
     <div className="space-y-3">
-      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(270px,0.85fr)]">
-          <Card className="min-w-0 rounded-xl border shadow-none">
+      <div className="grid min-w-0 items-stretch gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(270px,0.85fr)]">
+          <Card className="flex h-full min-w-0 flex-col rounded-xl border shadow-none">
             <div className="border-b bg-muted/15 px-4 py-3">
               <div className="flex items-center gap-2">
                 <TipoIcon className="h-4 w-4 text-primary" />
@@ -1370,14 +1386,14 @@ export default function TicketsWorkspace({
           </Card>
 
 
-        <Card className="flex min-w-0 flex-col rounded-xl border shadow-none">
+        <Card className="flex h-full min-w-0 flex-col rounded-xl border shadow-none">
           <div className="border-b bg-muted/15 px-3 py-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <FileText className="h-4 w-4 text-primary" />
               Resumo do Ticket
             </h2>
             <p className="text-xs text-muted-foreground">
-              Confira os dados e finalize após confirmar as duas pesagens.
+              Confira os dados e feche após registrar as duas pesagens.
             </p>
           </div>
           <div className="flex flex-1 flex-col gap-3 p-3">
@@ -1403,51 +1419,25 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2">
                 <span>1ª Pesagem</span>
                 <span className="font-semibold">
-                  {ticketAtivo ? formatKg(primeiraPesagem) : capturaPendente?.etapa === 1 ? formatKg(capturaPendente.peso) : '—'}
+                  {ticketAtivo ? formatKg(primeiraPesagem) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {ticketAtivo ? 'Confirmada' : capturaPendente?.etapa === 1 ? 'Capturada · aguardando confirmação' : 'Aguardando captura'}
+                {ticketAtivo ? 'Registrada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2">
                 <span>2ª Pesagem</span>
                 <span className="font-semibold">
-                  {segundaPesagem > 0 ? formatKg(segundaPesagem) : capturaPendente?.etapa === 2 ? formatKg(capturaPendente.peso) : '—'}
+                  {segundaPesagem > 0 ? formatKg(segundaPesagem) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {segundaPesagem > 0 ? 'Confirmada' : capturaPendente?.etapa === 2 ? 'Capturada · aguardando confirmação' : 'Aguardando captura'}
+                {segundaPesagem > 0 ? 'Registrada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
-                <span>Peso líquido corrigido</span>
+                <span>Peso Líquido</span>
                 <span className="text-base text-primary">{segundaPesagem > 0 ? formatKg(liquido) : '—'}</span>
               </div>
-            </div>
-
-            <div className="rounded-lg bg-muted/20 p-3">
-              <Label htmlFor="correcao-peso-ticket" className="text-xs font-semibold">
-                Correção de peso (kg)
-              </Label>
-              <div className="mt-1 flex items-center gap-2">
-                <Input
-                  id="correcao-peso-ticket"
-                  inputMode="decimal"
-                  value={correcaoPeso}
-                  onChange={(event) => setCorrecaoPeso(event.target.value)}
-                  className="h-9 flex-1"
-                  placeholder="0,00"
-                  disabled={saving}
-                />
-                <span className="text-xs text-muted-foreground">kg</span>
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                + acrescenta; − desconta. Aplicada somente ao peso líquido final.
-              </p>
-              {segundaPesagem > 0 && liquido <= 0 && (
-                <p className="mt-1 text-xs text-destructive">
-                  O peso líquido corrigido deve ser maior que zero.
-                </p>
-              )}
             </div>
 
             {ticketAtivo?.tipo === 'venda' && pedidoSel && !pedidoSel.sem_limite &&
@@ -1460,7 +1450,7 @@ export default function TicketsWorkspace({
             <Button
               type="button"
               className="mt-auto h-10 w-full gap-2"
-              disabled={saving || !ticketAtivo || !(segundaPesagem > 0) || !!capturaPendente || !(liquido > 0)}
+              disabled={saving || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
               onClick={fecharTicketAtual}
             >
               <CheckCircle2 className="h-4 w-4" />
@@ -1469,7 +1459,7 @@ export default function TicketsWorkspace({
           </div>
         </Card>
 
-        <Card className="h-fit min-w-0 rounded-xl border shadow-none">
+        <Card className="flex h-full min-w-0 flex-col rounded-xl border shadow-none">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Weight className="h-4 w-4 text-primary" />
@@ -1497,7 +1487,7 @@ export default function TicketsWorkspace({
                     value={pesoAtual}
                     onChange={(event) => setPesoAtual(event.target.value)}
                     placeholder={displayPeso}
-                    disabled={saving || !!capturaPendente}
+                    disabled={saving || lendo}
                     className="h-11 min-w-0 border-0 bg-transparent text-right text-2xl font-bold shadow-none placeholder:text-foreground"
                   />
                 ) : (
