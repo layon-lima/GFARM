@@ -943,12 +943,28 @@ export default function TicketsWorkspace({
   const TipoIcon = tipoIcon;
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <Card className="rounded-2xl border p-4 shadow-none">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <div className="min-w-[130px]">
+    <div className="space-y-3">
+      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(270px,0.85fr)]">
+          <Card className="min-w-0 rounded-xl border shadow-none">
+            <div className="border-b bg-muted/15 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <TipoIcon className="h-4 w-4 text-primary" />
+                <div>
+                  <h2 className="text-sm font-semibold">
+                    Dados do Ticket
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {ticketAtivo
+                      ? 'Ticket em aberto pronto para a 2ª pesagem.'
+                      : 'Preencha os dados antes de capturar e confirmar o peso.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 p-3">
+            <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center">
+              <div className="sm:min-w-[95px]">
                 <p className="text-sm font-semibold">Tipo de ticket</p>
               </div>
 
@@ -992,26 +1008,6 @@ export default function TicketsWorkspace({
                 </div>
               )}
             </div>
-          </Card>
-
-          <Card className="rounded-2xl border shadow-none">
-            <div className="border-b bg-muted/15 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <TipoIcon className="h-4 w-4 text-primary" />
-                <div>
-                  <h2 className="text-sm font-semibold">
-                    Dados do Ticket
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    {ticketAtivo
-                      ? 'Ticket em aberto carregado para a 2ª pesagem.'
-                      : 'Preencha os dados e registre a 1ª pesagem.'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4 p-4">
               {isVenda && (
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_170px]">
                   <div className="space-y-1.5">
@@ -1059,7 +1055,7 @@ export default function TicketsWorkspace({
                 </div>
               )}
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Motorista *</Label>
 
@@ -1378,19 +1374,225 @@ export default function TicketsWorkspace({
             </div>
           </Card>
 
+
+        <Card className="flex min-w-0 flex-col rounded-xl border shadow-none">
+          <div className="border-b bg-muted/15 px-3 py-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <FileText className="h-4 w-4 text-primary" />
+              Resumo do Ticket
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Confira os dados e finalize após confirmar as duas pesagens.
+            </p>
+          </div>
+          <div className="flex flex-1 flex-col gap-3 p-3">
+            <div className="space-y-2 rounded-lg bg-muted/20 p-3 text-xs">
+              {[
+                ['Ticket', ticketAtivo?.numero || 'Novo ticket'],
+                ['Tipo', tipoLabel(tipoAtual)],
+                ['Motorista', ticketAtivo?.motorista || form.motorista || '—'],
+                ['Placa', formatPlaca(ticketAtivo?.placa || form.placa) || '—'],
+                ['Transportadora', transportadoraAtual?.nome || '—'],
+                ['Cliente / Fornecedor', clienteAtual?.nome || '—'],
+                ['Produto', produtoAtual?.nome || '—'],
+                ['Origem / Destino', `${ticketAtivo?.origem || form.origem || '—'} / ${ticketAtivo?.destino || form.destino || '—'}`],
+              ].map(([label, value]) => (
+                <div key={label} className="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="min-w-0 break-words font-medium">{value}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2 rounded-lg border p-3 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span>1ª Pesagem</span>
+                <span className="font-semibold">
+                  {ticketAtivo ? formatKg(primeiraPesagem) : capturaPendente?.etapa === 1 ? formatKg(capturaPendente.peso) : '—'}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {ticketAtivo ? 'Confirmada' : capturaPendente?.etapa === 1 ? 'Capturada · aguardando confirmação' : 'Aguardando captura'}
+              </p>
+              <div className="flex items-center justify-between gap-2">
+                <span>2ª Pesagem</span>
+                <span className="font-semibold">
+                  {segundaPesagem > 0 ? formatKg(segundaPesagem) : capturaPendente?.etapa === 2 ? formatKg(capturaPendente.peso) : '—'}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {segundaPesagem > 0 ? 'Confirmada' : capturaPendente?.etapa === 2 ? 'Capturada · aguardando confirmação' : 'Aguardando captura'}
+              </p>
+              <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
+                <span>Peso líquido corrigido</span>
+                <span className="text-base text-primary">{segundaPesagem > 0 ? formatKg(liquido) : '—'}</span>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-muted/20 p-3">
+              <Label htmlFor="correcao-peso-ticket" className="text-xs font-semibold">
+                Correção de peso (kg)
+              </Label>
+              <div className="mt-1 flex items-center gap-2">
+                <Input
+                  id="correcao-peso-ticket"
+                  inputMode="decimal"
+                  value={correcaoPeso}
+                  onChange={(event) => setCorrecaoPeso(event.target.value)}
+                  className="h-9 flex-1"
+                  placeholder="0,00"
+                  disabled={saving}
+                />
+                <span className="text-xs text-muted-foreground">kg</span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                + acrescenta; − desconta. Aplicada somente ao peso líquido final.
+              </p>
+              {segundaPesagem > 0 && liquido <= 0 && (
+                <p className="mt-1 text-xs text-destructive">
+                  O peso líquido corrigido deve ser maior que zero.
+                </p>
+              )}
+            </div>
+
+            {ticketAtivo?.tipo === 'venda' && pedidoSel && !pedidoSel.sem_limite &&
+              liquido > (Number(pedidoSel.saldo_kg) || 0) && (
+                <p className="text-xs font-semibold text-destructive">
+                  Peso líquido acima do saldo disponível do pedido.
+                </p>
+              )}
+
+            <Button
+              type="button"
+              className="mt-auto h-10 w-full gap-2"
+              disabled={saving || !ticketAtivo || !(segundaPesagem > 0) || !!capturaPendente || !(liquido > 0)}
+              onClick={fecharTicketAtual}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {saving ? 'Processando...' : 'Fechar e Salvar Ticket'}
+            </Button>
+          </div>
+        </Card>
+
+        <Card className="h-fit min-w-0 rounded-xl border shadow-none">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Weight className="h-4 w-4 text-primary" />
+              Pesagem
+            </h2>
+            <Badge
+              variant="outline"
+              className={balancaConectada
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-red-200 bg-red-50 text-red-700'}
+            >
+              <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${balancaConectada ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              {balancaConectada ? 'Balança conectada' : 'Balança desconectada'}
+            </Badge>
+          </div>
+          <div className="space-y-3 p-3">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <p className="mb-1 text-xs text-muted-foreground">Peso em tempo real</p>
+              <div className="flex items-center gap-2">
+                <Package className="h-5 w-5 shrink-0 text-primary" />
+                {podeDigitar ? (
+                  <Input
+                    aria-label="Peso manual autorizado"
+                    inputMode="decimal"
+                    value={pesoAtual}
+                    onChange={(event) => setPesoAtual(event.target.value)}
+                    placeholder={displayPeso}
+                    disabled={saving || !!capturaPendente}
+                    className="h-11 min-w-0 border-0 bg-transparent text-right text-2xl font-bold shadow-none placeholder:text-foreground"
+                  />
+                ) : (
+                  <span className="min-w-0 flex-1 text-right text-2xl font-bold tabular-nums">
+                    {displayPeso}
+                  </span>
+                )}
+                <span className="text-sm text-muted-foreground">kg</span>
+              </div>
+            </div>
+            <div className="space-y-1.5 border-t pt-3">
+              <div className="flex justify-between gap-2 text-xs font-semibold">
+                <span>1ª Pesagem</span>
+                <span className="text-muted-foreground">
+                  {ticketAtivo ? 'Confirmada' : capturaPendente?.etapa === 1 ? 'Aguardando confirmação' : 'Aguardando'}
+                </span>
+              </div>
+              <div className="rounded-lg bg-muted/30 px-3 py-3 text-right">
+                <div className="text-xl font-semibold tabular-nums">
+                  {ticketAtivo ? formatKg(primeiraPesagem) : capturaPendente?.etapa === 1 ? formatKg(capturaPendente.peso) : '—'}
+                </div>
+                {capturaPendente?.etapa === 1 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {formatDateTime(capturaPendente.capturadoEm)}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1.5 border-t pt-3">
+              <div className="flex justify-between gap-2 text-xs font-semibold">
+                <span>2ª Pesagem</span>
+                <span className="text-muted-foreground">
+                  {segundaPesagem > 0 ? 'Confirmada' : capturaPendente?.etapa === 2 ? 'Aguardando confirmação' : 'Aguardando'}
+                </span>
+              </div>
+              <div className="rounded-lg bg-muted/30 px-3 py-3 text-right">
+                <div className="text-xl font-semibold tabular-nums">
+                  {segundaPesagem > 0 ? formatKg(segundaPesagem) : capturaPendente?.etapa === 2 ? formatKg(capturaPendente.peso) : '—'}
+                </div>
+                {(segundaRegistradaEm || capturaPendente?.etapa === 2) && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {formatDateTime(segundaRegistradaEm || capturaPendente?.capturadoEm)}
+                  </span>
+                )}
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={saving || lendo || etapaCaptura === 0}
+              onClick={capturarOuConfirmar}
+            >
+              {aguardaConfirmacao ? <CheckCircle2 className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+              {saving || lendo
+                ? 'Aguarde...'
+                : etapaCaptura === 0
+                  ? 'Duas pesagens confirmadas'
+                  : `${aguardaConfirmacao ? 'Confirmar' : 'Capturar'} ${etapaCaptura}ª Pesagem`}
+            </Button>
+            <p className="text-center text-[11px] text-muted-foreground">
+              Um botão para capturar e confirmar cada pesagem.
+            </p>
+          </div>
+        </Card>
+
+      </div>
           <Card className="overflow-hidden rounded-2xl border shadow-none">
             <div className="flex flex-col gap-2 border-b bg-muted/15 px-4 py-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
                   <CircleDot className="h-4 w-4 text-amber-500" />
-                  Tickets em Aberto
+                  Tickets de Pesagem
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Clique em um ticket para carregá-lo na área de pesagem.
+                  Selecione um ticket aberto para continuar a pesagem.
                 </p>
               </div>
 
-              <div className="relative w-full md:max-w-md">
+              <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+                  <select
+                    aria-label="Filtrar tickets por status"
+                    value={filtroStatus}
+                    onChange={(event) => setFiltroStatus(event.target.value)}
+                    className="h-9 rounded-md border bg-background px-2 text-xs"
+                  >
+                    <option value="todos">Todos os status</option>
+                    <option value="aberto">Abertos</option>
+                    <option value="fechado">Fechados</option>
+                  </select>
+                <div className="relative w-full md:w-72">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={buscaAbertos}
@@ -1398,16 +1600,17 @@ export default function TicketsWorkspace({
                   placeholder="Buscar ticket, motorista, placa, cliente..."
                   className="h-9 pl-9"
                 />
+                </div>
               </div>
             </div>
 
             {abertosFiltrados.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                Nenhum ticket em aberto.
+                Nenhum ticket encontrado.
               </div>
             ) : (
               <div className="overflow-auto">
-                <table className="min-w-[1050px] w-full text-xs">
+                <table className="min-w-[1060px] w-full text-xs">
                   <thead className="bg-muted/35">
                     <tr>
                       <th className="px-3 py-2.5 text-left">Ticket</th>
@@ -1417,6 +1620,8 @@ export default function TicketsWorkspace({
                       <th className="px-3 py-2.5 text-left">Cliente / Fornecedor</th>
                       <th className="px-3 py-2.5 text-left">Produto</th>
                       <th className="px-3 py-2.5 text-right">1ª Pesagem</th>
+                      <th className="px-3 py-2.5 text-right">2ª Pesagem</th>
+                      <th className="px-3 py-2.5 text-right">Peso Líquido</th>
                       <th className="px-3 py-2.5 text-center">Status</th>
                       <th className="w-20 px-3 py-2.5 text-center">Ações</th>
                     </tr>
@@ -1446,8 +1651,8 @@ export default function TicketsWorkspace({
                       return (
                         <tr
                           key={ticket.id}
-                          onClick={() => selecionarTicket(ticket)}
-                          className={`cursor-pointer border-t transition-colors ${
+                          onClick={() => { if (ticket.status === 'aberto') selecionarTicket(ticket); }}
+                          className={`border-t transition-colors ${
                             selected
                               ? 'bg-primary/5'
                               : 'hover:bg-muted/30'
@@ -1474,9 +1679,19 @@ export default function TicketsWorkspace({
                           <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
                             {formatKg(primeira)}
                           </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">
+                            {ticket.peso_bruto && ticket.peso_tara
+                              ? formatKg((Number(ticket.peso_tara) || 0) === primeira ? ticket.peso_bruto : ticket.peso_tara)
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                            {ticket.status === 'fechado' ? formatKg(ticket.peso_liquido || 0) : '—'}
+                          </td>
                           <td className="px-3 py-2.5 text-center">
-                            <Badge className="border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">
-                              Aguardando 2ª pesagem
+                            <Badge className={ticket.status === 'fechado'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50'
+                              : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50'}>
+                              {ticket.status === 'fechado' ? 'Fechado' : 'Aguardando 2ª pesagem'}
                             </Badge>
                           </td>
                           <td
@@ -1501,173 +1716,6 @@ export default function TicketsWorkspace({
               </div>
             )}
           </Card>
-        </div>
-
-        <Card className="h-fit rounded-2xl border shadow-none xl:sticky xl:top-4">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              <Weight className="h-5 w-5 text-primary" />
-              Pesagem
-            </h2>
-
-            <Badge
-              variant="outline"
-              className={
-                balancaConectada
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border-red-200 bg-red-50 text-red-700'
-              }
-            >
-              <span
-                className={`mr-1.5 h-2 w-2 rounded-full ${
-                  balancaConectada ? 'bg-emerald-500' : 'bg-red-500'
-                }`}
-              />
-              {balancaConectada
-                ? 'Balança conectada'
-                : 'Balança desconectada'}
-            </Badge>
-          </div>
-
-          <div className="space-y-4 p-4">
-            <div className="rounded-xl border-2 border-primary/25 bg-primary/5 p-3">
-              <div className="flex items-center gap-2">
-                <Package className="h-4 w-4 text-primary" />
-
-                {podeDigitar ? (
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={pesoAtual}
-                    onChange={(e) => setPesoAtual(e.target.value)}
-                    placeholder={displayPeso}
-                    className="h-16 min-w-0 flex-1 bg-transparent text-right text-4xl font-bold tracking-tight outline-none placeholder:text-foreground"
-                  />
-                ) : (
-                  <div className="flex-1 text-right text-4xl font-bold tracking-tight">
-                    {displayPeso}
-                  </div>
-                )}
-
-                <span className="text-base font-semibold text-muted-foreground">
-                  kg
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-[1fr_auto] gap-2">
-              <LerPesoButton
-                onPesoLido={setPesoAtual}
-                className="h-11 w-full px-4 text-sm"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11"
-                onClick={() => setPesoAtual('')}
-                disabled={!pesoAtual}
-              >
-                <RefreshCw className="mr-1.5 h-4 w-4" />
-                Limpar
-              </Button>
-            </div>
-
-            <div className="border-t pt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold">
-                  1ª Pesagem
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {ticketAtivo
-                    ? formatDateTime(ticketAtivo.data_abertura)
-                    : 'Aguardando'}
-                </span>
-              </div>
-
-              <div className="mb-2 rounded-lg bg-muted/35 px-3 py-3 text-right text-2xl font-semibold tabular-nums">
-                {ticketAtivo
-                  ? formatKg(primeiraPesagem)
-                  : '0,00 kg'}
-              </div>
-
-              <Button
-                type="button"
-                variant={ticketAtivo ? 'outline' : 'default'}
-                className="w-full"
-                disabled={saving || !!ticketAtivo}
-                onClick={registrarPrimeiraPesagem}
-              >
-                <Play className="mr-2 h-4 w-4" />
-                Registrar 1ª Pesagem
-              </Button>
-            </div>
-
-            <div className="border-t pt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold">
-                  2ª Pesagem
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {segundaRegistradaEm
-                    ? formatDateTime(segundaRegistradaEm)
-                    : 'Aguardando'}
-                </span>
-              </div>
-
-              <div className="mb-2 rounded-lg bg-muted/35 px-3 py-3 text-right text-2xl font-semibold tabular-nums">
-                {segundaPesagem > 0
-                  ? formatKg(segundaPesagem)
-                  : '0,00 kg'}
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-primary text-primary hover:bg-primary/5"
-                disabled={saving || !ticketAtivo}
-                onClick={registrarSegundaPesagem}
-              >
-                <Play className="mr-2 h-4 w-4" />
-                Registrar 2ª Pesagem
-              </Button>
-            </div>
-
-            <div className="border-t pt-4">
-              <p className="mb-2 text-sm font-semibold">
-                Peso Líquido
-              </p>
-
-              <div className="rounded-lg bg-muted/35 px-3 py-4 text-right text-3xl font-bold tabular-nums">
-                {formatKg(liquido)}
-              </div>
-            </div>
-
-            {ticketAtivo?.tipo === 'venda' &&
-              pedidoSel &&
-              !pedidoSel.sem_limite &&
-              liquido > (Number(pedidoSel.saldo_kg) || 0) && (
-                <p className="text-xs font-medium text-destructive">
-                  O peso líquido excede o saldo atual do pedido.
-                </p>
-              )}
-
-            <Button
-              type="button"
-              className="h-11 w-full gap-2"
-              disabled={
-                saving ||
-                !ticketAtivo ||
-                !(segundaPesagem > 0) ||
-                !(liquido > 0)
-              }
-              onClick={fecharTicketAtual}
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {saving ? 'Processando...' : 'Fechar Ticket'}
-            </Button>
-          </div>
-        </Card>
-      </div>
 
       <AlertDialog
         open={!!excluirTicket}
