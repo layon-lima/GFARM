@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -19,7 +20,7 @@ class CorrecaoPesoTicketTest(unittest.TestCase):
                     tipo="compra",
                     motorista="Teste",
                     placa="ABC1D23",
-                    data_abertura="2026-10-14T08:00:00",
+                    data_abertura=datetime(2026, 10, 14, 8, 0, tzinfo=timezone.utc),
                     peso_tara=1000,
                     peso_bruto=2500,
                     peso_liquido=1490,
