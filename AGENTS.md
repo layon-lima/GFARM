@@ -264,6 +264,10 @@ Não alterar a linguagem visual inteira sem pedido do usuário.
 - A área da Balança mostra o **Peso Líquido** calculado pelas duas pesagens. Não há campo nem mecanismo ativo de correção manual de peso.
 - O botão **Fechar e Salvar Ticket** permanece exclusivamente no Resumo e somente é liberado após as duas pesagens, mantendo a baixa de vendas pelo motor oficial.
 - Dados e correções de tickets históricos não devem ser apagados ou migrados destrutivamente; permissões de entrada manual de peso permanecem obrigatórias.
+- **Tipo de ticket é pré-requisito para qualquer preenchimento**: todos os demais campos do formulário e a captura de peso devem ficar desabilitados até a seleção do tipo (ao carregar ticket já aberto, o tipo do próprio ticket autoriza o fluxo).
+- **Trocar o tipo não deve zerar o formulário**: preservar motorista, placa, transportadora, cliente/fornecedor, produto, origem, destino e observações já informados. Limpar apenas o vínculo de pedido de venda quando o novo tipo não for venda, para não carregar uma associação indevida.
+- Os números de peso em tempo real, 1ª Pesagem, 2ª Pesagem e Peso Líquido devem ter fonte maior e legível, sem criar overflow na coluna da balança.
+
 
 ### Movimentos no PC — layout compacto aprovado
 
