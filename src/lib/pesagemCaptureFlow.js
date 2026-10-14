@@ -28,3 +28,13 @@ export function recapturaPrimeiraValida({
     )
   );
 }
+
+// Alterar o tipo deve preservar o preenchimento comum; pedido so se aplica
+// a ticket de venda e nao deve ficar vinculado a outros tipos de ticket.
+export function atualizarTipoTicket(form, novoTipo) {
+  return {
+    ...form,
+    tipo: novoTipo,
+    pedido_id: novoTipo === 'venda' ? (form.pedido_id || '') : '',
+  };
+}

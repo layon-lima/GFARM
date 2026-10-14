@@ -47,7 +47,7 @@ import {
   statusPorSaldo,
 } from '@/lib/pesagem';
 import { formatQtd, parseQtd } from '@/lib/format';
-import { etapaCapturaPesagem, recapturaPrimeiraValida } from '@/lib/pesagemCaptureFlow';
+import { atualizarTipoTicket, etapaCapturaPesagem, recapturaPrimeiraValida } from '@/lib/pesagemCaptureFlow';
 
 const EMPTY_FORM = {
   tipo: '',
@@ -327,10 +327,7 @@ export default function TicketsWorkspace({
   function trocarTipo(value) {
     if (ticketAtivo) return;
 
-    setForm({
-      ...EMPTY_FORM,
-      tipo: value,
-    });
+    setForm((prev) => atualizarTipoTicket(prev, value));
     setPesoAtual('');
     setEtapaSelecionada(0);
   }
@@ -1031,6 +1028,11 @@ export default function TicketsWorkspace({
                 </div>
               )}
             </div>
+              <fieldset
+                disabled={!tipoAtual}
+                className="min-w-0 space-y-3 disabled:opacity-55"
+                aria-label="Dados do ticket: escolha o tipo antes de preencher"
+              >
               {isVenda && (
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_170px]">
                   <div className="space-y-1.5">
@@ -1394,6 +1396,7 @@ export default function TicketsWorkspace({
                   />
                 </div>
               </div>
+              </fieldset>
             </div>
           </Card>
 
@@ -1500,11 +1503,11 @@ export default function TicketsWorkspace({
                     value={pesoAtual}
                     onChange={(event) => setPesoAtual(event.target.value)}
                     placeholder={displayPeso}
-                    disabled={saving || lendo}
-                    className="h-11 min-w-0 border-0 bg-transparent text-right text-2xl font-bold shadow-none placeholder:text-foreground"
+                    disabled={saving || lendo || !tipoAtual}
+                    className="h-14 min-w-0 border-0 bg-transparent text-right !text-3xl font-bold shadow-none placeholder:text-foreground 2xl:!text-4xl"
                   />
                 ) : (
-                  <span className="min-w-0 flex-1 text-right text-2xl font-bold tabular-nums">
+                  <span className="min-w-0 flex-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
                     {displayPeso}
                   </span>
                 )}
@@ -1515,7 +1518,7 @@ export default function TicketsWorkspace({
             <button
               type="button"
               onClick={() => selecionarEtapa(1)}
-              disabled={saving || lendo}
+              disabled={saving || lendo || !tipoAtual}
               aria-pressed={etapaCaptura === 1}
               title="Selecionar primeira pesagem para capturar novamente"
               className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 ${
@@ -1530,7 +1533,7 @@ export default function TicketsWorkspace({
                   {ticketAtivo ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
-              <div className="mt-1 text-right text-xl font-semibold tabular-nums">
+              <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
                 {ticketAtivo ? formatKg(primeiraPesagem) : '—'}
               </div>
               {ticketAtivo && (
@@ -1558,7 +1561,7 @@ export default function TicketsWorkspace({
                   {segundaPesagem > 0 ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
-              <div className="mt-1 text-right text-xl font-semibold tabular-nums">
+              <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
                 {segundaPesagem > 0 ? formatKg(segundaPesagem) : '—'}
               </div>
               {segundaPesagem > 0 && (
@@ -1571,7 +1574,7 @@ export default function TicketsWorkspace({
             <div className="rounded-lg border bg-muted/25 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold">Peso Líquido</span>
-                <span className="text-xl font-bold tabular-nums text-primary">
+                <span className="text-3xl font-bold tabular-nums text-primary 2xl:text-4xl">
                   {segundaPesagem > 0 && ticketAtivo
                     ? formatKg(liquido)
                     : '—'}
@@ -1582,7 +1585,7 @@ export default function TicketsWorkspace({
             <Button
               type="button"
               className="mt-auto h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={saving || lendo || etapaCaptura === 0}
+              disabled={saving || lendo || !tipoAtual || etapaCaptura === 0}
               onClick={capturarPeso}
             >
               <Play className="mr-2 h-4 w-4" />
