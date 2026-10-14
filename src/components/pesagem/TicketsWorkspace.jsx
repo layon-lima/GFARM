@@ -32,7 +32,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import SearchSelect from '@/components/SearchSelect';
-import LerPesoButton from '@/components/balanca/LerPesoButton';
 import { useBalanca } from '@/lib/balancaContext';
 import { useAuth } from '@/lib/AuthContext';
 import { podeDigitarPeso } from '@/lib/permissions';
@@ -99,12 +98,17 @@ export default function TicketsWorkspace({
     status: statusBalanca,
     ultimaLeitura,
     formatarPeso,
+    lerPeso,
+    lendo,
   } = useBalanca();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [ticketAtivoId, setTicketAtivoId] = useState('');
   const [ticketLocal, setTicketLocal] = useState(null);
   const [pesoAtual, setPesoAtual] = useState('');
+  const [capturaPendente, setCapturaPendente] = useState(null);
+  const [correcaoPeso, setCorrecaoPeso] = useState('0,00');
+  const [filtroStatus, setFiltroStatus] = useState('todos');
   const [segundaPesagem, setSegundaPesagem] = useState(0);
   const [segundaRegistradaEm, setSegundaRegistradaEm] = useState('');
   const [transportadoraFechamento, setTransportadoraFechamento] = useState('');
@@ -165,6 +169,8 @@ export default function TicketsWorkspace({
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
     setPesoAtual('');
+    setCapturaPendente(null);
+    setCorrecaoPeso(formatQtd(ticketAtivo?.correcao_peso_kg || 0));
   }, [ticketAtivo?.id]);
 
   const primeiraPesagem = useMemo(() => {
@@ -183,13 +189,22 @@ export default function TicketsWorkspace({
     (Number(ticketAtivo.peso_bruto) || 0) > 0 &&
     (Number(ticketAtivo.peso_tara) || 0) === 0;
 
-  const liquido = useMemo(() => {
+  const pesoLiquidoBruto = useMemo(() => {
     if (!ticketAtivo || !(segundaPesagem > 0)) return 0;
-
     return isInverted
       ? calcLiquido(ticketAtivo.peso_bruto || 0, segundaPesagem)
       : calcLiquido(segundaPesagem, ticketAtivo.peso_tara || 0);
   }, [ticketAtivo, segundaPesagem, isInverted]);
+
+  // Correção assinada: positiva acrescenta, negativa desconta, sem
+  // modificar as leituras originais da balança.
+  const correcaoAtual = parseQtd(correcaoPeso);
+  const liquido = Math.round((pesoLiquidoBruto + correcaoAtual) * 1000) / 1000;
+  const etapaCaptura = ticketAtivo
+    ? (segundaPesagem > 0 ? 0 : 2)
+    : 1;
+  const aguardaConfirmacao =
+    capturaPendente?.etapa === etapaCaptura && etapaCaptura !== 0;
 
   const leituraBalanca = Number(ultimaLeitura?.peso);
   const pesoDisponivel =
@@ -302,6 +317,8 @@ export default function TicketsWorkspace({
     setTicketLocal(null);
     setForm(EMPTY_FORM);
     setPesoAtual('');
+    setCapturaPendente(null);
+    setCorrecaoPeso('0,00');
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
     setTransportadoraFechamento('');
@@ -311,6 +328,8 @@ export default function TicketsWorkspace({
     setTicketLocal(null);
     setTicketAtivoId(ticket.id);
     setPesoAtual('');
+    setCapturaPendente(null);
+    setCorrecaoPeso(formatQtd(ticket.correcao_peso_kg || 0));
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
   }
@@ -323,6 +342,7 @@ export default function TicketsWorkspace({
       tipo: value,
     });
     setPesoAtual('');
+    setCapturaPendente(null);
   }
 
   function escolherPedido(value) {
@@ -422,7 +442,7 @@ export default function TicketsWorkspace({
     }
   }
 
-  async function registrarPrimeiraPesagem() {
+  async function registrarPrimeiraPesagem(pesoConfirmado, capturadoEm) {
     if (ticketAtivo) return;
 
     if (!form.tipo) {
@@ -450,12 +470,12 @@ export default function TicketsWorkspace({
       return;
     }
 
-    if (!(pesoDisponivel > 0)) {
+    if (!(pesoConfirmado > 0)) {
       toast({
         variant: 'destructive',
-        title: 'Informe ou leia o peso da 1ª pesagem',
+        title: 'Primeiro capture um peso válido na balança.',
       });
-      return;
+      return null;
     }
 
     let pedidoVenda = null;
@@ -564,7 +584,7 @@ export default function TicketsWorkspace({
       const created = await api.entities.TicketPesagem.create({
         numero,
         tipo: form.tipo,
-        data_abertura: new Date().toISOString(),
+        data_abertura: capturadoEm || new Date().toISOString(),
         motorista: form.motorista.trim(),
         placa,
         produto_id: produtoId || '',
@@ -581,7 +601,7 @@ export default function TicketsWorkspace({
           form.tipo === 'venda'
             ? ''
             : form.destino.trim(),
-        peso_tara: pesoDisponivel,
+        peso_tara: pesoConfirmado,
         peso_bruto: 0,
         peso_liquido: 0,
         status: 'aberto',
@@ -595,10 +615,11 @@ export default function TicketsWorkspace({
 
       toast({
         title: '1ª pesagem registrada',
-        description: `${numero} • ${formatKg(pesoDisponivel)}`,
+        description: `${numero} • ${formatKg(pesoConfirmado)}`,
       });
 
       await onReload?.();
+      return created;
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -610,7 +631,7 @@ export default function TicketsWorkspace({
     }
   }
 
-  function registrarSegundaPesagem() {
+  function registrarSegundaPesagem(pesoConfirmado, capturadoEm) {
     if (!ticketAtivo) {
       toast({
         variant: 'destructive',
@@ -619,15 +640,15 @@ export default function TicketsWorkspace({
       return;
     }
 
-    if (!(pesoDisponivel > 0)) {
+    if (!(pesoConfirmado > 0)) {
       toast({
         variant: 'destructive',
-        title: 'Informe ou leia o peso da 2ª pesagem',
+        title: 'Primeiro capture o peso da 2ª pesagem.',
       });
-      return;
+      return false;
     }
 
-    if (Math.abs(pesoDisponivel - primeiraPesagem) < 0.0001) {
+    if (Math.abs(pesoConfirmado - primeiraPesagem) < 0.0001) {
       toast({
         variant: 'destructive',
         title: 'Pesagens iguais',
@@ -636,17 +657,89 @@ export default function TicketsWorkspace({
       return;
     }
 
-    setSegundaPesagem(pesoDisponivel);
-    setSegundaRegistradaEm(new Date().toISOString());
+    setSegundaPesagem(pesoConfirmado);
+    setSegundaRegistradaEm(capturadoEm || new Date().toISOString());
 
     toast({
       title: '2ª pesagem registrada',
-      description: formatKg(pesoDisponivel),
+      description: formatKg(pesoConfirmado),
     });
+    return true;
+  }
+
+  async function capturarOuConfirmar() {
+    if (saving || lendo || etapaCaptura === 0) return;
+
+    if (aguardaConfirmacao) {
+      if (etapaCaptura === 1) {
+        const salvo = await registrarPrimeiraPesagem(
+          capturaPendente.peso,
+          capturaPendente.capturadoEm
+        );
+        if (salvo) setCapturaPendente(null);
+      } else if (
+        registrarSegundaPesagem(
+          capturaPendente.peso,
+          capturaPendente.capturadoEm
+        )
+      ) {
+        setCapturaPendente(null);
+      }
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Leitura manual somente para o perfil autorizado. Para os demais,
+      // a leitura fresca vem obrigatoriamente do contexto da balança.
+      const manual = podeDigitar && pesoAtual.trim()
+        ? parseQtd(pesoAtual)
+        : null;
+      const valor = manual ?? (
+        balancaConectada ? await lerPeso() : null
+      );
+
+      if (!(Number(valor) > 0) || !Number.isFinite(Number(valor))) {
+        toast({
+          variant: 'destructive',
+          title: 'Peso indisponível',
+          description: podeDigitar
+            ? 'Conecte a balança ou informe um peso manual válido.'
+            : 'Conecte a balança e aguarde uma leitura válida.',
+        });
+        return;
+      }
+
+      if (
+        etapaCaptura === 2 &&
+        Math.abs(Number(valor) - primeiraPesagem) < 0.0001
+      ) {
+        toast({
+          variant: 'destructive',
+          title: 'Pesagens iguais',
+          description: 'A segunda pesagem deve ser diferente da primeira.',
+        });
+        return;
+      }
+
+      setCapturaPendente({
+        etapa: etapaCaptura,
+        peso: Number(valor),
+        capturadoEm: new Date().toISOString(),
+      });
+      setPesoAtual('');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function fecharTicketAtual() {
-    if (!ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)) {
+    if (!ticketAtivo || !(segundaPesagem > 0) || capturaPendente || !(liquido > 0)) {
+      return;
+    }
+
+    if (!/^[+\-]?[\d.,]+$/.test(String(correcaoPeso).trim())) {
+      toast({ variant: 'destructive', title: 'Correção de peso inválida' });
       return;
     }
 
@@ -716,6 +809,7 @@ export default function TicketsWorkspace({
         pesoBruto: segundaPesagem,
         isInverted,
         liquido,
+        correcaoPesoKg: correcaoAtual,
         isVenda: ticketAtivo.tipo === 'venda',
         pedidoId: ticketAtivo.pedido_id || '',
         transportadoraId,
