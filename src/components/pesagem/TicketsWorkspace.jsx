@@ -47,6 +47,7 @@ import {
   statusPorSaldo,
 } from '@/lib/pesagem';
 import { formatQtd, parseQtd } from '@/lib/format';
+import { etapaCapturaPesagem, recapturaPrimeiraValida } from '@/lib/pesagemCaptureFlow';
 
 const EMPTY_FORM = {
   tipo: '',
@@ -195,8 +196,11 @@ export default function TicketsWorkspace({
 
   // Automaticamente 1ª → 2ª; após a segunda, clique no campo
   // correspondente para refazer uma leitura incorreta.
-  const etapaCaptura = etapaSelecionada ||
-    (!ticketAtivo ? 1 : segundaPesagem > 0 ? 0 : 2);
+  const etapaCaptura = etapaCapturaPesagem({
+    ticketAberto: !!ticketAtivo,
+    segundaRegistrada: segundaPesagem > 0,
+    etapaSelecionada,
+  });
 
   const leituraBalanca = Number(ultimaLeitura?.peso);
   const displayPeso =
@@ -690,25 +694,33 @@ export default function TicketsWorkspace({
       const capturadoEm = new Date().toISOString();
 
       if (etapaCaptura === 1 && ticketAtivo) {
-        if (
-          segundaPesagem > 0 &&
-          Math.abs(pesoLido - segundaPesagem) < 0.0001
-        ) {
+        // Confere o estado atualizado no servidor antes de refazer a 1ª,
+        // para não modificar ticket fechado em outra estação.
+        const servidor = await api.entities.TicketPesagem.get(ticketAtivo.id);
+        if (!recapturaPrimeiraValida({
+          statusTicket: servidor.status,
+          primeiraNova: pesoLido,
+          segundaRegistrada: segundaPesagem > 0,
+          segundaPeso: segundaPesagem,
+        })) {
           toast({
             variant: 'destructive',
-            title: 'Pesagens iguais',
-            description: 'A primeira e a segunda pesagem devem ser diferentes.',
+            title: 'Não foi possível refazer a 1ª pesagem',
+            description: servidor.status !== 'aberto'
+              ? 'Este ticket já foi fechado.'
+              : 'A primeira e a segunda pesagem devem ser diferentes.',
           });
           return;
         }
 
-        // Só permite corrigir a 1ª pesagem enquanto o ticket está aberto.
+        // O registro original permanece, com alteração auditável do peso
+        // no mesmo ticket em aberto, sem gerar nova movimentação de estoque.
         const campoPeso = isInverted ? 'peso_bruto' : 'peso_tara';
         const atualizado = await api.entities.TicketPesagem.update(
           ticketAtivo.id,
           { [campoPeso]: pesoLido }
         );
-        setTicketLocal({ ...ticketAtivo, ...atualizado, [campoPeso]: pesoLido });
+        setTicketLocal({ ...servidor, ...atualizado, [campoPeso]: pesoLido });
         setEtapaSelecionada(0);
         setPesoAtual('');
         toast({
