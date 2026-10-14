@@ -301,6 +301,7 @@ class TicketPesagem(EntityBaseMixin, Base):
     peso_tara = mapped_column(Float, nullable=False, default=0)
     peso_bruto = mapped_column(Float, nullable=True, default=0)
     peso_liquido = mapped_column(Float, nullable=True, default=0)
+    correcao_peso_kg = mapped_column(Float, nullable=False, default=0)
     pedido_id = mapped_column(String(100), nullable=True, index=True)
     status = mapped_column(String(30), nullable=False, default="aberto", index=True)
     observacao = mapped_column(Text, nullable=True)

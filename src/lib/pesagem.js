@@ -228,7 +228,7 @@ export async function baixarEstoqueVendaTicket({
 }
 
 // Fecha um ticket de pesagem: atualiza o ticket, o pedido (venda) e baixa o estoque.
-export async function fecharTicket({ ticket, pesoBruto, isInverted, liquido, isVenda, pedidoId, transportadoraId, observacao, pedidoSel, clienteNome, transpNome, produtos }) {
+export async function fecharTicket({ ticket, pesoBruto, isInverted, liquido, correcaoPesoKg = null, isVenda, pedidoId, transportadoraId, observacao, pedidoSel, clienteNome, transpNome, produtos }) {
   const semLimite = isVenda && pedidoSel?.sem_limite;
   const novoSaldo = (!semLimite && pedidoSel) ? Math.round((Number(pedidoSel.saldo_kg) - liquido) * 1000) / 1000 : (pedidoSel?.saldo_kg || 0);
 
@@ -236,6 +236,7 @@ export async function fecharTicket({ ticket, pesoBruto, isInverted, liquido, isV
     peso_tara: isInverted ? parseQtd(pesoBruto) : (ticket.peso_tara || 0),
     peso_bruto: isInverted ? (ticket.peso_bruto || 0) : parseQtd(pesoBruto),
     peso_liquido: liquido,
+    ...(correcaoPesoKg !== null ? { correcao_peso_kg: parseQtd(correcaoPesoKg) } : {}),
     pedido_id: isVenda ? pedidoId : '',
     produto_id: isVenda && pedidoSel ? pedidoSel.produto_id : (ticket.produto_id || ''),
     cliente_id: isVenda && pedidoSel ? pedidoSel.cliente_id : (ticket.cliente_id || ''),
