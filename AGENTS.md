@@ -255,16 +255,15 @@ Não alterar a linguagem visual inteira sem pedido do usuário.
 - Não impor limites fixos de `max-width` a páginas operacionais completas (Pesquisa, Movimentos, Pesagem, Cadastros, Aplicação, Relatórios e Inventário).
 - Tabelas e listas devem distribuir colunas conforme a largura realmente disponível, sem scroll horizontal desnecessário.
 
-### Pesagem rodoviária — captura e confirmação
+### Pesagem rodoviária — registro imediato e recaptura
 
-- O módulo Tickets na Pesagem desktop usa três áreas na primeira faixa: **Dados do Ticket**, **Resumo do Ticket** e **Pesagem/Balança**; a lista em tabela de tickets fica abaixo ocupando toda a largura.
-- Na área da balança deve existir **apenas um botão principal**: **Capturar 1ª** → **Confirmar 1ª** → **Capturar 2ª** → **Confirmar 2ª**.
-- Captura é provisória e confirmação trava o peso; a 1ª confirmação abre o ticket pelo fluxo existente, a 2ª habilita o fechamento.
-- **Fechar e Salvar Ticket** fica no Resumo, e nunca pode ser acionado antes da confirmação das duas pesagens.
-- Configurar **correção de peso** como valor assinado (kg) diretamente no Resumo, **sem novo botão**; aplicar só ao peso líquido final, nunca adulterar leituras capturadas.
-- Persistir a correção no ticket com rastreabilidade; a baixa de estoque de vendas continua usando exclusivamente o fluxo oficial do motor e o peso líquido final corrigido.
-- Se a balança estiver desconectada, somente pessoas já autorizadas à digitação manual podem realizar captura informando o peso; nunca reutilizar leitura antiga para capturar.
-- Preservar tickets anteriores e os módulos Pedidos, Pagamentos, PDF e edição.
+- No desktop, a primeira faixa mantém três cartões **alinhados em altura**: Dados do Ticket, Resumo do Ticket e Pesagem/Balança. A tabela de tickets ocupa toda a largura logo abaixo.
+- Na Balança existe **um único botão principal de captura**, sem confirmação intermediária: **Capturar 1ª Pesagem** grava a primeira e abre o ticket; depois **Capturar 2ª Pesagem** registra a segunda e habilita o fechamento.
+- Se uma pesagem estiver incorreta, o usuário **clica no próprio campo da 1ª ou 2ª pesagem** para selecioná-la e usa o mesmo botão para capturar novamente. Não criar botões separados para corrigir.
+- A recaptura da 1ª pesagem atualiza apenas o peso do ticket **em aberto** no backend, sem alterar o estoque nem criar outro ticket; a 2ª continua editável antes do fechamento.
+- A área da Balança mostra o **Peso Líquido** calculado pelas duas pesagens. Não há campo nem mecanismo ativo de correção manual de peso.
+- O botão **Fechar e Salvar Ticket** permanece exclusivamente no Resumo e somente é liberado após as duas pesagens, mantendo a baixa de vendas pelo motor oficial.
+- Dados e correções de tickets históricos não devem ser apagados ou migrados destrutivamente; permissões de entrada manual de peso permanecem obrigatórias.
 
 ### Movimentos no PC — layout compacto aprovado
 
