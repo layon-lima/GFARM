@@ -42,6 +42,21 @@ class TestGFARMControl(unittest.TestCase):
         details = self.engine.validate_archive(archive)
         self.assertEqual(details, {"uploads": 1, "xmls": 1})
 
+    def test_import_assets_only_preserves_database(self):
+        archive = self.make_zip([
+            ("database.dump", b"PGDMPtest-only"),
+            ("manifest.json", json.dumps({"formato_banco": "pg_dump custom"})),
+            ("uploads/foto.png", b"foto real da simulacao"),
+            ("xml_inbox/nota.xml", b"<nota/>"),
+        ])
+        with mock.patch.object(self.engine, "port_busy", return_value=False):
+            result = self.engine.import_assets_only(str(archive))
+        self.assertEqual(result["importados"], 2)
+        self.assertFalse(result["banco_alterado"])
+        self.assertEqual((Path(self.folder.name) / "data" / "uploads" /
+                          "foto.png").read_bytes(), b"foto real da simulacao")
+        self.assertFalse((Path(self.folder.name) / "data" / "backend.env").exists())
+
     def test_rejects_path_traversal(self):
         archive = self.make_zip([
             ("database.dump", b"PGDMPfake"),
