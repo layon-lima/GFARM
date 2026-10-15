@@ -38,7 +38,7 @@ def write_log(message):
 def load():
     if not CONFIG.is_file():
         return {"app_path": str(APP), "version": "pacote-inicial",
-                "automatic": True, "remote_host": "127.0.0.1"}
+                "automatic": True, "desired_running": True, "remote_host": "127.0.0.1"}
     return json.loads(CONFIG.read_text(encoding="utf-8"))
 
 
@@ -132,6 +132,9 @@ def start():
     global PROCESS, LAST_START
     with LOCK:
         p = ensure_configured()
+        cfg = load()
+        cfg["desired_running"] = True
+        save(cfg)
         if owned():
             return "Servidor ja esta iniciado pelo Control."
         if port_busy(backend_port()):
@@ -159,9 +162,13 @@ def start():
     raise RuntimeError("GFARM nao respondeu em 50 segundos; confira o log.")
 
 
-def stop():
+def stop(temporary=False):
     global PROCESS
     with LOCK:
+        if not temporary:
+            cfg = load()
+            cfg["desired_running"] = False
+            save(cfg)
         if not owned():
             if port_busy(backend_port()):
                 raise RuntimeError("API pertence a outro processo. Control nao vai encerra-lo.")
@@ -179,7 +186,7 @@ def stop():
 
 
 def restart():
-    stop()
+    stop(temporary=True)
     return start()
 
 
@@ -235,7 +242,7 @@ def create_backup():
         if port_busy(backend_port()) and not was_running:
             raise RuntimeError("API nao controlada detectada; pare-a antes do backup.")
         if was_running:
-            stop()
+            stop(temporary=True)
         try:
             e, args = db_args()
             BACKUPS.mkdir(parents=True, exist_ok=True)
@@ -447,12 +454,14 @@ def update(progress):
                 cwd=release, timeout=1200)
             if not (release / "dist" / "index.html").is_file():
                 raise RuntimeError("Compilacao do GFARM nao gerou dist/index.html.")
+            progress("Criando backup obrigatorio antes da atualizacao...")
+            create_backup()
             progress("Publicando a nova versao e validando API...")
             was_running = owned()
             if port_busy(backend_port()) and not was_running:
                 raise RuntimeError("Servidor iniciado fora do Control. Atualizacao bloqueada.")
             if was_running:
-                stop()
+                stop(temporary=True)
             cfg["app_path"], cfg["version"] = str(release), revision
             save(cfg)
             try:
@@ -461,7 +470,7 @@ def update(progress):
             except Exception:
                 if owned():
                     try:
-                        stop()
+                        stop(temporary=True)
                     except Exception as x:
                         write_log("Falha parando nova versao: " + str(x))
                 cfg["app_path"], cfg["version"] = str(before), previous_version
@@ -534,14 +543,19 @@ def watchdog():
     global LAST_START
     while True:
         try:
-            c = load()
-            if c.get("automatic", True) and not owned() and not port_busy(backend_port()):
-                if time.monotonic() - LAST_START > 90 and (DATA / "backend.env").is_file():
-                    LAST_START = time.monotonic()
-                    try:
-                        start()
-                    except Exception as err:
-                        write_log("Reinicio automatico nao realizado: " + str(err))
+            if LOCK.acquire(blocking=False):
+                try:
+                    c = load()
+                    if (c.get("automatic", True) and c.get("desired_running", True)
+                            and not owned() and not port_busy(backend_port())):
+                        if time.monotonic() - LAST_START > 90 and (DATA / "backend.env").is_file():
+                            LAST_START = time.monotonic()
+                            try:
+                                start()
+                            except Exception as err:
+                                write_log("Reinicio automatico nao realizado: " + str(err))
+                finally:
+                    LOCK.release()
         except Exception as err:
             write_log("Falha no monitor: " + str(err))
         time.sleep(15)
