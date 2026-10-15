@@ -118,6 +118,10 @@ def update(project: Path) -> None:
     previous_dist = None
     try:
         root_check(project)
+        if (STATE / "maintenance.flag").is_file():
+            raise RuntimeError("Servidor em manutenção. Atualização remota bloqueada.")
+        if (STATE / "restart.request").is_file():
+            raise RuntimeError("Há reinício pendente de outra operação. Confira o monitor antes.")
         say("ETAPA 1/6 — Verificando GitHub e segurança...")
         old = git(project, "rev-parse", "HEAD")
         git(project, "fetch", "--prune", "origin", "main")
