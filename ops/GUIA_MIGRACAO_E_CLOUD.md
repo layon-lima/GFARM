@@ -8,7 +8,11 @@ Nenhum destes scripts move seu banco automaticamente, troca o dominio ou modific
 
 Requisitos no NOVO PC: Git, Python 3.13, Node.js LTS, PostgreSQL com pg_dump/pg_restore compativeis (destino mesma versao major ou posterior), backup externo criptografado. O computador continua precisando estar ligado.
 
-1. No PC atual, obtenha um backup independente e agende uma janela sem operacoes. Interrompa o backend pelo painel e impeça movimentacoes, mas deixe o PostgreSQL ligado para a exportacao.
+1. No PC atual, obtenha um backup independente e agende uma janela sem operacoes. Se ainda estiver no monitor antigo V2, instale primeiro o monitor versionado no GitHub com INSTALAR_INICIALIZACAO.ps1 e REINICIE o Windows para encerrar os processos antigos. Ative a pausa do monitor:
+
+       powershell -NoProfile -ExecutionPolicy Bypass -File .\ops\windows\MODO_MANUTENCAO.ps1 -Ativar
+
+   Depois interrompa o backend pelo painel e impeça movimentacoes, mas deixe o PostgreSQL ligado para a exportacao. A exportacao rejeita backup se a porta da API continuar ativa ou voltar durante a operacao.
 2. Na pasta do projeto, com codigo atualizado do GitHub, rode no PowerShell:
 
        .\backend\.venv\Scripts\python.exe .\ops\migrar_servidor.py exportar --destino "E:\ESTQ_TRANSFERENCIA" --operacoes-pausadas
@@ -32,7 +36,8 @@ Requisitos no NOVO PC: Git, Python 3.13, Node.js LTS, PostgreSQL com pg_dump/pg_
        powershell -NoProfile -ExecutionPolicy Bypass -File .\ops\windows\INSTALAR_INICIALIZACAO.ps1
 
    O instalador move inicializadores velhos para backup, cria atalho .lnk e inicia monitor versionado que tenta recuperar backend quando /api/health parar. Logs em %LOCALAPPDATA%\ESTQ-Inicializacao. O atalho funciona DEPOIS DO LOGIN do usuario no Windows; nao durante PC desligado.
-8. Migre o servico Cloudflare Tunnel para o destino, com credenciais guardadas FORA do GitHub. Mantenha o endereco publico apontando para origem ate confirmar testes. Interrompa gravacoes na origem antes de liberar destino. Nao retome escrita nos dois servidores.
+8. Se a migracao for cancelada, libere o monitor no PC antigo com MODO_MANUTENCAO.ps1 -Desativar. Se o destino for colocado em producao, NAO remova a pausa para aceitar operacoes antigas.
+9. Migre o servico Cloudflare Tunnel para o destino, com credenciais guardadas FORA do GitHub. Mantenha o endereco publico apontando para origem ate confirmar testes. Interrompa gravacoes na origem antes de liberar destino. Nao retome escrita nos dois servidores.
 
 ## B — HOSPEDAR EM VPS LINUX (PC PODE FICAR DESLIGADO)
 
