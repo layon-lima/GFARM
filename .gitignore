@@ -74,3 +74,11 @@ base44/.app.jsonc
 historico_migracao/
 VALIDACAO_PROJETO.txt
 VALIDAR_PROJETO_COMPLETO_V4.ps1
+
+# Migrações de servidor — backups e arquivos privados jamais no Git
+/transfer/
+/migracao/
+*.dump
+*.backup
+*.sha256
+*.zip
