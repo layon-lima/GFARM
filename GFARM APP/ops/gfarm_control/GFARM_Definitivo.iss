@@ -1,5 +1,5 @@
 ; GFARM - Instalador Windows em 3 etapas.
-; Dependencias e interface estao no pacote, sem uso de aplicativos antigos.
+; Instalador leve: baixa os arquivos do GFARM diretamente do GitHub privado.
 #define AppName "GFARM"
 #define AppVersion "2.0.0"
 
@@ -40,7 +40,6 @@ Source: "build\GFARM.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM-Control.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM-Control.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "build\GFARM_APP.zip"; DestDir: "{app}"; Flags: ignoreversion
 Source: "install_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -80,7 +79,7 @@ begin
   Txt.Width := Stage1.SurfaceWidth;
   Txt.Height := 130;
   Txt.Caption := 'A instalação terá dois atalhos independentes: GFARM e GFARM Control.' + #13#10#13#10 +
-    'O GFARM será instalado com frontend, backend Python e dependências.' + #13#10 +
+    'O GFARM será baixado do GitHub privado durante a instalação; poderá pedir autenticação.' + #13#10 +
     'Os arquivos operacionais ficarão separados, em ProgramData\GFARM.' + #13#10#13#10 +
     'Não serão criados dados fictícios e o banco PostgreSQL existente não será apagado.';
 
@@ -145,8 +144,7 @@ begin
   WizardForm.StatusLabel.Caption := '1/3 e 3/3 — Instalando GFARM, dependências e serviço do Windows...';
   Arguments := '-NoProfile -ExecutionPolicy Bypass -File "' +
     ExpandConstant('{app}\install_windows.ps1') + '" -InstallDir "' +
-    ExpandConstant('{app}') + '" -PayloadZip "' +
-    ExpandConstant('{app}\GFARM_APP.zip') + '"';
+    ExpandConstant('{app}') + '"';
   if (not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     Arguments, '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or
     (ResultCode <> 0) then
