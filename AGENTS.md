@@ -414,6 +414,17 @@ Testar o endpoint/fluxo que a UI realmente usa.
 - Hospedagem externa deve manter PostgreSQL e uploads persistentes, rede de banco privada, HTTPS, healthchecks, backups EXTERNOS e nenhum segredo no GitHub.
 - Balanca Web Serial depende do navegador/USB do PC operador; pasta local XML requer transferencia segura para VPS.
 
+## 12.2 PAINEL ÚNICO E TRANSFERÊNCIA PARA OUTRO WINDOWS
+
+- Entrega para novo PC: **um único PAINEL_ESTQ.exe**, produzido do GitHub Actions a partir de ops/painel_estq.py; nunca enviar instalador não versionado pelo chat.
+- No novo PC, o painel instala dependências via Winget, usa Git Credential Manager para baixar repositório privado, compila app, configura banco PostgreSQL exclusivo e restaura backup verificado do PC antigo.
+- Toda a operação de instalação, atualização, início, diagnóstico, exportação e restauração deve estar acessível pelo painel.
+- Banco, uploads, XMLs e chaves privadas NÃO estão no GitHub ou no EXE; transferir dados reais em pacote ZIP + SHA256 via meio privado criptografado e exigir confirmação da fonte antes do corte.
+- Preservar identidade, contas, históricos, custos, saldos oficiais do motor, tickets e arquivos; não reinicializar banco antigo, não criar um banco paralelo, não reescrever registros.
+- Nunca abrir backend no destino com banco vazio. Não permitir restore sobre tabelas ou uploads existentes; não iniciar o túnel público novo antes de parar o antigo para escrita.
+- Cloudflare Tunnel precisa de autorização pelo próprio dono no novo PC; não gravar token no GitHub, painel ou logs. Dispositivos Web Serial necessitam de nova permissão no navegador.
+- O painel deve operar com duplo clique no Windows e exibir erro/progresso, sem exigir git pull, Python ou scripts manuais ao usuário como fluxo principal.
+
 # 13. DEPLOY
 
 O usuário possui painel local com a ação:
