@@ -16,7 +16,7 @@ DefaultGroupName=GFARM
 DisableProgramGroupPage=yes
 UsePreviousAppDir=yes
 UninstallDisplayName=GFARM - Painel de Controle
-OutputDir=dist\setup
+OutputDir=..\..\dist\setup
 OutputBaseFilename=GFARM_Instalador
 Compression=lzma2
 SolidCompression=yes
@@ -36,7 +36,7 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDescription: "Atalhos:"; Flags: checkedonce
 
 [Files]
-Source: "dist\PAINEL_ESTQ.exe"; DestDir: "{app}"; DestName: "PAINEL_ESTQ.exe"; Flags: ignoreversion
+Source: "..\..\dist\PAINEL_ESTQ.exe"; DestDir: "{app}"; DestName: "PAINEL_ESTQ.exe"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\GFARM - Painel de Controle"; Filename: "{app}\PAINEL_ESTQ.exe"; WorkingDir: "{app}"
