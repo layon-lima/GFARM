@@ -327,9 +327,9 @@ def verify_backup(name):
 
 def restore_empty(name, confirmation):
     # NUNCA restaura sobre banco real preenchido.
-    e, args = db_args()
     if confirmation != "RESTAURAR EM BANCO VAZIO":
         raise RuntimeError("Confirme o texto exato de restauracao.")
+    e, args = db_args()
     if port_busy(backend_port()):
         raise RuntimeError("Pare o GFARM antes da restauracao.")
     info = verify_backup(name)
