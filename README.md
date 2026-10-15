@@ -44,15 +44,24 @@ Consulte [MIGRACAO E CLOUD](ops/GUIA_MIGRACAO_E_CLOUD.md) para:
 
 **Nao copie backups ou credenciais para o GitHub e nao restaure por cima do banco atual.** O VPS e o Cloudflare requerem configuracao na conta do operador.
 
-## Instalação oficial GFARM (Windows)
+## Instalação oficial do SISTEMA GFARM (Windows)
 
-Use [GFARM_Instalador.exe](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest).
-O assistente instala o painel em **C:\\Programas\\GFARM** (caminho configurável),
-com atalho no menu Iniciar, opção de atalho na Área de Trabalho e desinstalador.
-Dados e backend ficam fora dessa pasta protegida; no PC novo o servidor usa
-`%LOCALAPPDATA%\\GFARM\\Servidor`. A instalação não inicia servidor automaticamente
-nem migra/substitui o banco existente. Em PCs com estoque já em uso, o painel
-identifica o caminho real e pede confirmação antes de qualquer atualização.
+Baixe o **[GFARM_Instalador.exe](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest)**.
+É o instalador online do **sistema de estoque**, não apenas do painel: oferece
+a pasta padrão `C:\\Programas\\GFARM` (editável pelo usuário), cria atalhos e
+abre o assistente **INSTALAR GFARM COMPLETO** após a instalação.
+
+O assistente instala os programas necessários, baixa o código oficial do
+GitHub para `C:\\Programas\\GFARM\\Servidor` (ou na pasta escolhida),
+instala o backend e compila o site. Em seguida, cria um banco PostgreSQL
+**novo** com autorização, solicita o backup ZIP acompanhado de SHA256 para
+restaurar os dados e permite iniciar o servidor após a validação. Exige
+internet, Windows 11 e eventualmente permissões de administrador/reinicialização.
+
+**Não reinstala o estoque sobre um servidor em funcionamento, não apaga banco
+existente e não copia os dados privados do GitHub.** Em PC que já executa o
+ESTQ, a instalação preserva o servidor e o painel procura seu caminho real.
+Veja [manual completo](ops/PAINEL_UNICO_WINDOWS.md).
 
 ## Painel único Windows (instalação e troca de PC)
 
