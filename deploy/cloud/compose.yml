@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$${POSTGRES_USER}\" -d \"$$${POSTGRES_DB}\""]
+      test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER}\" -d \"${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -27,6 +27,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: "5432"
+      ESTQ_XML_TICKET_DIR: "/home/estq/Documents/INDEX ERP DATA/xml-inbox"
       APP_HOST: "0.0.0.0"
       APP_PORT: "8000"
     ports:
