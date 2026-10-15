@@ -19,7 +19,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-REPO = "layon-lima/gest-o-de-estoque-novo-horizonte"
+REPO = "layon-lima/GFARM"
 STATE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ESTQ-Inicializacao"
 
 
@@ -54,7 +54,8 @@ def health() -> bool:
 
 
 def root_check(project: Path) -> None:
-    if not (project / ".git").exists() or not (project / "backend" / ".env").is_file():
+    git_root = project.parent if project.name == "GFARM APP" else project
+    if not (git_root / ".git").exists() or not (project / "backend" / ".env").is_file():
         raise RuntimeError("Pasta do servidor inválida ou banco não configurado. Nenhuma alteração feita.")
     origin = git(project, "remote", "get-url", "origin")
     if REPO not in origin or git(project, "branch", "--show-current") != "main":
@@ -132,12 +133,19 @@ def update(project: Path) -> None:
         # Não aceitar uma reescrita da main ou versões divergentes.
         git(project, "merge-base", "--is-ancestor", old, new)
         changed = changes(project, old, new)
-        if any(x.startswith("backend/alembic/") or x == "backend/requirements.txt" for x in changed):
+        if project.name != "GFARM APP" and any(x.startswith("GFARM APP/") for x in changed):
+            raise RuntimeError(
+                "Reorganização do repositório detectada. Atualização automática "
+                "de uma instalação antiga bloqueada para proteger o servidor."
+            )
+        prefix = "GFARM APP/" if project.name == "GFARM APP" else ""
+        if any(x.startswith(prefix + "backend/alembic/") or
+               x == prefix + "backend/requirements.txt" for x in changed):
             raise RuntimeError(
                 "Esta versão altera migrations ou dependências do backend. "
                 "Por segurança exige atualização local supervisionada e backup."
             )
-        backend_changed = any(x.startswith("backend/") for x in changed)
+        backend_changed = any(x.startswith(prefix + "backend/") for x in changed)
         if backend_changed and not monitor_owns_backend():
             raise RuntimeError(
                 "O backend foi iniciado por outro painel ou monitor antigo. "
@@ -145,17 +153,19 @@ def update(project: Path) -> None:
                 "inicializador GitHub no computador servidor. Nenhuma versão aplicada."
             )
         say("ETAPA 2/6 — Montando a nova versão em pasta isolada...")
-        build_dir = Path(tempfile.mkdtemp(prefix="estq-build-", dir=str(project.parent)))
+        repo_root = project.parent if project.name == "GFARM APP" else project
+        build_dir = Path(tempfile.mkdtemp(prefix="estq-build-", dir=str(repo_root.parent)))
         # Git exige diretório inexistente ao criar um worktree.
         shutil.rmtree(build_dir)
         git(project, "worktree", "add", "--detach", str(build_dir), new)
         added_worktree = True
         say("ETAPA 3/6 — Instalando e compilando frontend separado do app online...")
+        build_app = build_dir / "GFARM APP" if project.name == "GFARM APP" else build_dir
         run(["npm.cmd" if os.name == "nt" else "npm", "ci", "--no-audit", "--no-fund"],
-            build_dir, timeout=1800)
+            build_app, timeout=1800)
         run(["npm.cmd" if os.name == "nt" else "npm", "run", "build"],
-            build_dir, timeout=1200)
-        staged_dist = build_dir / "dist"
+            build_app, timeout=1200)
+        staged_dist = build_app / "dist"
         if not (staged_dist / "index.html").is_file():
             raise RuntimeError("Novo frontend não foi compilado. App atual preservado.")
         # Uma segunda verificação antes da publicação protege contra concorrência.
