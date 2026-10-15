@@ -1,0 +1,67 @@
+name: Painel Unico Windows ESTQ
+
+on:
+  pull_request:
+    paths:
+      - 'ops/painel_estq.py'
+      - 'tests/test_painel_estq.py'
+      - '.github/workflows/painel-estq-windows.yml'
+      - 'ops/migrar_servidor.py'
+  push:
+    branches: [main]
+    paths:
+      - 'ops/painel_estq.py'
+      - 'tests/test_painel_estq.py'
+      - '.github/workflows/painel-estq-windows.yml'
+      - 'ops/migrar_servidor.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  painel-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Testes de protecao e sintaxe
+        shell: pwsh
+        run: |
+          python -m compileall -q ops/painel_estq.py ops/migrar_servidor.py
+          python -m unittest discover -s tests -p 'test_painel_estq.py' -v
+      - name: Construir executavel de arquivo unico
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.16.0
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --noupx --name PAINEL_ESTQ ops/painel_estq.py
+          if (-not (Test-Path dist/PAINEL_ESTQ.exe)) {
+            throw "Executavel nao foi gerado"
+          }
+          (Get-FileHash dist/PAINEL_ESTQ.exe -Algorithm SHA256).Hash | Out-File dist/PAINEL_ESTQ.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PAINEL_ESTQ_WINDOWS_UNICO
+          path: |
+            dist/PAINEL_ESTQ.exe
+            dist/PAINEL_ESTQ.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publicar executavel para download apos merge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: painel-estq-${{ github.run_number }}
+          name: Painel ESTQ Windows - ${{ github.sha }}
+          make_latest: true
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            Painel portatil oficial do servidor ESTQ (1 unico EXE), compilado pelo GitHub Actions a partir de main.
+            Use em Windows 11. Sem credenciais, sem banco e sem dados embutidos.
+            Para transferir cadastros, saldo, imagens e tickets, crie o backup verificado no computador anterior.
+          files: |
+            dist/PAINEL_ESTQ.exe
+            dist/PAINEL_ESTQ.exe.sha256
