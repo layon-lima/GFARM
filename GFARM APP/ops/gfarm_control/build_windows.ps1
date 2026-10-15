@@ -52,12 +52,37 @@ try {
       throw 'Pacote contem credenciais ou node_modules.'
     }
   } finally { $archive.Dispose() }
-  Write-Host '[5/5] Compilando Inno Setup...'
-  $pfx86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
-  if (-not $pfx86) { $pfx86 = $env:ProgramFiles }
-  $iscc = Join-Path $pfx86 'Inno Setup 6\ISCC.exe'
-  if (-not (Test-Path $iscc)) { $iscc = Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
-  if (-not (Test-Path $iscc)) { throw 'Instale Inno Setup 6 para compilar.' }
+  Write-Host '[5/5] Localizando Inno Setup 6 e compilando...'
+  function Find-InnoSetup6 {
+    $locations = @(
+      (Join-Path ([Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) 'Inno Setup 6\ISCC.exe'),
+      (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
+      (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')
+    )
+    foreach ($candidate in $locations) {
+      if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        return $candidate
+      }
+    }
+    return $null
+  }
+  $iscc = Find-InnoSetup6
+  if (-not $iscc) {
+    Write-Host 'Inno Setup 6 ausente. Instalando automaticamente pelo winget...'
+    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if (-not $winget) {
+      throw 'Inno Setup 6 ausente e winget indisponivel. Instale Inno Setup 6 e execute novamente.'
+    }
+    & $winget.Source install --id JRSoftware.InnoSetup --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+    if ($LASTEXITCODE -ne 0) {
+      throw "Instalacao do Inno Setup 6 falhou (codigo $LASTEXITCODE)."
+    }
+    $iscc = Find-InnoSetup6
+  }
+  if (-not $iscc) {
+    throw 'Inno Setup 6 foi instalado, mas ISCC.exe nao foi encontrado nos caminhos conhecidos. Reinicie o VS Code e execute novamente.'
+  }
+  Write-Host "Compilador Inno Setup: $iscc"
   & $iscc (Join-Path $here 'GFARM_Definitivo.iss')
   if ($LASTEXITCODE -ne 0) { throw 'Erro Inno Setup.' }
   $exe = Join-Path $build 'GFARM_Instalador_Definitivo.exe'
