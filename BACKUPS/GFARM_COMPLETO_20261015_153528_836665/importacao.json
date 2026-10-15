@@ -1,0 +1,19 @@
+{
+  "format": "GFARM-GITHUB-PARTES-v1",
+  "arquivo_original": "GFARM_COMPLETO_20261015_153528_836665.zip",
+  "tamanho_original": 81640704,
+  "sha256_original": "a53294630f4ffcf3014ceacdea54764e7c0cdbae05b22bd52e1e1a21a5381039",
+  "partes": [
+    {
+      "arquivo": "GFARM_COMPLETO_20261015_153528_836665.zip.part0001",
+      "bytes": 50331648,
+      "sha256": "475ce96bd1f94a56bfc7a936abd7012eea753e89a1ff00a9dc2166d7ac44f1ef"
+    },
+    {
+      "arquivo": "GFARM_COMPLETO_20261015_153528_836665.zip.part0002",
+      "bytes": 31309056,
+      "sha256": "634900aec7b30d2cf310297df126513701e72b1b31ca81db4230eea455b7bb0f"
+    }
+  ],
+  "restaurar": "Concatenar partes na ordem e conferir SHA-256; restaurar somente em banco vazio."
+}
