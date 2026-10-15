@@ -45,14 +45,14 @@ Source: "install_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\GFARM.ico"
-Name: "{autoprograms}\GFARM Control"; Filename: "http://127.0.0.1:8787"; IconFilename: "{app}\GFARM-Control.ico"
+Name: "{autoprograms}\GFARM Control"; Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; IconFilename: "{app}\GFARM-Control.ico"
 Name: "{autodesktop}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\GFARM.ico"; Tasks: desktopicon
-Name: "{autodesktop}\GFARM Control"; Filename: "http://127.0.0.1:8787"; IconFilename: "{app}\GFARM-Control.ico"; Tasks: desktopicon
+Name: "{autodesktop}\GFARM Control"; Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; IconFilename: "{app}\GFARM-Control.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\GFARM-Control.exe"; Parameters: "--setup-password-file ""{commonappdata}\GFARM\control-password.tmp"""; StatusMsg: "2/3 — Configurando senha segura do GFARM Control..."; Flags: runhidden waituntilterminated; Check: PasswordNeeded
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install_windows.ps1"" -InstallDir ""{app}"" -PayloadZip ""{app}\GFARM_APP.zip"""; StatusMsg: "1/3 e 3/3 — Instalando o GFARM completo e configurando serviços..."; Flags: runhidden waituntilterminated
-Filename: "http://127.0.0.1:8787"; Description: "Abrir GFARM Control para configurar PostgreSQL"; Flags: shellexec postinstall skipifsilent nowait
+Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; Description: "Abrir GFARM Control para configurar PostgreSQL"; Flags: postinstall skipifsilent nowait
 
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/End /TN ""GFARM Control"""; Flags: runhidden
