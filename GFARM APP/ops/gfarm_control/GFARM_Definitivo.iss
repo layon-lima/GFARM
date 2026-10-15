@@ -50,8 +50,6 @@ Name: "{autodesktop}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\G
 Name: "{autodesktop}\GFARM Control"; Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; IconFilename: "{app}\GFARM-Control.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\GFARM-Control.exe"; Parameters: "--setup-password-file ""{commonappdata}\GFARM\control-password.tmp"""; StatusMsg: "2/3 — Configurando senha segura do GFARM Control..."; Flags: runhidden waituntilterminated; Check: PasswordNeeded
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\install_windows.ps1"" -InstallDir ""{app}"" -PayloadZip ""{app}\GFARM_APP.zip"""; StatusMsg: "1/3 e 3/3 — Instalando o GFARM completo e configurando serviços..."; Flags: runhidden waituntilterminated
 Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; Description: "Abrir GFARM Control para configurar PostgreSQL"; Flags: postinstall skipifsilent nowait
 
 [UninstallRun]
@@ -126,12 +124,34 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  P: String;
+  P, Arguments: String;
+  ResultCode: Integer;
 begin
-  if (CurStep = ssPostInstall) and PasswordNeeded() then
+  if CurStep <> ssPostInstall then
+    Exit;
+
+  if PasswordNeeded() then
   begin
     P := ExpandConstant('{commonappdata}\GFARM\control-password.tmp');
     if not SaveStringToFile(P, PasswordPage.Values[0], False) then
       RaiseException('Não foi possível preparar a senha do GFARM Control.');
+    WizardForm.StatusLabel.Caption := '2/3 — Configurando GFARM Control...';
+    if (not Exec(ExpandConstant('{app}\GFARM-Control.exe'),
+      '--setup-password-file "' + P + '"', '', SW_HIDE,
+      ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+      RaiseException('Falha ao configurar a senha do GFARM Control. Código: ' + IntToStr(ResultCode));
   end;
+
+  WizardForm.StatusLabel.Caption := '1/3 e 3/3 — Instalando GFARM, dependências e serviço do Windows...';
+  Arguments := '-NoProfile -ExecutionPolicy Bypass -File "' +
+    ExpandConstant('{app}\install_windows.ps1') + '" -InstallDir "' +
+    ExpandConstant('{app}') + '" -PayloadZip "' +
+    ExpandConstant('{app}\GFARM_APP.zip') + '"';
+  if (not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    Arguments, '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or
+    (ResultCode <> 0) then
+    RaiseException('Falha na instalação GFARM. Código: ' + IntToStr(ResultCode) +
+      '. Veja o registro em C:\ProgramData\GFARM\instalacao.log.');
+
+  WizardForm.StatusLabel.Caption := 'GFARM instalado — abra o Control para conectar ao PostgreSQL.';
 end;
