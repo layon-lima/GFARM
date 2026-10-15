@@ -46,7 +46,10 @@ def find_binary(name: str) -> Path | None:
         "python": [local / "Programs" / "Python" / "Python313" / "python.exe"],
         "psql": [program / "PostgreSQL" / "17" / "bin" / "psql.exe"],
         "pg_dump": [program / "PostgreSQL" / "17" / "bin" / "pg_dump.exe"],
-        "cloudflared": [program / "cloudflared" / "cloudflared.exe"],
+        "cloudflared": [
+            program / "cloudflared" / "cloudflared.exe",
+            Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "cloudflared" / "cloudflared.exe",
+        ],
     }
     return next((p for p in patterns.get(name, []) if p.is_file()), None)
 
@@ -284,6 +287,7 @@ class Painel:
             ("Node.js", "npm", "OpenJS.NodeJS.LTS"),
             ("Python 3.13", "python", "Python.Python.3.13"),
             ("PostgreSQL 17", "psql", "PostgreSQL.PostgreSQL.17"),
+            ("Cloudflare Tunnel", "cloudflared", "Cloudflare.cloudflared"),
         ]:
             present = find_binary(binary)
             if present and (binary != "python" or "313" in str(present) or find_binary("py")):
@@ -621,16 +625,83 @@ class Painel:
         return "Diagnóstico finalizado. Consulte mensagens e log do painel."
 
     def cloudflare(self):
-        messagebox.showinfo(
-            "Acesso externo seguro",
-            "O Cloudflare Tunnel deve ser instalado no NOVO PC como serviço Windows, "
-            "com credenciais da sua conta Cloudflare. Não copie tokens para o GitHub.\n\n"
-            "Mantenha o endereço público no PC antigo até validar dados e saldos no novo.\n\n"
-            "O painel pode preparar o backend, mas a mudança final do túnel requer "
-            "autorização na sua conta Cloudflare.\n\n"
-            "Será aberta a página oficial do Cloudflare."
+        if not api_ok():
+            messagebox.showerror("ESTQ", "A API do ESTQ precisa estar online e validada antes de ativar acesso externo.")
+            return
+        if not find_binary("cloudflared"):
+            if messagebox.askyesno(
+                "Cloudflare Tunnel",
+                "O Cloudflare Tunnel ainda não foi instalado. Instalar o programa oficial pelo Winget?"
+            ):
+                self.run_background("Instalar Cloudflare Tunnel", self._winget, "Cloudflare.cloudflared")
+            return
+        text = (
+            "A troca do túnel é a última etapa. O servidor antigo NÃO pode "
+            "continuar aceitando gravações enquanto o novo estiver público.\n\n"
+            "Pelo painel Cloudflare, acesse Networking > Tunnels > Seu túnel > Add a replica "
+            "e copie SOMENTE o token (string iniciada por eyJ).\n\n"
+            "O painel instala como serviço, sem gravar token no GitHub. "
+            "Se seu túnel atual for gerenciado localmente, primeiro converta/crie "
+            "um túnel gerenciado remotamente no Cloudflare."
         )
-        webbrowser.open("https://one.dash.cloudflare.com/")
+        if not messagebox.askyesno("Ativar no novo servidor", text + "\n\nJá validou os dados e parou o servidor/túnel ANTIGO?"):
+            webbrowser.open("https://one.dash.cloudflare.com/")
+            return
+        if not messagebox.askyesno("CONFIRMAÇÃO FINAL",
+             "Confirma que o servidor ANTIGO foi desconectado e não receberá mais movimentações?"):
+            return
+        token = simpledialog.askstring(
+            "Token do Cloudflare Tunnel", "Cole somente o token do túnel remoto (não será salvo no painel):",
+            show="*", parent=self.root,
+        )
+        if not token:
+            return
+        token = token.strip()
+        if not token.startswith("eyJ") or any(c.isspace() for c in token):
+            messagebox.showerror("ESTQ", "Token inválido. Obtenha o token pela sua conta Cloudflare.")
+            return
+        self.run_background("Instalar túnel remoto como serviço Windows",
+                            self._install_cloudflare_service, token)
+
+    def _install_cloudflare_service(self, token):
+        import ctypes
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            raise RuntimeError(
+                "É necessária permissão de Administrador para instalar serviço Windows. "
+                "Feche o painel e execute PAINEL_ESTQ.exe como administrador nesta etapa."
+            )
+        binary = find_binary("cloudflared")
+        if not binary:
+            raise RuntimeError("cloudflared ausente. Instale pelo painel primeiro.")
+        checked = self._run(["sc.exe", "query", "cloudflared"], timeout=15) if self._service_exists() else ""
+        if checked:
+            raise RuntimeError(
+                "Serviço Cloudflare já existe. O painel não altera um túnel previamente configurado."
+            )
+        # cloudflared >= 2026.7.3 grava o token em arquivo ACL-protegido
+        # e configura Windows Service com --token-file.
+        try:
+            result = subprocess.run(
+                [str(binary), "service", "install", token],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=100,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("Instalador Cloudflare excedeu o tempo.") from exc
+        if result.returncode:
+            message = (result.stderr or result.stdout or "").replace(token, "[TOKEN OCULTO]")
+            raise RuntimeError("Cloudflare não conseguiu instalar serviço: " + message[-800:])
+        self._log("Cloudflare Tunnel instalado como serviço Windows.")
+        return "Túnel configurado. Confira o status da conexão e o domínio no painel da Cloudflare."
+
+    def _service_exists(self):
+        result = subprocess.run(
+            ["sc.exe", "query", "cloudflared"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return result.returncode == 0
 
     def guide(self):
         webbrowser.open("https://github.com/" + REPO_SLUG + "/blob/main/ops/GUIA_MIGRACAO_E_CLOUD.md")
