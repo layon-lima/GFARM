@@ -31,7 +31,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 REPO = "https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte.git"
 REPO_SLUG = "layon-lima/gest-o-de-estoque-novo-horizonte"
 REPO_BRANCH = "main"
-PANEL_VERSION = "1.0"
+PANEL_VERSION = "1.1"
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ESTQ-Painel"
 CONFIG = DATA / "painel.json"
 LOG = DATA / "painel.log"
@@ -253,7 +253,7 @@ class Painel:
                     self.busy = False
                     for button in self.buttons:
                         button.configure(state="normal")
-                    self.status_value.set("Servidor online" if api_ok() else "Servidor indisponível no momento")
+                    self.status_value.set("API local online" if api_ok() else "API local indisponível — para outro PC use Testar conexão")
                     messagebox.showinfo("ESTQ", data)
                 elif event == "fail":
                     self.busy = False
@@ -1029,7 +1029,7 @@ class Painel:
         webbrowser.open("https://github.com/" + REPO_SLUG + "/blob/main/ops/GUIA_MIGRACAO_E_CLOUD.md")
 
     def run(self):
-        self.status_value.set("Servidor online" if api_ok() else "Servidor indisponível no momento")
+        self.status_value.set("API local online" if api_ok() else "API local indisponível — para outro PC use Testar conexão")
         self._log("Painel portátil v" + PANEL_VERSION + " | GitHub main | dados locais preservados")
         self.root.mainloop()
 
