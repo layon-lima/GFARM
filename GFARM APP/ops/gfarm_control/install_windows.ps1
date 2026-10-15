@@ -169,6 +169,39 @@ try {
   & schtasks.exe /Run /TN 'GFARM Control' | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Falha ao iniciar tarefa GFARM Control.' }
 
+  # schtasks /Run confirma SOMENTE o pedido de inicializacao;
+  # ele nao garante que GFARM-Control.exe conseguiu atender a porta 8787.
+  Log 'Verificando servidor HTTP do Control (ate 45 segundos).'
+  $controlOnline = $false
+  for ($attempt = 0; $attempt -lt 45; $attempt++) {
+    try {
+      $request = [System.Net.HttpWebRequest]::Create('http://127.0.0.1:8787/')
+      $request.Proxy = $null
+      $request.Timeout = 1500
+      $request.ReadWriteTimeout = 1500
+      $response = $request.GetResponse()
+      try {
+        $serverHeader = [string]$response.Headers['Server']
+        if ($serverHeader.StartsWith('GFARMControl/')) { $controlOnline = $true }
+      } finally { $response.Close() }
+      if ($controlOnline) { break }
+    } catch {
+      # Aguardando o processo iniciar; diagnosticos sao emitidos no fim.
+    }
+    Start-Sleep -Seconds 1
+  }
+  if (-not $controlOnline) {
+    Log 'GFARM Control nao respondeu na porta 8787.'
+    $taskState = & schtasks.exe /Query /TN 'GFARM Control' /V /FO LIST 2>&1
+    Log ('Estado da tarefa: ' + (($taskState | Out-String).Trim()))
+    $startupLog = Join-Path $root 'control-startup.log'
+    if (Test-Path -LiteralPath $startupLog) {
+      Log ('Falha interna Control: ' + ((Get-Content -LiteralPath $startupLog -Tail 12) -join ' | '))
+    }
+    throw 'GFARM Control nao iniciou. Confira o estado da tarefa e control-startup.log.'
+  }
+  Log 'GFARM Control ONLINE em http://127.0.0.1:8787/.'
+
   Log '[3/3] Detectando PostgreSQL sem modificar banco.'
   $pgDir = Join-Path $env:ProgramFiles 'PostgreSQL'
   $pg = Get-ChildItem -Path $pgDir -Directory -ErrorAction SilentlyContinue |
