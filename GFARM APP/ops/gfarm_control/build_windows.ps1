@@ -15,7 +15,21 @@ if ($LASTEXITCODE -ne 0) { throw 'Compilar dentro do repositorio GFARM.' }
 Write-Host "GFARM, commit $rev"
 Push-Location $here
 try {
-  Write-Host '[1/5] Validando Python...'
+  Write-Host '[1/5] Validando PowerShell do instalador e sintaxe Python...'
+  $installerTokens = $null
+  $installerErrors = $null
+  $null = [System.Management.Automation.Language.Parser]::ParseFile(
+    (Join-Path $here 'install_windows.ps1'),
+    [ref]$installerTokens,
+    [ref]$installerErrors
+  )
+  if ($installerErrors -and $installerErrors.Count -gt 0) {
+    foreach ($parseError in $installerErrors) {
+      Write-Host ("ERRO POWERSHELL: " + $parseError.ToString()) -ForegroundColor Red
+    }
+    throw 'O instalador tem erro de sintaxe PowerShell. EXE NAO sera gerado.'
+  }
+  Write-Host 'Script de instalacao PowerShell validado.'
   & $Python -3.13 -m py_compile server.py engine.py launcher.py create_icons.py
   if ($LASTEXITCODE -ne 0) { throw 'Erro de sintaxe Python.' }
   Write-Host '[2/5] Instalando utilitarios de build...'
