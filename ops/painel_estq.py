@@ -121,7 +121,17 @@ class Painel:
         self.project_value = tk.StringVar(value=self.config.get("project", str(DEFAULT_PROJECT)))
         self.status_value = tk.StringVar(value="Verificando servidor...")
         self._layout()
+        self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.after(200, self._drain)
+
+    def _close(self):
+        if self.busy:
+            messagebox.showwarning(
+                "Operação em andamento",
+                "Aguarde finalizar a instalação, backup ou restauração para fechar o painel."
+            )
+            return
+        self.root.destroy()
 
     def _layout(self):
         outer = ttk.Frame(self.root, padding=14)
@@ -290,7 +300,17 @@ class Painel:
             ("Cloudflare Tunnel", "cloudflared", "Cloudflare.cloudflared"),
         ]:
             present = find_binary(binary)
-            if present and (binary != "python" or "313" in str(present) or find_binary("py")):
+            if binary == "python":
+                ready = False
+                try:
+                    self._python_for_venv()
+                    ready = True
+                except RuntimeError:
+                    pass
+                if ready:
+                    self._log(label + " detectado.")
+                    continue
+            elif present:
                 self._log(label + " detectado.")
                 continue
             self._winget(package)
