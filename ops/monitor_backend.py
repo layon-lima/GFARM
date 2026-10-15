@@ -84,6 +84,10 @@ def main() -> int:
     child = None
     while True:
         try:
+            if (log_dir / "maintenance.flag").is_file():
+                # Durante backup de migração, não reiniciar a API.
+                time.sleep(max(args.intervalo, 5))
+                continue
             if health(args.port):
                 time.sleep(max(args.intervalo, 5))
                 continue
