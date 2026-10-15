@@ -27,16 +27,17 @@ from pathlib import Path
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from ops.local_install import is_estq_project, locate_projects, windows_processes
+from ops.local_install import (default_server_root, initial_server_root,
+                               is_estq_project, locate_projects, windows_processes)
 
 REPO = "https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte.git"
 REPO_SLUG = "layon-lima/gest-o-de-estoque-novo-horizonte"
 REPO_BRANCH = "main"
-PANEL_VERSION = "1.2"
+PANEL_VERSION = "1.3"
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ESTQ-Painel"
 CONFIG = DATA / "painel.json"
 LOG = DATA / "painel.log"
-DEFAULT_PROJECT = Path.home() / "Documents" / "ESTQ_SERVIDOR"
+DEFAULT_PROJECT = default_server_root()
 REMOTE_KEY = DATA / "id_ed25519_estq"
 REMOTE_HOSTS = DATA / "remote_known_hosts"
 
@@ -122,10 +123,10 @@ class Painel:
         self.events = queue.Queue()
         self.busy = False
         self.root = tk.Tk()
-        self.root.title("ESTQ — Painel do Servidor | v" + PANEL_VERSION)
+        self.root.title("GFARM — Painel de Controle | v" + PANEL_VERSION)
         self.root.geometry("1040x850")
         self.root.minsize(850, 730)
-        self.project_value = tk.StringVar(value=self.config.get("project", str(DEFAULT_PROJECT)))
+        self.project_value = tk.StringVar(value=str(initial_server_root(self.config)))
         self.remote_ip = tk.StringVar(value=self.config.get("remote_ip", ""))
         self.remote_user = tk.StringVar(value=self.config.get("remote_user", ""))
         self.remote_project = tk.StringVar(value=self.config.get("remote_project", ""))
@@ -150,17 +151,21 @@ class Painel:
     def _layout(self):
         outer = ttk.Frame(self.root, padding=14)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text="PAINEL DE CONTROLE DO SERVIDOR ESTQ",
+        ttk.Label(outer, text="GFARM — PAINEL DE CONTROLE",
                   font=("Segoe UI", 16, "bold")).pack(anchor="w")
         ttk.Label(outer, text="Instalação, GitHub, banco, migração, início automático e diagnóstico.",
                   foreground="#64748b").pack(anchor="w", pady=(0, 10))
         location = ttk.Frame(outer)
         location.pack(fill="x", pady=(0, 6))
-        ttk.Label(location, text="Pasta do projeto:").pack(side="left")
+        ttk.Label(location, text="Pasta do servidor:").pack(side="left")
         ttk.Entry(location, textvariable=self.project_value).pack(side="left", fill="x", expand=True, padx=8)
         ttk.Button(location, text="Escolher pasta", command=self.choose_project).pack(side="left", padx=(0, 6))
         ttk.Button(location, text="Localizar instalação em uso", command=self.detect_existing).pack(side="left")
         ttk.Label(outer, textvariable=self.status_value, foreground="#2563eb").pack(anchor="w", pady=(0, 10))
+        ttk.Label(outer,
+                  text="Pasta do painel: C:\\Programas\\GFARM (configurável no instalador). "
+                       "Pasta dos dados/servidor: separada e gravável.",
+                  foreground="#64748b").pack(anchor="w", pady=(0, 5))
 
         boxes = ttk.Frame(outer)
         boxes.pack(fill="x")
