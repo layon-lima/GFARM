@@ -27,11 +27,12 @@ from pathlib import Path
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
+from ops.local_install import is_estq_project, locate_projects, windows_processes
 
 REPO = "https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte.git"
 REPO_SLUG = "layon-lima/gest-o-de-estoque-novo-horizonte"
 REPO_BRANCH = "main"
-PANEL_VERSION = "1.1"
+PANEL_VERSION = "1.2"
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ESTQ-Painel"
 CONFIG = DATA / "painel.json"
 LOG = DATA / "painel.log"
@@ -132,6 +133,10 @@ class Painel:
         self._layout()
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.after(200, self._drain)
+        # Não altera a instalação ao iniciar. Só oferece localização se a API
+        # está neste computador e o caminho padrão não contém o ERP existente.
+        if api_ok() and not is_estq_project(Path(self.project_value.get()).expanduser()):
+            self.root.after(500, self.detect_existing)
 
     def _close(self):
         if self.busy:
@@ -153,7 +158,8 @@ class Painel:
         location.pack(fill="x", pady=(0, 6))
         ttk.Label(location, text="Pasta do projeto:").pack(side="left")
         ttk.Entry(location, textvariable=self.project_value).pack(side="left", fill="x", expand=True, padx=8)
-        ttk.Button(location, text="Escolher pasta", command=self.choose_project).pack(side="left")
+        ttk.Button(location, text="Escolher pasta", command=self.choose_project).pack(side="left", padx=(0, 6))
+        ttk.Button(location, text="Localizar instalação em uso", command=self.detect_existing).pack(side="left")
         ttk.Label(outer, textvariable=self.status_value, foreground="#2563eb").pack(anchor="w", pady=(0, 10))
 
         boxes = ttk.Frame(outer)
@@ -254,7 +260,10 @@ class Painel:
                     for button in self.buttons:
                         button.configure(state="normal")
                     self.status_value.set("API local online" if api_ok() else "API local indisponível — para outro PC use Testar conexão")
-                    messagebox.showinfo("ESTQ", data)
+                    if isinstance(data, dict) and data.get("kind") == "discovery":
+                        self._offer_discovered(data)
+                    else:
+                        messagebox.showinfo("ESTQ", data)
                 elif event == "fail":
                     self.busy = False
                     for button in self.buttons:
@@ -294,6 +303,87 @@ class Painel:
         if path:
             self.project_value.set(path)
             self.project()
+
+    def detect_existing(self):
+        """Procura o backend ativo de forma somente leitura, sem baixar Git ou tocar no banco."""
+        self.run_background("Localizando a instalação existente", self._detect_existing)
+
+    def _detect_existing(self):
+        current = Path(self.project_value.get()).expanduser()
+        found = locate_projects(current)
+        return {"kind": "discovery", "found": found}
+
+    def _offer_discovered(self, report):
+        found = report["found"]
+        if not found:
+            messagebox.showwarning(
+                "Servidor não localizado",
+                "Não consegui identificar automaticamente a pasta que executa o estoque.\n\n"
+                "Isso NÃO significa que o banco esteja ausente. Clique em Escolher pasta e "
+                "selecione a pasta que contém backend, dist e os dados locais. "
+                "Nada foi instalado ou modificado."
+            )
+            return
+        # Mais de uma instalação exige confirmação explícita para evitar apontar
+        # o painel a clone de testes em lugar do servidor que atende os usuários.
+        if len(found) == 1:
+            chosen = found[0]
+        else:
+            menu = "\n".join(
+                f"{n}. {r['path']}  [{r['source']}]"
+                for n, r in enumerate(found[:10], 1)
+            )
+            index = simpledialog.askinteger(
+                "Selecionar instalação existente",
+                "Foram encontradas instalações diferentes. Escolha a pasta correta; "
+                "não alteraremos nenhuma delas automaticamente:\n\n" + menu,
+                minvalue=1, maxvalue=min(len(found), 10), parent=self.root
+            )
+            if index is None:
+                return
+            chosen = found[index - 1]
+        path = chosen["path"]
+        if not messagebox.askyesno(
+            "Confirmar servidor",
+            f"Usar esta pasta no painel?\n\n{path}\n\n"
+            f"Identificação: {chosen['source']}\n"
+            f"Clone Git: {'SIM' if chosen['git'] else 'NÃO'}\n\n"
+            "Esta operação só salva o caminho no painel. Não interrompe o estoque."
+        ):
+            return
+        self.project_value.set(str(path))
+        self.project()
+        self._log("Pasta de instalação selecionada: " + str(path))
+        if not chosen["git"]:
+            messagebox.showwarning(
+                "Instalação existente sem clone Git",
+                "Encontrei o ESTQ em execução, mas esta pasta não possui o "
+                "controle de versões .git.\n\n"
+                "O estoque continua funcionando normalmente. NÃO vamos clonar "
+                "ou substituir arquivos por cima dele. A atualização direta exige "
+                "vinculação segura da instalação existente ao repositório, "
+                "sem recriar banco ou mudar uploads."
+            )
+        else:
+            messagebox.showinfo(
+                "Instalação localizada",
+                "O caminho correto foi associado ao painel. Agora o botão "
+                "Atualizar do GitHub e publicar usará esta instalação."
+            )
+
+    def _check_active_target(self, project: Path) -> None:
+        """Nunca publicar silenciosamente em outro clone enquanto API local está ativa."""
+        if not api_ok():
+            return
+        active = locate_projects(processes=windows_processes(), other_roots=[])
+        active_paths = {x["path"] for x in active if x["source"] == "processo ativo"}
+        if active_paths and project.resolve() not in active_paths:
+            choices = "\n".join(str(x) for x in sorted(active_paths, key=str))
+            raise RuntimeError(
+                "A API está online, mas foi iniciada por OUTRA pasta:\n" + choices +
+                "\n\nUse Localizar instalação em uso. "
+                "Atualização bloqueada para não publicar no projeto errado."
+            )
 
     def remote_install_tailscale(self):
         if messagebox.askyesno("Tailscale",
@@ -781,31 +871,63 @@ class Painel:
 
     def update_and_publish(self):
         project = self.project()
-        if not (project / ".git").is_dir():
-            messagebox.showwarning("ESTQ", "Ainda não existe clone Git neste PC. Use Preparar aplicativo.")
+        if not is_estq_project(project):
+            if messagebox.askyesno(
+                "Caminho do servidor não identificado",
+                "A pasta configurada não corresponde a uma instalação existente "
+                "do ESTQ. Deseja localizar a instalação em uso?\n\n"
+                "Não será criado outro servidor nem outro banco."
+            ):
+                self.detect_existing()
+            return
+        if not (project / ".git").exists():
+            if messagebox.askyesno(
+                "Instalação antiga sem Git",
+                "Encontrei o estoque instalado nesta pasta, mas ela não contém "
+                "um clone Git. Não vou fazer nova instalação nem sobrescrever "
+                "o servidor existente.\n\nDeseja localizar outra instalação "
+                "que esteja vinculada ao GitHub?"
+            ):
+                self.detect_existing()
+            return
+        try:
+            self._check_active_target(project)
+        except RuntimeError as error:
+            messagebox.showerror("Proteção do servidor", str(error))
             return
         if not messagebox.askyesno(
-            "Atualizar do GitHub e publicar",
-            "Atualizar o código pela main e recompilar o aplicativo?\n\n"
-            "Isso não altera o banco, mas pode ser preciso reiniciar o backend "
-            "pelo próprio painel para ativar o código novo."
+            "Atualizar o servidor em uso",
+            f"Instalação selecionada:\n{project}\n\n"
+            "Publicar a versão do GitHub com verificações de segurança?\n"
+            "Atualizações com migrations ou dependências do backend serão "
+            "bloqueadas até execução supervisionada.\n\n"
+            "Se houver reinício, pode ocorrer breve interrupção. "
+            "Não atualize durante movimentações de estoque."
         ):
             return
-        self.run_background("Atualizar do GitHub e publicar", self._update_publish, project)
+        self.run_background("Atualização segura do servidor existente",
+                            self._update_publish, project)
 
     def _update_publish(self, project):
-        self._prepare(project)
-        if api_ok():
-            pid = self.config.get("backend_pid")
-            if pid and self._process_running(pid):
-                self._stop_owned_server()
-                return self._start(project) + " (atualizado pela main)"
-            return (
-                "GitHub atualizado e frontend compilado, mas o servidor foi iniciado "
-                "por OUTRO painel/monitor. Por segurança não encerramos processos desconhecidos. "
-                "Reinicie o servidor pelo painel original para ativar o backend novo."
+        self._check_active_target(project)
+        if not (project / ".git").exists():
+            raise RuntimeError("Esta instalação não está vinculada ao GitHub. Nada foi alterado.")
+        if not api_ok():
+            raise RuntimeError(
+                "O servidor local não responde. Atualização bloqueada para "
+                "não publicar em um banco ou instalação desconhecidos."
             )
-        return "Código atualizado. O servidor estava parado; clique Iniciar servidor."
+        # Reutiliza exatamente as proteções e o motor da atualização remota,
+        # mas executando localmente; sem instalar um clone novo ou iniciar outra API.
+        python = python_project(project)
+        updater = project / "ops" / "remote_update.py"
+        if not updater.is_file():
+            raise RuntimeError(
+                "O projeto ainda não contém o atualizador seguro. "
+                "Não execute 'Preparar aplicativo' em cima do ERP em uso."
+            )
+        return self._run([python, updater, "--project-dir", project, "update"],
+                         cwd=project, timeout=3600)
 
     def _process_running(self, pid):
         try:
