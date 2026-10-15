@@ -30,8 +30,8 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from ops.local_install import (default_server_root, initial_server_root,
                                is_estq_project, locate_projects, windows_processes)
 
-REPO = "https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte.git"
-REPO_SLUG = "layon-lima/gest-o-de-estoque-novo-horizonte"
+REPO = "https://github.com/layon-lima/GFARM.git"
+REPO_SLUG = "layon-lima/gfarm"
 REPO_BRANCH = "main"
 PANEL_VERSION = "1.4"
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ESTQ-Painel"
@@ -109,6 +109,8 @@ def safe_project_folder(project: Path) -> None:
     if project.exists() and not project.is_dir():
         raise RuntimeError("O caminho escolhido é um arquivo, não uma pasta.")
     if (project / ".git").exists():
+        return
+    if project.name == "GFARM APP" and (project.parent / ".git").exists():
         return
     if project.exists() and any(project.iterdir()):
         raise RuntimeError("Para evitar sobrescrita, escolha uma pasta vazia ou o clone Git oficial existente.")
@@ -828,22 +830,31 @@ class Painel:
         if not git:
             raise RuntimeError("Git ausente. Instale as dependências primeiro.")
         safe_project_folder(project)
-        if not (project / ".git").is_dir():
-            project.parent.mkdir(parents=True, exist_ok=True)
-            self._log("Clonando GitHub privado. Autorize a conta no navegador se solicitado.")
-            self._run([git, "clone", "--branch", REPO_BRANCH, "--single-branch", REPO,
-                       str(project)], timeout=1200)
+        if project.name != "GFARM APP":
+            raise RuntimeError(
+                "O novo layout exige a pasta GFARM APP de um clone novo. "
+                "Não é seguro converter um servidor antigo automaticamente."
+            )
+        repo_root = project.parent
+        if not (repo_root / ".git").is_dir():
+            if repo_root.exists() and any(repo_root.iterdir()):
+                raise RuntimeError("Pasta do clone ocupada. Não clonar sobre arquivos.")
+            repo_root.parent.mkdir(parents=True, exist_ok=True)
+            self._log("Clonando o GitHub privado do GFARM...")
+            self._run([git, "clone", "--branch", REPO_BRANCH, "--single-branch",
+                       REPO, str(repo_root)], timeout=1200)
+            if not (project / "backend" / "run_production.py").is_file():
+                raise RuntimeError("A pasta GFARM APP/backend não veio no clone.")
         else:
-            # Nunca registrar URL: origin pode conter credencial de checkout privado.
             remote = self._run(
-                [git, "remote", "get-url", "origin"], cwd=project, display=False
+                [git, "remote", "get-url", "origin"], cwd=repo_root, display=False
             ).lower()
             if REPO_SLUG not in remote:
-                raise RuntimeError("O repositório existente não é o ESTQ oficial. Nada foi alterado.")
-            if self._run([git, "status", "--porcelain"], cwd=project):
-                raise RuntimeError("Há mudanças locais rastreadas. Protegido contra sobrescrita pelo Git.")
-            self._run([git, "fetch", "origin", REPO_BRANCH], cwd=project, timeout=1200)
-            self._run([git, "merge", "--ff-only", "origin/main"], cwd=project, timeout=300)
+                raise RuntimeError("O clone existente não é do GFARM oficial.")
+            if self._run([git, "status", "--porcelain"], cwd=repo_root):
+                raise RuntimeError("Clone alterado localmente. Atualização bloqueada.")
+            self._run([git, "fetch", "origin", REPO_BRANCH], cwd=repo_root, timeout=1200)
+            self._run([git, "merge", "--ff-only", "origin/main"], cwd=repo_root, timeout=300)
         return git
 
     def _python_for_venv(self):
@@ -1061,7 +1072,7 @@ class Painel:
             ):
                 self.detect_existing()
             return
-        if not (project / ".git").exists():
+        if not ((project / ".git").exists() or (project.name == "GFARM APP" and (project.parent / ".git").exists())):
             if messagebox.askyesno(
                 "Instalação antiga sem Git",
                 "Encontrei o estoque instalado nesta pasta, mas ela não contém "
@@ -1091,7 +1102,7 @@ class Painel:
 
     def _update_publish(self, project):
         self._check_active_target(project)
-        if not (project / ".git").exists():
+        if not ((project / ".git").exists() or (project.name == "GFARM APP" and (project.parent / ".git").exists())):
             raise RuntimeError("Esta instalação não está vinculada ao GitHub. Nada foi alterado.")
         if not api_ok():
             raise RuntimeError(
