@@ -38,7 +38,7 @@ def write_log(message):
 def load():
     if not CONFIG.is_file():
         return {"app_path": str(APP), "version": "pacote-inicial",
-                "automatic": True, "desired_running": True, "remote_host": "127.0.0.1"}
+                "automatic": True, "desired_running": False, "remote_host": "127.0.0.1"}
     return json.loads(CONFIG.read_text(encoding="utf-8"))
 
 
@@ -534,6 +534,17 @@ def save_database(data):
             raise RuntimeError("Configuracao invalida.")
     if owned() or port_busy(backend_port()):
         raise RuntimeError("Pare o GFARM antes de alterar a conexao.")
+    # Teste REAL de autenticacao antes de aceitar a configuracao.
+    # Consulta de leitura, nao cria banco/tabela nem executa migration.
+    result = run(
+        [pg_binary("psql"), "-X", "-At", "-v", "ON_ERROR_STOP=1",
+         "-h", values["DB_HOST"], "-p", values["DB_PORT"],
+         "-U", values["DB_USER"], "-d", values["DB_NAME"],
+         "-c", "SELECT 1"],
+        timeout=15, env={"PGPASSWORD": values["DB_PASSWORD"]},
+    )
+    if result.strip() != "1":
+        raise RuntimeError("O PostgreSQL nao confirmou a conexao. Nada foi salvo.")
     DATA.mkdir(parents=True, exist_ok=True)
     path = DATA / "backend.env"
     tmp = path.with_suffix(".tmp")
