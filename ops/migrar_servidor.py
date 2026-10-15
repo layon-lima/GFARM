@@ -20,6 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND))
 UPLOADS = BACKEND / "uploads"
+XML_INBOX = Path(os.environ.get(
+    "ESTQ_XML_TICKET_DIR", str(Path.home() / "Documents" / "XML ERP")
+))
 
 
 def digest(path: Path) -> str:
@@ -63,7 +66,8 @@ def verificar_arquivo(arquivo: Path) -> dict:
                 or parts.is_absolute()
                 or (mode == 0xA000)  # link simbólico
                 or (name not in {"database.dump", "manifest.json"}
-                    and not name.startswith("uploads/"))
+                    and not name.startswith("uploads/")
+                    and not name.startswith("xml_inbox/"))
             ):
                 raise RuntimeError("ZIP contém caminho ou tipo de arquivo inseguro.")
         if zf.getinfo("database.dump").file_size == 0:
@@ -96,6 +100,12 @@ def exportar(destino_dir: Path, confirmada_parada: bool) -> None:
     if destino.exists() or Path(str(destino) + ".sha256").exists():
         raise RuntimeError("Já existe um arquivo com esse nome. Nenhum arquivo foi substituído.")
     shutil.copy2(origem, destino)
+    # XML ainda não processado é parte do estado operacional da pesagem.
+    if XML_INBOX.is_dir():
+        with zipfile.ZipFile(destino, "a", compression=zipfile.ZIP_DEFLATED) as zipf:
+            for arquivo_xml in sorted(XML_INBOX.glob("*.xml")):
+                if arquivo_xml.is_file() and not arquivo_xml.is_symlink():
+                    zipf.write(arquivo_xml, f"xml_inbox/{arquivo_xml.name}")
     Path(str(destino) + ".sha256").write_text(digest(destino) + "\n", encoding="utf-8")
     resultado = verificar_arquivo(destino)
     print(json.dumps(resultado, ensure_ascii=False, indent=2))
@@ -157,6 +167,10 @@ def restaurar(arquivo: Path, confirmado: bool) -> None:
         raise RuntimeError(
             "Restauração recusada: a pasta backend/uploads não está vazia."
         )
+    if XML_INBOX.exists() and XML_INBOX.is_dir() and any(XML_INBOX.iterdir()):
+        raise RuntimeError(
+            "Restauração recusada: a caixa de entrada XML não está vazia."
+        )
 
     arquivo = arquivo.expanduser().resolve()
     with tempfile.TemporaryDirectory(prefix="estq-restaurar-") as temp:
@@ -202,7 +216,15 @@ def restaurar(arquivo: Path, confirmado: bool) -> None:
             for arquivo_upload in uploads_extraidos.iterdir():
                 shutil.move(str(arquivo_upload), str(UPLOADS / arquivo_upload.name))
 
-    print("RESTAURAÇÃO CONCLUÍDA: PostgreSQL e uploads transferidos.")
+        caixa_xml = temporario / "xml_inbox"
+        if caixa_xml.is_dir():
+            XML_INBOX.mkdir(parents=True, exist_ok=True)
+            if any(XML_INBOX.iterdir()):
+                raise RuntimeError("Caixa XML alterada durante a restauração.")
+            for xml in caixa_xml.iterdir():
+                shutil.move(str(xml), str(XML_INBOX / xml.name))
+
+    print("RESTAURAÇÃO CONCLUÍDA: PostgreSQL, uploads e caixa XML transferidos.")
     print(f"SHA-256 validado: {resultado['sha256']}")
     print("Confira os registros, uploads e saldos com o motor do estoque antes de")
     print("mudar o domínio. Não ligue o servidor antigo para novas movimentações.")
