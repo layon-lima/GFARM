@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'ops/painel_estq.py'
+      - 'ops/windows/GFARM_Instalador.iss'
       - 'ops/local_install.py'
       - 'tests/test_painel_estq.py'
       - 'tests/test_local_install.py'
@@ -18,6 +19,7 @@ on:
     branches: [main]
     paths:
       - 'ops/painel_estq.py'
+      - 'ops/windows/GFARM_Instalador.iss'
       - 'ops/local_install.py'
       - 'tests/test_painel_estq.py'
       - 'tests/test_local_install.py'
@@ -58,7 +60,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_painel_estq.py' -v
           python -m unittest discover -s tests -p 'test_local_install.py' -v
           python -m unittest discover -s tests -p 'test_remote_update.py' -v
-      - name: Construir executavel de arquivo unico
+      - name: Construir executavel do Painel GFARM
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check pyinstaller==6.16.0
@@ -67,12 +69,36 @@ jobs:
             throw "Executavel nao foi gerado"
           }
           (Get-FileHash dist/PAINEL_ESTQ.exe -Algorithm SHA256).Hash | Out-File dist/PAINEL_ESTQ.exe.sha256
+      - name: Compilar instalador GFARM (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --yes --no-progress --limit-output
+            $iscc = @(
+              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+              "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Compilador Inno Setup indisponível" }
+          & $iscc "ops\windows\GFARM_Instalador.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao gerar GFARM_Instalador.exe" }
+          if (-not (Test-Path "dist\setup\GFARM_Instalador.exe")) {
+            throw "GFARM_Instalador.exe não encontrado"
+          }
+          (Get-FileHash "dist\setup\GFARM_Instalador.exe" -Algorithm SHA256).Hash |
+            Out-File "dist\setup\GFARM_Instalador.exe.sha256"
       - uses: actions/upload-artifact@v4
         with:
-          name: PAINEL_ESTQ_WINDOWS_UNICO
+          name: GFARM_WINDOWS_INSTALADOR_E_PORTATIL
           path: |
             dist/PAINEL_ESTQ.exe
             dist/PAINEL_ESTQ.exe.sha256
+            dist/setup/GFARM_Instalador.exe
+            dist/setup/GFARM_Instalador.exe.sha256
           if-no-files-found: error
           retention-days: 30
       - name: Publicar executavel para download apos merge
@@ -85,9 +111,12 @@ jobs:
           prerelease: false
           generate_release_notes: false
           body: |
-            Painel portatil oficial do servidor ESTQ (1 unico EXE), compilado pelo GitHub Actions a partir de main.
-            Use em Windows 11. Sem credenciais, sem banco e sem dados embutidos.
-            Para transferir cadastros, saldo, imagens e tickets, crie o backup verificado no computador anterior.
+            Instalador GFARM para Windows 11 com pasta padrão C:\Programas\GFARM.
+            Instala o painel, atalhos e desinstalador, sem migrar nem substituir
+            o servidor existente ou os dados locais. Também oferece EXE portátil.
+            O servidor e seus dados ficam separados em diretório gravável.
           files: |
+            dist/setup/GFARM_Instalador.exe
+            dist/setup/GFARM_Instalador.exe.sha256
             dist/PAINEL_ESTQ.exe
             dist/PAINEL_ESTQ.exe.sha256
