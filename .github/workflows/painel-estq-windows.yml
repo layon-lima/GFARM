@@ -26,6 +26,10 @@ on:
       - 'tests/test_remote_update.py'
   workflow_dispatch:
 
+concurrency:
+  group: painel-estq-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
