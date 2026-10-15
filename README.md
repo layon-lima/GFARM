@@ -43,3 +43,9 @@ Consulte [MIGRACAO E CLOUD](ops/GUIA_MIGRACAO_E_CLOUD.md) para:
 - preparar um VPS Docker/PostgreSQL persistente, sem depender do computador local.
 
 **Nao copie backups ou credenciais para o GitHub e nao restaure por cima do banco atual.** O VPS e o Cloudflare requerem configuracao na conta do operador.
+
+## Painel único Windows (instalação e troca de PC)
+
+No computador novo, use [PAINEL_ESTQ.exe — versão oficial](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest) gerado no GitHub Actions. O aplicativo portátil instala Git/Python/Node/PostgreSQL/Cloudflare, baixa a main, prepara o backend, restaura banco e arquivos e instala monitor de inicialização. Veja [guia de migração por painel](ops/PAINEL_UNICO_WINDOWS.md).
+
+Dados reais e credenciais **não estão** no GitHub nem no executável. O PC antigo precisa exportar primeiro o backup ZIP acompanhado do SHA256; o novo restaura somente em banco vazio. O Cloudflare Tunnel precisa de autorização separada para evitar dois servidores gravando no estoque.
