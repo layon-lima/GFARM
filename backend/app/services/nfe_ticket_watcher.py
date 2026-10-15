@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import time
 import unicodedata
@@ -12,7 +13,13 @@ from app.db.database import SessionLocal
 from app.models import Pessoa, Produto, TicketPesagem
 
 
-XML_DIR = Path(r"C:\Users\User\Documents\XML ERP")
+# Mantém o caminho histórico no Windows, mas permite migrar para outro PC/VPS.
+XML_DIR = Path(
+    os.environ.get(
+        "ESTQ_XML_TICKET_DIR",
+        str(Path.home() / "Documents" / "XML ERP"),
+    )
+)
 PESO_TOLERANCIA_KG = 1.0
 _RETRY_SECONDS = 5.0
 _tentativas: dict[str, tuple[tuple[int, int], float]] = {}
