@@ -44,6 +44,16 @@ Consulte [MIGRACAO E CLOUD](ops/GUIA_MIGRACAO_E_CLOUD.md) para:
 
 **Nao copie backups ou credenciais para o GitHub e nao restaure por cima do banco atual.** O VPS e o Cloudflare requerem configuracao na conta do operador.
 
+## Instalação oficial GFARM (Windows)
+
+Use [GFARM_Instalador.exe](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest).
+O assistente instala o painel em **C:\\Programas\\GFARM** (caminho configurável),
+com atalho no menu Iniciar, opção de atalho na Área de Trabalho e desinstalador.
+Dados e backend ficam fora dessa pasta protegida; no PC novo o servidor usa
+`%LOCALAPPDATA%\\GFARM\\Servidor`. A instalação não inicia servidor automaticamente
+nem migra/substitui o banco existente. Em PCs com estoque já em uso, o painel
+identifica o caminho real e pede confirmação antes de qualquer atualização.
+
 ## Painel único Windows (instalação e troca de PC)
 
 No computador novo, use [PAINEL_ESTQ.exe — versão oficial](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest) gerado no GitHub Actions. O aplicativo portátil instala Git/Python/Node/PostgreSQL/Cloudflare, baixa a main, prepara o backend, restaura banco e arquivos e instala monitor de inicialização. Veja [guia de migração por painel](ops/PAINEL_UNICO_WINDOWS.md).
