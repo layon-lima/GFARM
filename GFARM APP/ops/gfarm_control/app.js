@@ -129,7 +129,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.querySelectorAll("[data-action]").forEach(item =>
     item.addEventListener("click", () => operate(item.dataset.action))
   );
-  $("open-app").addEventListener("click", () => window.open("http://" + window.location.hostname + ":8000/", "_blank", "noopener,noreferrer"));
+  $("open-app").addEventListener("click", () => {
+    if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+      window.open("http://127.0.0.1:8000/", "_blank", "noopener,noreferrer");
+    } else {
+      message("A API do GFARM nao esta exposta na porta 8000 para acesso remoto. Abra o sistema pelo endereco HTTPS habitual.", true);
+    }
+  });
   $("restore-button").addEventListener("click", () => operate("restore", {
     name:$("restore-file").value.trim(), confirmation:$("restore-confirmation").value.trim()
   }));
