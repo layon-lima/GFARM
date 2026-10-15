@@ -5,9 +5,13 @@ Sem efeitos destrutivos: restauração apenas em banco novo e vazio.
 """
 from __future__ import annotations
 
+import base64
+import hmac
+import ipaddress
 import json
 import os
 import queue
+import re
 import secrets
 import shutil
 import signal
@@ -32,6 +36,8 @@ DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ESTQ-Painel"
 CONFIG = DATA / "painel.json"
 LOG = DATA / "painel.log"
 DEFAULT_PROJECT = Path.home() / "Documents" / "ESTQ_SERVIDOR"
+REMOTE_KEY = DATA / "id_ed25519_estq"
+REMOTE_HOSTS = DATA / "remote_known_hosts"
 
 
 def find_binary(name: str) -> Path | None:
@@ -116,9 +122,12 @@ class Painel:
         self.busy = False
         self.root = tk.Tk()
         self.root.title("ESTQ — Painel do Servidor | v" + PANEL_VERSION)
-        self.root.geometry("920x720")
-        self.root.minsize(760, 630)
+        self.root.geometry("1040x850")
+        self.root.minsize(850, 730)
         self.project_value = tk.StringVar(value=self.config.get("project", str(DEFAULT_PROJECT)))
+        self.remote_ip = tk.StringVar(value=self.config.get("remote_ip", ""))
+        self.remote_user = tk.StringVar(value=self.config.get("remote_user", ""))
+        self.remote_project = tk.StringVar(value=self.config.get("remote_project", ""))
         self.status_value = tk.StringVar(value="Verificando servidor...")
         self._layout()
         self.root.protocol("WM_DELETE_WINDOW", self._close)
@@ -178,6 +187,36 @@ class Painel:
                 b = ttk.Button(box, text=label, command=callback)
                 b.pack(fill="x", pady=4)
                 self.buttons.append(b)
+
+        remote = ttk.LabelFrame(outer, text="CONTROLE REMOTO — SERVIDOR EM OUTRO PC (TAILSCALE + SSH)", padding=8)
+        remote.pack(fill="x", pady=(10, 0))
+        fields = ttk.Frame(remote)
+        fields.pack(fill="x")
+        for column, (label, variable, size) in enumerate([
+            ("IP Tailscale do servidor (100.x.x.x)", self.remote_ip, 22),
+            ("Usuário Windows do servidor", self.remote_user, 20),
+            ("Pasta do projeto no servidor (C:\\\\...)", self.remote_project, 50),
+        ]):
+            area = ttk.Frame(fields)
+            area.grid(row=0, column=column, sticky="ew", padx=(0, 8))
+            fields.columnconfigure(column, weight=3 if column == 2 else 1)
+            ttk.Label(area, text=label).pack(anchor="w")
+            ttk.Entry(area, textvariable=variable, width=size).pack(fill="x")
+
+        actions = ttk.Frame(remote)
+        actions.pack(fill="x", pady=(8, 0))
+        for label, callback in [
+            ("1. Gerar/copiar chave deste PC", self.remote_generate_key),
+            ("2. Autorizar no servidor (local)", self.remote_enable),
+            ("3. Confiar na identidade", self.remote_pair),
+            ("Testar conexão", self.remote_connect),
+            ("ATUALIZAR SERVIDOR REMOTO", self.remote_update),
+        ]:
+            button = ttk.Button(actions, text=label, command=callback)
+            button.pack(side="left", padx=(0, 7))
+            self.buttons.append(button)
+        ttk.Label(remote, text="Ative Tailscale nos dois computadores. A autorização inicial é feita UMA VEZ no PC servidor, como administrador.",
+                  foreground="#64748b").pack(anchor="w", pady=(5, 0))
 
         ttk.Label(outer, text="ANDAMENTO E MENSAGENS", font=("Segoe UI", 10, "bold")).pack(
             anchor="w", pady=(14, 4)
@@ -252,6 +291,199 @@ class Painel:
         if path:
             self.project_value.set(path)
             self.project()
+
+    def remote_generate_key(self):
+        """A chave privada nunca deixa o PC de controle."""
+        DATA.mkdir(parents=True, exist_ok=True)
+        if not REMOTE_KEY.is_file():
+            binary = find_binary("ssh-keygen")
+            if not binary:
+                messagebox.showerror("Acesso remoto", "OpenSSH Client do Windows não foi encontrado.")
+                return
+            self._run([binary, "-q", "-t", "ed25519", "-a", "64",
+                       "-N", "", "-f", str(REMOTE_KEY), "-C", "ESTQ-painel-remoto"],
+                      timeout=35, display=False)
+        public = Path(str(REMOTE_KEY) + ".pub")
+        if not public.is_file():
+            messagebox.showerror("Acesso remoto", "Chave pública não encontrada.")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(public.read_text(encoding="ascii").strip())
+        messagebox.showinfo("Chave pública copiada",
+            "Chave pública copiada! No computador SERVIDOR, abra este painel como "
+            "Administrador, escolha a pasta correta do projeto e clique "
+            "'Autorizar no servidor (local)'. Cole a chave. "
+            "Nunca copie/envie o arquivo da chave privada.")
+
+    def remote_enable(self):
+        project = self.project()
+        if not (project / "ops" / "windows" / "HABILITAR_REMOTO.ps1").is_file():
+            messagebox.showerror("Acesso remoto", "Projeto do servidor ainda não está atualizado.")
+            return
+        key = simpledialog.askstring("Autorizar seu PC",
+            "Cole a chave PÚBLICA gerada no seu computador de controle:",
+            parent=self.root)
+        if not key:
+            return
+        if not re.fullmatch(r"ssh-ed25519 [A-Za-z0-9+/=]+(?: [A-Za-z0-9._@ -]{0,120})?", key.strip()):
+            messagebox.showerror("Chave inválida", "Cole somente a chave pública ssh-ed25519.")
+            return
+        if not messagebox.askyesno("Configurar servidor",
+            "Isso instala/habilita o OpenSSH no computador SERVIDOR "
+            "e restringe a porta SSH ao Tailscale. Exige permissão de Administrador. "
+            "Não modifica o ERP ou o banco. Continuar?"):
+            return
+        self.run_background("Autorizando conexão privada no servidor",
+            self._enable_ssh, project, key.strip())
+
+    def _enable_ssh(self, project, key):
+        script = project / "ops" / "windows" / "HABILITAR_REMOTO.ps1"
+        return self._run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                          "-File", str(script), "-Projeto", str(project),
+                          "-PublicKey", key], timeout=1200)
+
+    def _remote_values(self):
+        ip = self.remote_ip.get().strip()
+        try:
+            address = ipaddress.ip_address(ip)
+        except ValueError as exc:
+            raise RuntimeError("Informe o IP Tailscale (100.x.x.x) do servidor.") from exc
+        if address.version != 4 or address not in ipaddress.ip_network("100.64.0.0/10"):
+            raise RuntimeError("Por segurança, o painel aceita somente IP privado Tailscale (100.64.0.0/10).")
+        user = self.remote_user.get().strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", user):
+            raise RuntimeError("Informe o nome do usuário Windows do servidor (sem domínio).")
+        project = self.remote_project.get().strip().rstrip("\\")
+        if not re.fullmatch(r"[A-Za-z]:\\[A-Za-z0-9_ .\\-]{3,210}", project):
+            raise RuntimeError("Informe a pasta Windows completa do projeto no servidor, sem caracteres especiais.")
+        self.config.update(remote_ip=ip, remote_user=user, remote_project=project)
+        save_config(self.config)
+        return ip, user, project
+
+    def remote_pair(self):
+        try:
+            host, _, _ = self._remote_values()
+        except RuntimeError as exc:
+            messagebox.showerror("Acesso remoto", str(exc))
+            return
+        expected = simpledialog.askstring("Identidade do servidor",
+            "Digite o SHA256:... exibido pelo PAINEL no computador servidor "
+            "(FINGERPRINT_HOST). Só aceite se for exatamente igual:",
+            parent=self.root)
+        if expected:
+            self.run_background("Verificando identidade SSH", self._pair_ssh,
+                                host, expected.strip())
+
+    def _pair_ssh(self, host, expected):
+        scan = find_binary("ssh-keyscan")
+        keygen = find_binary("ssh-keygen")
+        if not scan or not keygen:
+            raise RuntimeError("OpenSSH Client incompleto: faltam ssh-keyscan e ssh-keygen.")
+        result = self._run([scan, "-T", "12", "-t", "ed25519", host],
+                           timeout=25, display=False)
+        line = next((x.strip() for x in result.splitlines()
+                     if len(x.split()) >= 3 and x.split()[1] == "ssh-ed25519"), "")
+        if not line:
+            raise RuntimeError("Servidor não apresentou host key ed25519.")
+        DATA.mkdir(parents=True, exist_ok=True)
+        candidate = DATA / "hostkey_candidate.tmp"
+        try:
+            candidate.write_text(line + "\n", encoding="ascii")
+            fingerprint = self._run([keygen, "-lf", str(candidate), "-E", "sha256"],
+                                    timeout=12, display=False)
+        finally:
+            candidate.unlink(missing_ok=True)
+        found = re.search(r"SHA256:[A-Za-z0-9+/=]+", fingerprint)
+        if not found or not hmac.compare_digest(found.group(), expected):
+            raise RuntimeError("A identidade do servidor NÃO confere. Pareamento recusado.")
+        if REMOTE_HOSTS.is_file():
+            existing = REMOTE_HOSTS.read_text(encoding="ascii")
+            if any(x.startswith(host + " ") and x.strip() != line
+                   for x in existing.splitlines()):
+                raise RuntimeError("Já existe outra identidade para este servidor. "
+                                   "Não sobrescrevemos host keys automaticamente.")
+            if line not in existing.splitlines():
+                with REMOTE_HOSTS.open("a", encoding="ascii") as fp:
+                    fp.write(line + "\n")
+        else:
+            REMOTE_HOSTS.write_text(line + "\n", encoding="ascii")
+        return "Identidade SHA256 confirmada. A conexão SSH agora exige essa chave do servidor."
+
+    def _remote_command(self, action):
+        if action not in ("status", "update"):
+            raise RuntimeError("Ação remota não autorizada.")
+        host, user, project = self._remote_values()
+        if not REMOTE_KEY.is_file() or not REMOTE_HOSTS.is_file():
+            raise RuntimeError("Gere a chave deste PC e confirme o fingerprint do servidor primeiro.")
+        ssh = find_binary("ssh")
+        if not ssh:
+            raise RuntimeError("OpenSSH Client não está instalado no Windows.")
+        # EncodedCommand evita interpretações do shell remoto e injeção de argumentos.
+        ps = (
+            "$p='" + project + "'; "
+            "$py=Join-Path $p 'backend\\.venv\\Scripts\\python.exe'; "
+            "if (!(Test-Path $py)) {$py=Join-Path $p '.venv\\Scripts\\python.exe'}; "
+            "$script=Join-Path $p 'ops\\remote_update.py'; "
+            "& $py $script --project-dir $p " + action + "; exit $LASTEXITCODE"
+        )
+        encoded = base64.b64encode(ps.encode("utf-16-le")).decode("ascii")
+        return [ssh, "-T", "-i", str(REMOTE_KEY),
+                "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+                "-o", "StrictHostKeyChecking=yes",
+                "-o", "GlobalKnownHostsFile=NUL",
+                "-o", "UserKnownHostsFile=" + str(REMOTE_HOSTS),
+                "-o", "ClearAllForwardings=yes",
+                "-o", "ConnectTimeout=12",
+                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+                user + "@" + host,
+                "powershell.exe -NoProfile -NonInteractive -EncodedCommand " + encoded]
+
+    def _execute_remote(self, action):
+        command = self._remote_command(action)
+        proc = subprocess.Popen([str(x) for x in command],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, encoding="utf-8", errors="replace",
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        recent = []
+        try:
+            for line in proc.stdout:
+                line = line.rstrip()
+                if line:
+                    self._log(line)
+                    recent.append(line)
+                    recent = recent[-12:]
+            code = proc.wait(timeout=30)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        if code:
+            raise RuntimeError("Falha no comando remoto (" + str(code) + "): " +
+                               " | ".join(recent[-4:])[-600:])
+        return "Conexão remota validada." if action == "status" else (
+            "Atualização remota concluída. Confira também o log e o estado da API."
+        )
+
+    def remote_connect(self):
+        try:
+            self._remote_command("status")
+            self.run_background("Testando servidor privado", self._execute_remote, "status")
+        except RuntimeError as exc:
+            messagebox.showerror("Acesso remoto", str(exc))
+
+    def remote_update(self):
+        try:
+            self._remote_command("update")
+        except RuntimeError as exc:
+            messagebox.showerror("Acesso remoto", str(exc))
+            return
+        if messagebox.askyesno("Atualização REMOTA",
+            "Atualizar o ESTQ no computador servidor?\n\n"
+            "A atualização será bloqueada se existirem alterações de banco, "
+            "dependências ou falta de controle seguro do backend. "
+            "Se for necessário reiniciar, pode haver uma breve interrupção. "
+            "Evite executar durante movimentações de estoque."):
+            self.run_background("Atualizando servidor remoto com validações",
+                                self._execute_remote, "update")
 
     def _run(self, command, cwd=None, env=None, input_text=None, timeout=2400, display=True):
         # O comando não é escrito no log, pois pode conter informações privadas.
