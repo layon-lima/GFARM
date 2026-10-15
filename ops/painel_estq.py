@@ -205,15 +205,18 @@ class Painel:
 
         actions = ttk.Frame(remote)
         actions.pack(fill="x", pady=(8, 0))
-        for label, callback in [
+        for index, (label, callback) in enumerate([
+            ("Instalar Tailscale (1ª vez)", self.remote_install_tailscale),
             ("1. Gerar/copiar chave deste PC", self.remote_generate_key),
             ("2. Autorizar no servidor (local)", self.remote_enable),
             ("3. Confiar na identidade", self.remote_pair),
             ("Testar conexão", self.remote_connect),
             ("ATUALIZAR SERVIDOR REMOTO", self.remote_update),
-        ]:
+        ]):
             button = ttk.Button(actions, text=label, command=callback)
-            button.pack(side="left", padx=(0, 7))
+            button.grid(row=index // 3, column=index % 3, sticky="ew",
+                        padx=(0, 7), pady=(0, 4))
+            actions.columnconfigure(index % 3, weight=1)
             self.buttons.append(button)
         ttk.Label(remote, text="Ative Tailscale nos dois computadores. A autorização inicial é feita UMA VEZ no PC servidor, como administrador.",
                   foreground="#64748b").pack(anchor="w", pady=(5, 0))
@@ -291,6 +294,12 @@ class Painel:
         if path:
             self.project_value.set(path)
             self.project()
+
+    def remote_install_tailscale(self):
+        if messagebox.askyesno("Tailscale",
+            "Instalar o Tailscale oficial pelo Winget neste computador? "
+            "Depois será necessário fazer login na rede privada."):
+            self.run_background("Instalando Tailscale", self._winget, "Tailscale.Tailscale")
 
     def remote_generate_key(self):
         """A chave privada nunca deixa o PC de controle."""
