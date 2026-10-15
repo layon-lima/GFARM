@@ -553,13 +553,45 @@ class Painel:
         project = self.project()
         self.run_background("Iniciar backend do ESTQ", self._start, project)
 
+    def _restored_database(self, project):
+        env_path = project / "backend" / ".env"
+        if not env_path.is_file():
+            raise RuntimeError("backend/.env ausente.")
+        # Apenas lê configurações, sem expor segredos ou modificar dados.
+        values = {}
+        for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip('"').strip("'")
+        for key in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"):
+            if not values.get(key):
+                raise RuntimeError("Configuração incompleta: falta " + key)
+        psql = find_binary("psql")
+        if not psql:
+            raise RuntimeError("Cliente PostgreSQL psql não encontrado.")
+        subprocess_env = os.environ.copy()
+        subprocess_env["PGPASSWORD"] = values["DB_PASSWORD"]
+        cmd = [str(psql), "-h", values["DB_HOST"], "-p", values["DB_PORT"],
+               "-U", values["DB_USER"], "-d", values["DB_NAME"],
+               "-X", "-v", "ON_ERROR_STOP=1", "-At", "-c",
+               "SELECT to_regclass('public.alembic_version') IS NOT NULL"]
+        result = subprocess.run(cmd, env=subprocess_env, capture_output=True,
+                                text=True, timeout=15,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if result.returncode != 0 or result.stdout.strip() != "t":
+            raise RuntimeError(
+                "Banco do ESTQ sem estrutura restaurada. Não é seguro iniciar o servidor "
+                "antes de restaurar os dados. Não execute migrations sobre um banco vazio."
+            )
+        return True
+
     def _start(self, project):
         if api_ok():
             return "Backend já responde em http://127.0.0.1:8000. Nenhuma instância duplicada foi iniciada."
         if port_busy():
             raise RuntimeError("Porta 8000 já usada por outro processo. Não iniciamos servidor duplicado.")
-        if not (project / "backend" / ".env").is_file():
-            raise RuntimeError("backend/.env ausente. Configure banco e restaure antes de iniciar.")
+        self._restored_database(project)
         if not (project / "dist" / "index.html").is_file():
             raise RuntimeError("Frontend não compilado. Prepare aplicativo primeiro.")
         python = python_project(project)
@@ -598,6 +630,7 @@ class Painel:
         self.run_background("Instalar início automático versionado", self._install_auto, project)
 
     def _install_auto(self, project):
+        self._restored_database(project)
         ps = project / "ops" / "windows" / "INSTALAR_INICIALIZACAO.ps1"
         if not ps.is_file():
             raise RuntimeError("Inicializador GitHub não encontrado.")
