@@ -79,7 +79,7 @@ class RemotePanelTests(unittest.TestCase):
             (root / "backend" / ".venv" / "Scripts" / "python.exe").write_text("")
             def fake_git(project, *args):
                 if args[0] == "remote":
-                    return "https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte.git"
+                    return "https://github.com/layon-lima/GFARM.git"
                 if args[0] == "branch":
                     return "main"
                 return ""
