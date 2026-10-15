@@ -566,3 +566,13 @@ Se alguma resposta for problemática, **não fazer merge** até corrigir.
 > **O motor de estoque é a fonte única da verdade.**
 >
 > **As telas não mandam no estoque. Os cadastros não criam uma verdade paralela. O histórico não é reescrito. Todo estado atual de estoque passa pelo motor.**
+
+---
+
+# 21. ORGANIZAÇÃO GFARM (15/10/2026)
+
+- Código, instalador, painel, backend, frontend e testes ficam em **GFARM APP/**.
+- **BACKUPS/** permanece separado na raiz.
+- **.github/workflows/** permanece na raiz, com builds executados em **GFARM APP/**.
+- Caminhos relativos descritos nas regras anteriores são interpretados a partir de **GFARM APP/**.
+- A instalação antiga do servidor não deve ser atualizada automaticamente para este layout sem plano de migração seguro.

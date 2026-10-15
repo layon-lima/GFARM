@@ -3,29 +3,33 @@ name: Validacao do Modo Admin Mobile
 on:
   pull_request:
     paths:
-      - 'src/**'
-      - 'backend/**'
-      - 'package.json'
-      - 'package-lock.json'
+      - 'GFARM APP/src/**'
+      - 'GFARM APP/backend/**'
+      - 'GFARM APP/package.json'
+      - 'GFARM APP/package-lock.json'
       - '.github/workflows/mobile-admin-ci.yml'
   push:
     branches:
       - main
     paths:
-      - 'src/**'
-      - 'backend/**'
-      - 'package.json'
-      - 'package-lock.json'
+      - 'GFARM APP/src/**'
+      - 'GFARM APP/backend/**'
+      - 'GFARM APP/package.json'
+      - 'GFARM APP/package-lock.json'
 
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: GFARM APP
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
+          cache-dependency-path: GFARM APP/package-lock.json
       - run: npm ci
       - run: node --test tests/pesagem-capture.test.mjs
       - run: npm run build
@@ -35,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: GFARM APP/backend
     env:
       DB_HOST: 127.0.0.1
       DB_PORT: '5432'
@@ -49,7 +53,7 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: GFARM APP/backend/requirements.txt
       - run: python -m pip install -r requirements.txt
       - run: python -m compileall app alembic/versions
       - run: python -m unittest tests.test_cadastros_mobile tests.test_entrada_saldo_admin tests.test_entrada_saldo_mobile tests.test_maquina_sem_deposito tests.test_lavouras tests.test_custo_produto tests.test_permissoes_usuarios tests.test_import_pesagem_legada tests.test_pesagem_correcao tests.test_relatorios_mobile tests.test_abastecimento_offline

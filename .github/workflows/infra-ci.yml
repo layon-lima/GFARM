@@ -3,29 +3,32 @@ name: Validacao de Migracao e Infraestrutura ESTQ
 on:
   pull_request:
     paths:
-      - 'ops/**'
-      - 'deploy/**'
-      - '.dockerignore'
+      - 'GFARM APP/ops/**'
+      - 'GFARM APP/deploy/**'
+      - 'GFARM APP/.dockerignore'
       - '.gitignore'
-      - 'backend/.env.example'
-      - 'backend/app/services/nfe_ticket_watcher.py'
-      - 'tests/test_server_migration.py'
+      - 'GFARM APP/backend/.env.example'
+      - 'GFARM APP/backend/app/services/nfe_ticket_watcher.py'
+      - 'GFARM APP/tests/test_server_migration.py'
       - '.github/workflows/infra-ci.yml'
   push:
     branches: [main]
     paths:
-      - 'ops/**'
-      - 'deploy/**'
-      - '.dockerignore'
+      - 'GFARM APP/ops/**'
+      - 'GFARM APP/deploy/**'
+      - 'GFARM APP/.dockerignore'
       - '.gitignore'
-      - 'backend/.env.example'
-      - 'backend/app/services/nfe_ticket_watcher.py'
-      - 'tests/test_server_migration.py'
+      - 'GFARM APP/backend/.env.example'
+      - 'GFARM APP/backend/app/services/nfe_ticket_watcher.py'
+      - 'GFARM APP/tests/test_server_migration.py'
       - '.github/workflows/infra-ci.yml'
 
 jobs:
   migration-and-cloud:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: GFARM APP
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,7 +41,7 @@ jobs:
       - name: Validacao YAML
         run: |
           python -m pip install pyyaml
-          python -c "import yaml; yaml.safe_load(open('deploy/cloud/compose.yml', encoding='utf-8'))"
+          python -c "import yaml; yaml.safe_load(open('GFARM APP/deploy/cloud/compose.yml', encoding='utf-8'))"
       - name: Validacao Compose (sem credenciais reais)
         run: |
           cp backend/.env.example backend/.env
@@ -49,6 +52,9 @@ jobs:
 
   powershell-syntax:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: GFARM APP
     steps:
       - uses: actions/checkout@v4
       - name: Verificar sintaxe sem executar inicializadores

@@ -34,9 +34,9 @@ env/
 htmlcov/
 
 # Backend local
-/backend/.venv/
-/backend/uploads/
-/backend/.env
+/GFARM APP/backend/.venv/
+/GFARM APP/backend/uploads/
+/GFARM APP/backend/.env
 
 # ------------------------------------------------------------
 # Logs
@@ -84,6 +84,6 @@ VALIDAR_PROJETO_COMPLETO_V4.ps1
 *.zip
 
 # Resíduos de diagnósticos e pastas PWA duplicadas (não são fontes do app)
-/_pwa_files/
-/backend/lint_completo.txt
-/backend/typecheck_completo.txt
+/GFARM APP/_pwa_files/
+/GFARM APP/backend/lint_completo.txt
+/GFARM APP/backend/typecheck_completo.txt

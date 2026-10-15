@@ -3,33 +3,33 @@ name: Painel Unico Windows ESTQ
 on:
   pull_request:
     paths:
-      - 'ops/painel_estq.py'
-      - 'ops/windows/GFARM_Instalador.iss'
-      - 'ops/local_install.py'
-      - 'tests/test_painel_estq.py'
-      - 'tests/test_local_install.py'
+      - 'GFARM APP/ops/painel_estq.py'
+      - 'GFARM APP/ops/windows/GFARM_Instalador.iss'
+      - 'GFARM APP/ops/local_install.py'
+      - 'GFARM APP/tests/test_painel_estq.py'
+      - 'GFARM APP/tests/test_local_install.py'
       - '.github/workflows/painel-estq-windows.yml'
-      - 'ops/migrar_servidor.py'
-      - 'ops/remote_update.py'
-      - 'ops/monitor_backend.py'
-      - 'ops/windows/HABILITAR_REMOTO.ps1'
-      - 'ops/windows/REMOTO_COMANDO.ps1'
-      - 'tests/test_remote_update.py'
+      - 'GFARM APP/ops/migrar_servidor.py'
+      - 'GFARM APP/ops/remote_update.py'
+      - 'GFARM APP/ops/monitor_backend.py'
+      - 'GFARM APP/ops/windows/HABILITAR_REMOTO.ps1'
+      - 'GFARM APP/ops/windows/REMOTO_COMANDO.ps1'
+      - 'GFARM APP/tests/test_remote_update.py'
   push:
     branches: [main]
     paths:
-      - 'ops/painel_estq.py'
-      - 'ops/windows/GFARM_Instalador.iss'
-      - 'ops/local_install.py'
-      - 'tests/test_painel_estq.py'
-      - 'tests/test_local_install.py'
+      - 'GFARM APP/ops/painel_estq.py'
+      - 'GFARM APP/ops/windows/GFARM_Instalador.iss'
+      - 'GFARM APP/ops/local_install.py'
+      - 'GFARM APP/tests/test_painel_estq.py'
+      - 'GFARM APP/tests/test_local_install.py'
       - '.github/workflows/painel-estq-windows.yml'
-      - 'ops/migrar_servidor.py'
-      - 'ops/remote_update.py'
-      - 'ops/monitor_backend.py'
-      - 'ops/windows/HABILITAR_REMOTO.ps1'
-      - 'ops/windows/REMOTO_COMANDO.ps1'
-      - 'tests/test_remote_update.py'
+      - 'GFARM APP/ops/migrar_servidor.py'
+      - 'GFARM APP/ops/remote_update.py'
+      - 'GFARM APP/ops/monitor_backend.py'
+      - 'GFARM APP/ops/windows/HABILITAR_REMOTO.ps1'
+      - 'GFARM APP/ops/windows/REMOTO_COMANDO.ps1'
+      - 'GFARM APP/tests/test_remote_update.py'
   workflow_dispatch:
 
 concurrency:
@@ -42,6 +42,9 @@ permissions:
 jobs:
   painel-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: GFARM APP
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -95,10 +98,10 @@ jobs:
         with:
           name: GFARM_WINDOWS_INSTALADOR_E_PORTATIL
           path: |
-            dist/PAINEL_ESTQ.exe
-            dist/PAINEL_ESTQ.exe.sha256
-            dist/setup/GFARM_Instalador.exe
-            dist/setup/GFARM_Instalador.exe.sha256
+            GFARM APP/dist/PAINEL_ESTQ.exe
+            GFARM APP/dist/PAINEL_ESTQ.exe.sha256
+            GFARM APP/dist/setup/GFARM_Instalador.exe
+            GFARM APP/dist/setup/GFARM_Instalador.exe.sha256
           if-no-files-found: error
           retention-days: 30
       - name: Publicar executavel para download apos merge
@@ -116,7 +119,7 @@ jobs:
             o servidor existente ou os dados locais. Também oferece EXE portátil.
             O servidor e seus dados ficam separados em diretório gravável.
           files: |
-            dist/setup/GFARM_Instalador.exe
-            dist/setup/GFARM_Instalador.exe.sha256
-            dist/PAINEL_ESTQ.exe
-            dist/PAINEL_ESTQ.exe.sha256
+            GFARM APP/dist/setup/GFARM_Instalador.exe
+            GFARM APP/dist/setup/GFARM_Instalador.exe.sha256
+            GFARM APP/dist/PAINEL_ESTQ.exe
+            GFARM APP/dist/PAINEL_ESTQ.exe.sha256
