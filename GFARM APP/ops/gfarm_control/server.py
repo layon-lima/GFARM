@@ -348,4 +348,18 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        # PyInstaller --windowed nao possui console: diagnostico local obrigatorio.
+        # Senhas/tokens nao sao incluidos no log de inicializacao.
+        try:
+            engine.ROOT.mkdir(parents=True, exist_ok=True)
+            with (engine.ROOT / "control-startup.log").open(
+                    "a", encoding="utf-8") as log:
+                from datetime import datetime
+                log.write(datetime.now().isoformat(timespec="seconds") +
+                          " | " + type(exc).__name__ + ": " + str(exc) + "\\n")
+        except OSError:
+            pass
+        raise
