@@ -275,6 +275,8 @@ class Painel:
                         self._wizard_install_database(Path(data["project"]))
                     elif isinstance(data, dict) and data.get("kind") == "gfarm-db-installed":
                         self._wizard_choose_backup(Path(data["project"]))
+                    elif isinstance(data, dict) and data.get("kind") == "gfarm-restored":
+                        self._wizard_finish_install(Path(data["project"]))
                     else:
                         messagebox.showinfo("GFARM", str(data))
                 elif event == "fail":
@@ -541,8 +543,27 @@ class Painel:
             "Restaurar este pacote VERIFICADO somente no banco NOVO e vazio? "
             "Não será iniciada outra instância sem sua confirmação."
         ):
-            self.run_background("GFARM — restaurando banco e arquivos", self._restore,
+            self.run_background("GFARM — restaurando banco e arquivos", self._wizard_restore,
                                 project, archive)
+
+    def _wizard_restore(self, project, archive):
+        self._restore(project, archive)
+        return {"kind": "gfarm-restored", "project": str(project)}
+
+    def _wizard_finish_install(self, project):
+        messagebox.showinfo(
+            "GFARM instalado",
+            "O sistema GFARM está instalado, o banco anterior foi restaurado "
+            "e os arquivos foram conferidos. O servidor ainda não foi exposto "
+            "publicamente. Confira o resultado antes de transferir o acesso externo."
+        )
+        if messagebox.askyesno(
+            "Iniciar GFARM",
+            "Deseja iniciar AGORA o sistema GFARM neste computador? "
+            "O painel verificará o banco e o frontend antes de iniciar."
+        ):
+            self.run_background("Iniciando sistema GFARM instalado",
+                                self._start, project)
 
 
     def remote_install_tailscale(self):
