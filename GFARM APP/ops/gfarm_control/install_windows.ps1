@@ -54,6 +54,10 @@ try {
     $config = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
   }
   if ($config -and $config.app_path -and
+      -not (Test-Path (Join-Path ([string]$config.app_path) 'backend\run_production.py'))) {
+    throw 'Uma instalacao anterior esta registrada mas a pasta do aplicativo nao foi encontrada. Nenhuma instalacao sera sobrescrita.'
+  }
+  if ($config -and $config.app_path -and
       (Test-Path (Join-Path ([string]$config.app_path) 'backend\run_production.py'))) {
     $app = [string]$config.app_path
     Log 'Instalacao existente preservada; use Control para futuras atualizacoes.'
