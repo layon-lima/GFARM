@@ -1,0 +1,17 @@
+# Evitar vazamento de dados/segredos para o build context e imagens
+.git
+.github
+node_modules
+dist
+backend/.env
+backend/.env.*
+!backend/.env.example
+**/__pycache__
+**/.venv
+backend/uploads
+transfer
+*.zip
+*.dump
+*.backup
+*.sha256
+*.log
