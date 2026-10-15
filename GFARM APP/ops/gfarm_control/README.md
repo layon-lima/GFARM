@@ -6,6 +6,12 @@
 
 Os fontes estão implementados. O executável Windows ainda precisa ser compilado e testado no Windows 11. O GitHub Actions da conta estava bloqueado antes de iniciar executores por configuração de faturamento, portanto NÃO foi possível gerar ou validar um EXE pelo Actions. Não instalar em produção antes de testar atualização/backup com banco descartável.
 
+## Gerar e instalar com um clique
+
+O pacote `GFARM_INSTALADOR_UM_CLIQUE.zip`, entregue na conversa, contem `ABRIR_INSTALADOR_GFARM.vbs` e `PREPARAR_GFARM.ps1`. Extraia o ZIP e execute o VBS: ele verifica ferramentas, instala as de compilacao que estiverem faltando, solicita login do GitHub privado, clona a main, gera o EXE do instalador, copia para a Area de Trabalho e abre o assistente Windows. Uma janela de preparacao mostra o andamento ate o instalador ficar pronto. O preparador NAO apaga bancos PostgreSQL.
+
+Uma versao alternativa do preparador tambem esta versionada no repositorio como `PREPARAR_GFARM_UM_CLIQUE.ps1`.
+
 ## Como gerar o instalador no Windows
 
 Requer Windows 11, Git, Python 3.13, Inno Setup 6 e internet. No diretório GFARM APP/ops/gfarm_control execute:
@@ -46,6 +52,7 @@ Somente SYSTEM e Administradores têm permissões diretas no diretório de dados
 - Atualizações: lê branch main do GitHub privado por Deploy Key SSH somente leitura; prepara novo release separado, compila dependências, faz backup antes de publicar, publica e valida API. A versão anterior permanece preservada. Atualizações que alterem migrations são BLOQUEADAS para revisão supervisionada.
 - Backup: pg_dump custom, cópia de uploads/XMLs, validação ZIP/pg_restore, arquivo SHA-256; suspende a API gerenciada durante a captura.
 - Restauração: aceita apenas pacote local validado, exige confirmação explícita e banco SEM tabelas, com pastas de uploads/XMLs vazias. Nunca sobrescreve o banco atual.
+- Recuperar anexos sem restaurar banco: na tela Backups, informe o caminho do ZIP original (por exemplo, Documentos\\GFARM_BACKUP_TRANSFERENCIA\\GFARM_COMPLETO_....zip), desligue a API e use o botao de importacao de fotos, documentos e XMLs. Anexos existentes nao sao sobrescritos; o banco existente nao e consultado ou alterado.
 - Remoto: por IP Tailscale na faixa 100.64.0.0/10; senha e autenticação obrigatórias, sem abrir porta administrativa na internet pública.
 - Manutenção: logs e estado das operações.
 
