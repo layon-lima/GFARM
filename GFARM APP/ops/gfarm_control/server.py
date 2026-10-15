@@ -145,7 +145,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
         if cookie:
             self.send_header("Set-Cookie", cookie)
         self.end_headers()
@@ -273,6 +273,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 job_start(action, data)
                 self.send(202, {"ok": True, "job": dict(CURRENT_JOB)})
             elif path == "/api/database":
+                if CURRENT_JOB["state"] == "running":
+                    raise RuntimeError("Aguarde a operacao em andamento terminar.")
                 answer = engine.save_database(data)
                 self.send(200, {"message": answer})
             elif path == "/api/remote":
