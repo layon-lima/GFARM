@@ -159,17 +159,17 @@ def update(project: Path) -> None:
         if git(project, "rev-parse", "HEAD") != old:
             raise RuntimeError("Versão local mudou durante compilação. Publicação cancelada.")
         say("ETAPA 4/6 — Publicando a versão compilada...")
-        git(project, "merge", "--ff-only", new)
         previous_dist = project / ".estq-dist-anterior"
+        # Mantém sempre a versão imediatamente anterior, sem acumular backups antigos.
+        # Só limpa a versão antiga após compilar e validar a nova integralmente.
         if previous_dist.exists():
-            raise RuntimeError(
-                "Já existe frontend anterior preservado; libere a revisão anterior "
-                "antes de publicar outra versão para evitar perda do rollback."
-            )
+            shutil.rmtree(previous_dist)
         current_dist = project / "dist"
         current_dist.rename(previous_dist)
         try:
             shutil.move(str(staged_dist), str(current_dist))
+            # A atualização do código só ocorre depois que o frontend novo está pronto.
+            git(project, "merge", "--ff-only", new)
         except Exception:
             if current_dist.exists():
                 shutil.rmtree(current_dist)
