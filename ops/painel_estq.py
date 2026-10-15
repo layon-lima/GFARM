@@ -162,9 +162,10 @@ class Painel:
         ttk.Button(location, text="Escolher pasta", command=self.choose_project).pack(side="left", padx=(0, 6))
         ttk.Button(location, text="Localizar instalação em uso", command=self.detect_existing).pack(side="left")
         ttk.Label(outer, textvariable=self.status_value, foreground="#2563eb").pack(anchor="w", pady=(0, 10))
+        panel_location = (str(Path(sys.executable).resolve().parent)
+                          if getattr(sys, "frozen", False) else "ambiente de desenvolvimento")
         ttk.Label(outer,
-                  text="Pasta do painel: C:\\Programas\\GFARM (configurável no instalador). "
-                       "Pasta dos dados/servidor: separada e gravável.",
+                  text=f"Painel instalado em: {panel_location} | Servidor: pasta independente e gravável",
                   foreground="#64748b").pack(anchor="w", pady=(0, 5))
 
         boxes = ttk.Frame(outer)
