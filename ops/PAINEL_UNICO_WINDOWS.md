@@ -1,33 +1,52 @@
 # GFARM — INSTALADOR E PAINEL DE CONTROLE DO ESTOQUE
 
-## INSTALADOR OFICIAL PARA WINDOWS
+## INSTALADOR DO **PROGRAMA COMPLETO** GFARM PARA WINDOWS
 
-Use **GFARM_Instalador.exe** em https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest.
-O instalador Windows oferece assistente de instalação, escolhe por padrão
-`C:\\Programas\\GFARM`, permite escolher outro local e adiciona atalhos de
-Área de Trabalho e Menu Iniciar e desinstalador padrão do Windows.
+O arquivo **GFARM_Instalador.exe** instala o GFARM e inclui o painel de controle
+que executa o assistente de instalação do sistema, não somente um painel solto.
 
-**A pasta selecionada no instalador é a do PAINEL, não a dos dados do estoque.**
-A pasta padrão do servidor para um PC novo é
-`%LOCALAPPDATA%\\GFARM\\Servidor`. O painel escolhe automaticamente esse caminho
-nas novas instalações e salva a escolha do usuário se ele selecionar outro.
-O código, o `backend/.env`, o frontend compilado, uploads e o ambiente Python
-precisam ficar em pasta gravável, não sob `C:\\Programas\\GFARM`.
-O banco real permanece no PostgreSQL, protegido separadamente.
+Baixe em https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest.
 
-**Se o computador já hospeda o estoque:** instalar o GFARM NÃO move nem
-substitui o servidor atual. O painel procura a instalação em funcionamento e
-pede confirmação do caminho encontrado. Se a instalação antiga não tiver Git,
-bloqueia a atualização, sem recriar banco ou clonar por cima.
+1. Execute o GFARM_Instalador.exe como instalador Windows e escolha a pasta.
+   Por padrão: **C:\Programas\GFARM** (ou outra escolhida por você).
+2. O instalador cria o programa/atalhos e registra o caminho real no
+   **gfarm-install.ini** da instalação.
+3. Ao concluir o instalador, é oferecida a opção **"Instalar e configurar o
+   programa GFARM agora"**. O painel é aberto automaticamente no assistente
+   **INSTALAR GFARM COMPLETO**.
+4. Em **C:\Programas\GFARM\Servidor**, o assistente baixa o sistema oficial da
+   branch main no GitHub, instala Git, Python 3.13, Node.js e PostgreSQL 17,
+   prepara o backend (.venv), instala bibliotecas e compila o frontend (dist).
+   **Necessário internet e autorização de Administrador do Windows.**
+   Programas instalados podem exigir sua confirmação/reinicialização.
+5. O assistente solicita a senha escolhida ao instalar o PostgreSQL e prepara
+   um banco NOVO. Se houver banco ou .env anterior, ele não os altera.
+6. O assistente solicita o ZIP do backup do servidor anterior e o respectivo
+   ZIP.sha256. Confere a integridade, restaura banco, uploads e XMLs, e oferece
+   iniciar o GFARM após a restauração.
+7. Depois de conferir tudo, clique **Instalar início automático do Windows** e
+   valide o acesso externo. O túnel Cloudflare é configurado separadamente
+   e o antigo servidor deve parar de aceitar gravações antes da troca.
 
-**Se o computador é novo:** instalar o GFARM não instala automaticamente o
-servidor. Abra o painel e execute o assistente de dependências, preparação,
-restauração e início automático. A instalação dos binários do painel não ativa
-outro backend nem altera a API do estoque.
+**No computador que JÁ executa o estoque:** o instalador não substitui, não
+move, não desliga e não reinicia o servidor. Detecta a API ativa (inclusive
+instalações antigas) e recusa criar outra instância/banco. Use
+**Localizar instalação em uso** no painel para apontar o caminho real.
+Instalações já existentes sem .git requerem reconciliação segura com GitHub
+antes da função Atualizar ser habilitada.
 
-Ao desinstalar, o instalador remove somente os arquivos do painel e seus
-atalhos. Não remove arquivos do servidor, credenciais, uploads ou PostgreSQL.
-A versão portátil `PAINEL_ESTQ.exe` continua disponível para contingência.
+**Separação de dados e segurança:** a pasta do sistema inclui código, .venv,
+dist e uploads; o banco continua gerenciado pelo PostgreSQL. O instalador
+NÃO leva dados reais do servidor anterior dentro do EXE. O projeto é obtido
+pelo GitHub e os dados somente pelo backup local verificado. Durante a
+instalação sob C:\Programas, o Windows pode exigir privilégios de
+Administrador para criar/atualizar os arquivos. Não concedemos permissões
+de escrita de credenciais a todos os usuários locais.
+
+**Desinstalar** o GFARM pelo Windows remove o lançador registrado, mas
+não destrói o PostgreSQL nem os arquivos do banco, nem limpa uploads do servidor.
+Antes de qualquer transferência ou limpeza de máquina, faça backup seguro.
+
 
 ---
 
@@ -44,7 +63,7 @@ O arquivo não contém banco, credenciais ou arquivos privados. Baixa todo o có
 
 ## NO PC NOVO — ABRIR SOMENTE O PAINEL_ESTQ.exe
 
-1. Instale o GFARM pelo GFARM_Instalador.exe. A pasta do painel será C:\\Programas\\GFARM (configurável), e a pasta de servidor proposta pelo painel será %LOCALAPPDATA%\\GFARM\\Servidor.
+1. Instale o GFARM pelo GFARM_Instalador.exe. O código do sistema será colocado pelo assistente em C:\\Programas\\GFARM\\Servidor (se não escolher outra pasta).
 2. Clique "Instalar dependências". Winget instala Git, Node.js LTS, Python 3.13, PostgreSQL 17 e Cloudflare Tunnel. O instalador PostgreSQL pode pedir senha de administrador do banco e reinicialização.
 3. Clique "Baixar e preparar app do GitHub". Faça login na conta autorizada se o navegador solicitar. São feitos clone da main, bibliotecas Python, npm ci e build.
 4. Clique "Criar PostgreSQL vazio + configurar". Informe no painel a senha do usuário postgres. O programa cria novo banco estq_novo_horizonte e usuário estq_app com senha própria aleatória, guardada apenas em backend/.env. Se usuário/banco ou .env já existir, recusa alterar.
