@@ -67,7 +67,9 @@ class TestGFARMControl(unittest.TestCase):
         data = dict(DB_HOST="127.0.0.1", DB_PORT="5432", DB_NAME="existente",
                     DB_USER="gestor", DB_PASSWORD="senha com # e ;", SECRET_KEY="segredo",
                     APP_HOST="127.0.0.1", APP_PORT="8000")
-        with mock.patch.object(self.engine, "port_busy", return_value=False):
+        with (mock.patch.object(self.engine, "port_busy", return_value=False),
+              mock.patch.object(self.engine, "pg_binary", return_value="psql"),
+              mock.patch.object(self.engine, "run", return_value="1")):
             outcome = self.engine.save_database(data)
         self.assertIn("nao foi modificado", outcome)
         txt = (Path(self.folder.name) / "data" / "backend.env").read_text()
