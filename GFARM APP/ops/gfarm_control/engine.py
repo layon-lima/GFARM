@@ -60,9 +60,17 @@ def env_values():
         for line in path.read_text(encoding="utf-8-sig").splitlines():
             if "=" in line and not line.lstrip().startswith("#"):
                 key, value = line.split("=", 1)
-                result[key.strip()] = value.strip().strip('"').strip("'")
+                raw = value.strip()
+                if raw.startswith('"') and raw.endswith('"'):
+                    try:
+                        result[key.strip()] = json.loads(raw)
+                    except ValueError:
+                        result[key.strip()] = raw[1:-1]
+                elif raw.startswith("'") and raw.endswith("'"):
+                    result[key.strip()] = raw[1:-1]
+                else:
+                    result[key.strip()] = raw
     return result
-
 
 def backend_port():
     return int(env_values().get("APP_PORT", "8000"))
