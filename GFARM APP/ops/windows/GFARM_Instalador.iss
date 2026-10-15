@@ -46,7 +46,7 @@ Name: "{app}\Servidor"
 [INI]
 ; Marca a localização selecionada pelo usuário no instalador para que o
 ; painel nunca volte a procurar apenas em Documentos.
-Filename: "{app}\gfarm-install.ini"; Section: "GFARM"; Key: "Servidor"; String: "{app}\Servidor"
+Filename: "{app}\gfarm-install.ini"; Section: "GFARM"; Key: "Servidor"; String: "{app}\Servidor\GFARM APP"
 
 [Icons]
 Name: "{autoprograms}\GFARM - Painel de Controle"; Filename: "{app}\PAINEL_ESTQ.exe"; WorkingDir: "{app}"
