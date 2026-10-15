@@ -6,6 +6,7 @@ depois pastas prováveis. Resultados ambíguos exigem escolha humana.
 """
 from __future__ import annotations
 
+import configparser
 import json
 import os
 import re
@@ -18,6 +19,21 @@ from pathlib import Path
 # O servidor usa uma pasta própria e gravável, pois .env/uploads/.venv/dist
 # NÃO devem ser colocados em uma pasta protegida de programas do Windows.
 def default_server_root() -> Path:
+    """Instalação GFARM: usa a pasta REAL escolhida no assistente do Windows."""
+    # Inno Setup escreve o manifesto junto ao painel e nunca o coloca no
+    # repositório/dados. Ao atualizar o painel na mesma pasta, ele persiste.
+    if getattr(sys, "frozen", False):
+        marker = Path(sys.executable).resolve().parent / "gfarm-install.ini"
+        try:
+            cfg = configparser.ConfigParser(interpolation=None)
+            if marker.is_file() and cfg.read(marker, encoding="utf-8"):
+                selected = cfg.get("GFARM", "Servidor", fallback="").strip()
+                if selected:
+                    candidate = Path(selected)
+                    if candidate.is_absolute():
+                        return candidate
+        except (OSError, ValueError, configparser.Error):
+            pass
     local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
     return local / "GFARM" / "Servidor"
 
