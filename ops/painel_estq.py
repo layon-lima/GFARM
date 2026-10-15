@@ -243,7 +243,7 @@ class Painel:
             self.project_value.set(path)
             self.project()
 
-    def _run(self, command, cwd=None, env=None, input_text=None, timeout=2400):
+    def _run(self, command, cwd=None, env=None, input_text=None, timeout=2400, display=True):
         # O comando não é escrito no log, pois pode conter informações privadas.
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         try:
@@ -262,7 +262,7 @@ class Painel:
                 + str(finished.returncode) + ": " + message[-1200:]
             )
         output = finished.stdout.strip()
-        if output:
+        if output and display:
             self._log(output[-1600:])
         return output
 
@@ -310,7 +310,10 @@ class Painel:
             self._run([git, "clone", "--branch", REPO_BRANCH, "--single-branch", REPO,
                        str(project)], timeout=1200)
         else:
-            remote = self._run([git, "remote", "get-url", "origin"], cwd=project).lower()
+            # Nunca registrar URL: origin pode conter credencial de checkout privado.
+            remote = self._run(
+                [git, "remote", "get-url", "origin"], cwd=project, display=False
+            ).lower()
             if REPO_SLUG not in remote:
                 raise RuntimeError("O repositório existente não é o ESTQ oficial. Nada foi alterado.")
             if self._run([git, "status", "--porcelain"], cwd=project):
@@ -516,7 +519,21 @@ class Painel:
             "pelo próprio painel para ativar o código novo."
         ):
             return
-        self.run_background("Atualizar do GitHub e publicar", self._prepare, project)
+        self.run_background("Atualizar do GitHub e publicar", self._update_publish, project)
+
+    def _update_publish(self, project):
+        self._prepare(project)
+        if api_ok():
+            pid = self.config.get("backend_pid")
+            if pid and self._process_running(pid):
+                self._stop_owned_server()
+                return self._start(project) + " (atualizado pela main)"
+            return (
+                "GitHub atualizado e frontend compilado, mas o servidor foi iniciado "
+                "por OUTRO painel/monitor. Por segurança não encerramos processos desconhecidos. "
+                "Reinicie o servidor pelo painel original para ativar o backend novo."
+            )
+        return "Código atualizado. O servidor estava parado; clique Iniciar servidor."
 
     def _process_running(self, pid):
         try:
