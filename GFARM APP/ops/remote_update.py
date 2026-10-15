@@ -42,7 +42,8 @@ def run(args: list[str], cwd: Path, timeout: int = 300) -> str:
 
 
 def git(project: Path, *args: str) -> str:
-    return run(["git", *args], project, timeout=180)
+    root = project.parent if project.name == "GFARM APP" else project
+    return run(["git", *args], root, timeout=180)
 
 
 def health() -> bool:
