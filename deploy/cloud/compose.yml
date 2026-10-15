@@ -1,0 +1,77 @@
+# Uso: docker compose --env-file backend/.env -f deploy/cloud/compose.yml up -d --build
+# Requer VPS Linux 24/7; acesso público deve usar túnel HTTPS separado.
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?Configure_DB_NAME}
+      POSTGRES_USER: ${DB_USER:?Configure_DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Configure_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$${POSTGRES_USER}\" -d \"$$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [private]
+
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../../backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app_uploads:/app/backend/uploads
+      - app_data:/home/estq/Documents/INDEX ERP DATA
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 20s
+      timeout: 10s
+      start_period: 180s
+      retries: 6
+    networks: [private]
+
+  # Restauração só sob comando explícito, sem iniciar a API.
+  restore:
+    profiles: [maintenance]
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/Dockerfile
+    env_file:
+      - ../../backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app_uploads:/app/backend/uploads
+      - ../../transfer:/transfer:ro
+    entrypoint: ["python", "/app/ops/migrar_servidor.py"]
+    networks: [private]
+
+networks:
+  private:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  app_uploads:
+  app_data:
