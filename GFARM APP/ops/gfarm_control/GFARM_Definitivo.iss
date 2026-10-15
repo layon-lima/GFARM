@@ -53,8 +53,8 @@ Name: "{autodesktop}\GFARM Control"; Filename: "{app}\GFARM-Control.exe"; Parame
 Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; Description: "Abrir GFARM Control para configurar PostgreSQL"; Flags: postinstall skipifsilent nowait
 
 [UninstallRun]
-Filename: "{sys}\schtasks.exe"; Parameters: "/End /TN ""GFARM Control"""; Flags: runhidden
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""GFARM Control"" /F"; Flags: runhidden
+Filename: "{sys}\schtasks.exe"; Parameters: "/End /TN ""GFARM Control"""; Flags: runhidden; RunOnceId: "GFARMControlStopTask"
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""GFARM Control"" /F"; Flags: runhidden; RunOnceId: "GFARMControlRemoveTask"
 
 [Code]
 var
