@@ -9,6 +9,9 @@ $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Execute PAINEL_ESTQ.exe como Administrador SOMENTE para habilitar acesso remoto."
 }
+if (-not (Test-Path (Join-Path $Projeto "ops\REMOTO_COMANDO.ps1")) -and -not (Test-Path (Join-Path $Projeto "ops\windows\REMOTO_COMANDO.ps1"))) {
+    throw "O comando remoto seguro não foi baixado do GitHub."
+}
 if (-not (Test-Path (Join-Path $Projeto "ops\remote_update.py"))) {
     throw "Atualize o repositório GitHub do servidor antes de autorizar o acesso remoto."
 }
@@ -28,7 +31,10 @@ if (-not $tail) {
 if (-not $tail) {
     throw "Tailscale não instalado. Instale e autentique o computador servidor antes."
 }
-$ip = (& $tail.FullName ip -4 2>$null | Select-Object -First 1).Trim()
+$tailPath = if ($tail -is [System.Management.Automation.ApplicationInfo]) { $tail.Source } else { $tail.FullName }
+$ipResult = @(& $tailPath ip -4 2>$null)
+$ip = [string]($ipResult | Select-Object -First 1)
+$ip = $ip.Trim()
 try {
     $octets = $ip.Split(".")
     $first = [int]$octets[0]
@@ -60,10 +66,20 @@ New-Item -Path $directory -ItemType Directory -Force | Out-Null
 if (-not (Test-Path $authorized)) {
     New-Item -Path $authorized -ItemType File -Force | Out-Null
 }
-$lines = @(Get-Content -Path $authorized -ErrorAction SilentlyContinue)
-if ($lines -notcontains $PublicKey) {
-    Add-Content -Path $authorized -Value $PublicKey -Encoding ascii
-}
+# A chave deste painel só autoriza DUAS ações fixas: "status" e "update".
+# EncodedCommand evita aspas especiais/caminhos com espaços nas opções do sshd.
+$helper = Join-Path $Projeto "ops\windows\REMOTO_COMANDO.ps1"
+$p = $Projeto.Replace("'", "''")
+$h = $helper.Replace("'", "''")
+$command = "& '$h' -Projeto '$p'"
+$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+$entry = 'restrict,command="powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + $encoded + '" ' + $PublicKey
+$keyBody = ($PublicKey -split ' ')[1]
+$lines = @(Get-Content -Path $authorized -ErrorAction SilentlyContinue | Where-Object {
+    $_ -notmatch ('ssh-ed25519\s+' + [Regex]::Escape($keyBody) + '(\s|$)')
+})
+$lines += $entry
+Set-Content -Path $authorized -Value $lines -Encoding ascii
 & icacls.exe $authorized /inheritance:r /grant:r '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Não foi possível proteger as permissões das chaves SSH." }
 $hostpub = Join-Path $env:ProgramData "ssh\ssh_host_ed25519_key.pub"
