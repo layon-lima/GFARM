@@ -146,7 +146,7 @@ begin
     ExpandConstant('{app}\install_windows.ps1') + '" -InstallDir "' +
     ExpandConstant('{app}') + '"';
   if (not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    Arguments, '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or
+    Arguments, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode)) or
     (ResultCode <> 0) then
     RaiseException('Falha na instalação GFARM. Código: ' + IntToStr(ResultCode) +
       '. Veja o registro em C:\ProgramData\GFARM\instalacao.log.');
