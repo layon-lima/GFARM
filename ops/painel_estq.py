@@ -418,15 +418,7 @@ class Painel:
         ssh = find_binary("ssh")
         if not ssh:
             raise RuntimeError("OpenSSH Client não está instalado no Windows.")
-        # EncodedCommand evita interpretações do shell remoto e injeção de argumentos.
-        ps = (
-            "$p='" + project + "'; "
-            "$py=Join-Path $p 'backend\\.venv\\Scripts\\python.exe'; "
-            "if (!(Test-Path $py)) {$py=Join-Path $p '.venv\\Scripts\\python.exe'}; "
-            "$script=Join-Path $p 'ops\\remote_update.py'; "
-            "& $py $script --project-dir $p " + action + "; exit $LASTEXITCODE"
-        )
-        encoded = base64.b64encode(ps.encode("utf-16-le")).decode("ascii")
+        # O sshd usa ForceCommand por chave: apenas "status" e "update".
         return [ssh, "-T", "-i", str(REMOTE_KEY),
                 "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
                 "-o", "StrictHostKeyChecking=yes",
@@ -436,7 +428,7 @@ class Painel:
                 "-o", "ConnectTimeout=12",
                 "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
                 user + "@" + host,
-                "powershell.exe -NoProfile -NonInteractive -EncodedCommand " + encoded]
+                action]
 
     def _execute_remote(self, action):
         command = self._remote_command(action)
