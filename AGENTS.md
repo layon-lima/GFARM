@@ -403,6 +403,17 @@ Testar o endpoint/fluxo que a UI realmente usa.
 
 ---
 
+## 12.1 Portabilidade e infraestrutura segura
+
+- TODA alteracao permanente de inicializacao, migracao, instalacao e hospedagem do ESTQ deve ser feita primeiro no GitHub; nao depender de scripts avulsos gerados fora do repositorio.
+- O caminho local nao pode ficar fixo em C:\\Users\\User; usar pasta do proprio projeto e configuracao apropriada quando o servidor for transferido.
+- Migração deve preservar PostgreSQL oficial, arquivos de backend/uploads, XMLs pendentes e segredos por canal privado — nunca colocar senhas, dumps ou tokens no Git.
+- Nunca permitir restore sobre banco com tabelas; exigir verificacao SHA-256 e validacao de destino vazio antes da restauração.
+- Antes de trocar de PC/VPS: parar novas movimentacoes na origem, produzir backup final consistente, validar motor e arquivos no destino e garantir somente uma fonte de estoque com escrita.
+- O Windows pode reiniciar o backend apos login via monitor versionado; Tunnel tem supervisao independente. Se o PC estiver desligado, so um servidor externo pode manter o app online.
+- Hospedagem externa deve manter PostgreSQL e uploads persistentes, rede de banco privada, HTTPS, healthchecks, backups EXTERNOS e nenhum segredo no GitHub.
+- Balanca Web Serial depende do navegador/USB do PC operador; pasta local XML requer transferencia segura para VPS.
+
 # 13. DEPLOY
 
 O usuário possui painel local com a ação:
