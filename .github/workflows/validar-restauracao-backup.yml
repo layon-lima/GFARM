@@ -1,0 +1,138 @@
+name: GFARM - Teste isolado de restauracao do backup
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validar-restauracao-backup.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  restauracao-temporaria:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgresql:
+        image: postgres:17
+        env:
+          POSTGRES_USER: gfarm_teste
+          POSTGRES_PASSWORD: senha_apenas_do_container_temporario
+          POSTGRES_DB: gfarm_teste
+        options: >-
+          --health-cmd "pg_isready -U gfarm_teste -d gfarm_teste"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - name: Baixar somente os arquivos privados do repositorio
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Reconstruir ZIP e verificar todos os hashes e arquivos
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import shutil
+          import tempfile
+          import zipfile
+          from pathlib import Path, PurePosixPath
+
+          folder = Path("BACKUPS/GFARM_COMPLETO_20261015_153528_836665")
+          manifest = json.loads((folder / "importacao.json").read_text(encoding="utf-8"))
+          if manifest.get("format") != "GFARM-GITHUB-PARTES-v1":
+              raise SystemExit("Formato do manifesto de partes invalido")
+          name = manifest.get("arquivo_original", "")
+          if not re.fullmatch(r"GFARM_COMPLETO_[A-Za-z0-9_]+\.zip", name):
+              raise SystemExit("Nome do ZIP invalido")
+          parts = manifest.get("partes", [])
+          if not parts or not isinstance(parts, list):
+              raise SystemExit("Manifesto sem partes")
+          out_dir = Path(os.environ["RUNNER_TEMP"])
+          archive = out_dir / name
+          total_hash = hashlib.sha256()
+          total_bytes = 0
+          with archive.open("xb") as merged:
+              for idx, entry in enumerate(parts, start=1):
+                  part_name = entry.get("arquivo", "")
+                  if part_name != f"{name}.part{idx:04d}":
+                      raise SystemExit("Parte faltando ou fora de ordem")
+                  src = folder / part_name
+                  if not src.is_file() or src.stat().st_size != int(entry.get("bytes", -1)):
+                      raise SystemExit("Tamanho de parte incorreto")
+                  digest = hashlib.sha256()
+                  with src.open("rb") as stream:
+                      for block in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+                          digest.update(block)
+                          total_hash.update(block)
+                          merged.write(block)
+                          total_bytes += len(block)
+                  if digest.hexdigest() != entry.get("sha256"):
+                      raise SystemExit("SHA-256 de parte invalido")
+          if total_bytes != int(manifest.get("tamanho_original", -1)):
+              raise SystemExit("Tamanho final incorreto")
+          if total_hash.hexdigest() != manifest.get("sha256_original"):
+              raise SystemExit("SHA-256 final incorreto")
+          with zipfile.ZipFile(archive, "r") as z:
+              infos = z.infolist()
+              names = [info.filename for info in infos]
+              if len(set(names)) != len(names):
+                  raise SystemExit("Entradas duplicadas no ZIP")
+              if not {"database.dump", "manifest.json"}.issubset(names):
+                  raise SystemExit("Dump ou manifesto ausente no ZIP")
+              for info in infos:
+                  item = PurePosixPath(info.filename)
+                  mode = (info.external_attr >> 16) & 0xF000
+                  if (item.is_absolute() or ".." in item.parts or "\\" in info.filename
+                      or mode == 0xA000 or
+                      (info.filename not in {"database.dump", "manifest.json"} and
+                       not info.filename.startswith(("uploads/", "xml_inbox/")))):
+                      raise SystemExit("Caminho perigoso ou inesperado no ZIP")
+              if z.testzip() is not None:
+                  raise SystemExit("Erro de integridade CRC no ZIP")
+              internal = json.loads(z.read("manifest.json"))
+              if internal.get("formato_banco") != "pg_dump custom":
+                  raise SystemExit("Formato do dump inesperado")
+              dump_path = out_dir / "gfarm-restauracao-teste.dump"
+              with z.open("database.dump") as source, dump_path.open("xb") as dest:
+                  shutil.copyfileobj(source, dest)
+              with dump_path.open("rb") as src:
+                  if src.read(5) != b"PGDMP":
+                      raise SystemExit("Arquivo nao e dump PostgreSQL custom")
+              uploads = sum(n.startswith("uploads/") and not n.endswith("/") for n in names)
+              xmls = sum(n.startswith("xml_inbox/") and not n.endswith("/") for n in names)
+          print(f"ZIP reconstruido e validado: {total_bytes} bytes")
+          print(f"Arquivos anexados no pacote: {uploads} | XMLs: {xmls}")
+          print("Nenhum arquivo do backup foi divulgado nos logs ou enviado como artifact.")
+          PY
+
+      - name: Restaurar PostgreSQL real em banco DESCARTAVEL
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTAINER=$(docker ps --filter 'ancestor=postgres:17' --format '{{.ID}}' | head -n 1)
+          if [ -z "$CONTAINER" ]; then
+            echo "Container PostgreSQL temporario nao encontrado"
+            exit 1
+          fi
+          docker cp "$RUNNER_TEMP/gfarm-restauracao-teste.dump" "$CONTAINER:/tmp/gfarm-restauracao-teste.dump"
+          docker exec "$CONTAINER" pg_restore --list /tmp/gfarm-restauracao-teste.dump > /dev/null
+          docker exec -e PGPASSWORD=senha_apenas_do_container_temporario "$CONTAINER" \
+            pg_restore --exit-on-error --single-transaction --no-owner --no-privileges \
+            -U gfarm_teste -d gfarm_teste /tmp/gfarm-restauracao-teste.dump
+          TABELAS=$(docker exec -e PGPASSWORD=senha_apenas_do_container_temporario "$CONTAINER" \
+            psql -X -A -t -v ON_ERROR_STOP=1 -U gfarm_teste -d gfarm_teste \
+            -c "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname = 'public';")
+          if ! [[ "$TABELAS" =~ ^[0-9]+$ ]] || [ "$TABELAS" -eq 0 ]; then
+            echo "Restauracao sem tabelas; teste recusado."
+            exit 1
+          fi
+          echo "RESTAURACAO CONCLUIDA COM SUCESSO em banco isolado: $TABELAS tabelas."
+          echo "Banco temporario sera destruido automaticamente ao terminar este job."
