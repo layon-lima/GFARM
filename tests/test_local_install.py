@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ops.local_install import is_estq_project, locate_projects, project_from_process
+from ops.local_install import (default_server_root, initial_server_root, is_estq_project,
+                               locate_projects, project_from_process)
 from ops.painel_estq import Painel
 
 
@@ -67,6 +68,33 @@ class LocalInstallTests(unittest.TestCase):
                  patch("ops.painel_estq.windows_processes", return_value=process):
                 with self.assertRaisesRegex(RuntimeError, "OUTRA pasta"):
                     panel._check_active_target(other)
+
+
+    def test_instalador_padroniza_pasta_do_servidor_em_area_gravavel(self):
+        with tempfile.TemporaryDirectory() as base:
+            with patch.dict("os.environ", {"LOCALAPPDATA": base}):
+                self.assertEqual(default_server_root(), Path(base) / "GFARM" / "Servidor")
+                self.assertEqual(initial_server_root({}), Path(base) / "GFARM" / "Servidor")
+                self.assertEqual(initial_server_root({"project": "C:/Desatualizado"}),
+                                 Path(base) / "GFARM" / "Servidor")
+
+    def test_setup_nao_muda_servidor_ja_funcionando(self):
+        with tempfile.TemporaryDirectory() as base:
+            active = Path(base) / "Estoque Original"
+            make_estq(active)
+            with patch.dict("os.environ", {"LOCALAPPDATA": base}):
+                self.assertEqual(initial_server_root({"project": str(active)}), active)
+                self.assertEqual((active / "backend" / ".env").read_text(), "DB_NAME=PROD")
+                self.assertFalse((Path(base) / "GFARM" / "Servidor").exists())
+
+    def test_codigo_do_instalador_nao_apaga_dados_do_erp(self):
+        installer = (Path(__file__).resolve().parents[1] / "ops" / "windows" / "GFARM_Instalador.iss")
+        data = installer.read_text(encoding="utf-8")
+        self.assertIn(r"DefaultDirName={sd}\Programas\GFARM", data)
+        self.assertIn("ContemDadosDoServidor", data)
+        self.assertIn("UninstallDisplayName=GFARM - Painel de Controle", data)
+        self.assertNotIn("uninsalwaysuninstall", data.lower())
+        self.assertNotIn("uninsdeletekeyifempty", data.lower())
 
     def test_nao_atualiza_pasta_sem_clone(self):
         with tempfile.TemporaryDirectory() as d:
