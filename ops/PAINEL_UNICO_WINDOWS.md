@@ -1,4 +1,35 @@
-# PAINEL ÚNICO ESTQ — TRANSFERIR PARA OUTRO WINDOWS
+# GFARM — INSTALADOR E PAINEL DE CONTROLE DO ESTOQUE
+
+## INSTALADOR OFICIAL PARA WINDOWS
+
+Use **GFARM_Instalador.exe** em https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest.
+O instalador Windows oferece assistente de instalação, escolhe por padrão
+`C:\\Programas\\GFARM`, permite escolher outro local e adiciona atalhos de
+Área de Trabalho e Menu Iniciar e desinstalador padrão do Windows.
+
+**A pasta selecionada no instalador é a do PAINEL, não a dos dados do estoque.**
+A pasta padrão do servidor para um PC novo é
+`%LOCALAPPDATA%\\GFARM\\Servidor`. O painel escolhe automaticamente esse caminho
+nas novas instalações e salva a escolha do usuário se ele selecionar outro.
+O código, o `backend/.env`, o frontend compilado, uploads e o ambiente Python
+precisam ficar em pasta gravável, não sob `C:\\Programas\\GFARM`.
+O banco real permanece no PostgreSQL, protegido separadamente.
+
+**Se o computador já hospeda o estoque:** instalar o GFARM NÃO move nem
+substitui o servidor atual. O painel procura a instalação em funcionamento e
+pede confirmação do caminho encontrado. Se a instalação antiga não tiver Git,
+bloqueia a atualização, sem recriar banco ou clonar por cima.
+
+**Se o computador é novo:** instalar o GFARM não instala automaticamente o
+servidor. Abra o painel e execute o assistente de dependências, preparação,
+restauração e início automático. A instalação dos binários do painel não ativa
+outro backend nem altera a API do estoque.
+
+Ao desinstalar, o instalador remove somente os arquivos do painel e seus
+atalhos. Não remove arquivos do servidor, credenciais, uploads ou PostgreSQL.
+A versão portátil `PAINEL_ESTQ.exe` continua disponível para contingência.
+
+---
 
 O painel oficial é compilado na branch main e distribuído como **um único arquivo PAINEL_ESTQ.exe** no GitHub: https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest
 
@@ -13,7 +44,7 @@ O arquivo não contém banco, credenciais ou arquivos privados. Baixa todo o có
 
 ## NO PC NOVO — ABRIR SOMENTE O PAINEL_ESTQ.exe
 
-1. Escolha uma pasta vazia para o aplicativo, como Documentos/ESTQ_SERVIDOR.
+1. Instale o GFARM pelo GFARM_Instalador.exe. A pasta do painel será C:\\Programas\\GFARM (configurável), e a pasta de servidor proposta pelo painel será %LOCALAPPDATA%\\GFARM\\Servidor.
 2. Clique "Instalar dependências". Winget instala Git, Node.js LTS, Python 3.13, PostgreSQL 17 e Cloudflare Tunnel. O instalador PostgreSQL pode pedir senha de administrador do banco e reinicialização.
 3. Clique "Baixar e preparar app do GitHub". Faça login na conta autorizada se o navegador solicitar. São feitos clone da main, bibliotecas Python, npm ci e build.
 4. Clique "Criar PostgreSQL vazio + configurar". Informe no painel a senha do usuário postgres. O programa cria novo banco estq_novo_horizonte e usuário estq_app com senha própria aleatória, guardada apenas em backend/.env. Se usuário/banco ou .env já existir, recusa alterar.
