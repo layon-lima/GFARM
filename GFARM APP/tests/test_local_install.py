@@ -74,10 +74,10 @@ class LocalInstallTests(unittest.TestCase):
     def test_instalador_padroniza_pasta_do_servidor_em_area_gravavel(self):
         with tempfile.TemporaryDirectory() as base:
             with patch.dict("os.environ", {"LOCALAPPDATA": base}):
-                self.assertEqual(default_server_root(), Path(base) / "GFARM" / "Servidor")
-                self.assertEqual(initial_server_root({}), Path(base) / "GFARM" / "Servidor")
+                self.assertEqual(default_server_root(), Path(base) / "GFARM" / "Servidor" / "GFARM APP")
+                self.assertEqual(initial_server_root({}), Path(base) / "GFARM" / "Servidor" / "GFARM APP")
                 self.assertEqual(initial_server_root({"project": "C:/Desatualizado"}),
-                                 Path(base) / "GFARM" / "Servidor")
+                                 Path(base) / "GFARM" / "Servidor" / "GFARM APP")
 
     def test_setup_nao_muda_servidor_ja_funcionando(self):
         with tempfile.TemporaryDirectory() as base:
@@ -86,7 +86,7 @@ class LocalInstallTests(unittest.TestCase):
             with patch.dict("os.environ", {"LOCALAPPDATA": base}):
                 self.assertEqual(initial_server_root({"project": str(active)}), active)
                 self.assertEqual((active / "backend" / ".env").read_text(), "DB_NAME=PROD")
-                self.assertFalse((Path(base) / "GFARM" / "Servidor").exists())
+                self.assertFalse((Path(base) / "GFARM" / "Servidor" / "GFARM APP").exists())
 
     def test_codigo_do_instalador_nao_apaga_dados_do_erp(self):
         installer = (Path(__file__).resolve().parents[1] / "ops" / "windows" / "GFARM_Instalador.iss")
@@ -96,7 +96,7 @@ class LocalInstallTests(unittest.TestCase):
         self.assertIn("UninstallDisplayName=GFARM - Sistema de Estoque", data)
         self.assertNotIn("uninsalwaysuninstall", data.lower())
         self.assertNotIn("uninsdeletekeyifempty", data.lower())
-        self.assertIn('Key: "Servidor"; String: "{app}\\Servidor"', data)
+        self.assertIn('Key: "Servidor"; String: "{app}\\Servidor\\GFARM APP"', data)
         self.assertIn('Parameters: "--install-gfarm"', data)
         self.assertIn("runascurrentuser", data)
         self.assertIn(r"Name: \"{app}\Servidor\"".replace(r"\"", '"'), data)
@@ -106,11 +106,11 @@ class LocalInstallTests(unittest.TestCase):
             root = Path(base) / "GFARM"
             root.mkdir()
             manifest = root / "gfarm-install.ini"
-            manifest.write_text("[GFARM]\nServidor = " + str(root / "Servidor") + "\n", encoding="utf-8")
+            manifest.write_text("[GFARM]\nServidor = " + str(root / "Servidor" / "GFARM APP") + "\n", encoding="utf-8")
             with patch("ops.local_install.sys.frozen", True, create=True), \
                  patch("ops.local_install.sys.executable", str(root / "PAINEL_ESTQ.exe")):
-                self.assertEqual(default_server_root(), root / "Servidor")
-                self.assertEqual(initial_server_root({}), root / "Servidor")
+                self.assertEqual(default_server_root(), root / "Servidor" / "GFARM APP")
+                self.assertEqual(initial_server_root({}), root / "Servidor" / "GFARM APP")
 
     def test_instalar_gfarm_nao_instala_duas_copias_se_servidor_online(self):
         panel = Painel.__new__(Painel)
@@ -126,7 +126,7 @@ class LocalInstallTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as base:
             original = Path(base) / "estoque atual"
             make_estq(original)
-            other = Path(base) / "GFARM" / "Servidor"
+            other = Path(base) / "GFARM" / "Servidor" / "GFARM APP"
             panel = Painel.__new__(Painel)
             panel.project = lambda: other
             with patch("ops.painel_estq.api_ok", return_value=False), \
