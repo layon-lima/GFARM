@@ -333,6 +333,81 @@ def verify_backup(name):
     return {"valido": True, **info}
 
 
+
+def import_assets_only(zip_path):
+    """Recupera uploads e XMLs sem tocar em qualquer tabela PostgreSQL.
+
+    Usar apos reinstalacao conectada ao mesmo banco existente. Nao substitui
+    um anexo atual; recusa caminhos suspeitos e ZIPs sem o dump esperado.
+    """
+    with LOCK:
+        if owned() or port_busy(backend_port()):
+            raise RuntimeError("Desligue a API GFARM para importar anexos com seguranca.")
+        selected = Path(str(zip_path)).expanduser().resolve(strict=True)
+        if selected.suffix.lower() != ".zip" or not selected.is_file():
+            raise RuntimeError("Selecione o ZIP completo do backup GFARM.")
+        details = validate_archive(selected)
+        destinations = {
+            "uploads/": DATA / "uploads",
+            "xml_inbox/": Path(env_values().get("ESTQ_XML_TICKET_DIR") or
+                               (DATA / "xml-inbox")),
+        }
+        all_items = []
+        with zipfile.ZipFile(selected) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                for prefix, root in destinations.items():
+                    if info.filename.startswith(prefix):
+                        relative = info.filename[len(prefix):]
+                        target = root.joinpath(*relative.split("/"))
+                        if not relative or any(p in ("", ".", "..") for p in relative.split("/")):
+                            raise RuntimeError("Caminho invalido no pacote.")
+                        if target.is_symlink():
+                            raise RuntimeError("Anexo aponta para link simbolico; operacao bloqueada.")
+                        if info.file_size > 2 * 1024 ** 3:
+                            raise RuntimeError("Anexo grande demais no pacote.")
+                        all_items.append((info, root, target))
+                        break
+            total = sum(item.file_size for item, _, _ in all_items)
+            if total > 8 * 1024 ** 3 or len(all_items) > 100000:
+                raise RuntimeError("Backup excede limites de seguranca para anexos.")
+            # Conferir conflitos ANTES de escrever qualquer arquivo.
+            for info, root, target in all_items:
+                if target.exists():
+                    if not target.is_file() or target.stat().st_size != info.file_size:
+                        raise RuntimeError("Arquivo ja existe e difere: " + str(target))
+                    digest_zip = hashlib.sha256()
+                    with archive.open(info) as inp:
+                        for chunk in iter(lambda: inp.read(1024 * 1024), b""):
+                            digest_zip.update(chunk)
+                    digest_local = hashlib.sha256()
+                    with target.open("rb") as inp:
+                        for chunk in iter(lambda: inp.read(1024 * 1024), b""):
+                            digest_local.update(chunk)
+                    if digest_zip.digest() != digest_local.digest():
+                        raise RuntimeError("Arquivo ja existe com conteudo diferente: " + str(target))
+            imported = 0
+            for info, root, target in all_items:
+                if target.exists():
+                    continue
+                # Nao seguir links simbolicos em caminhos intermediarios.
+                if any(node.is_symlink() for node in [root, *target.parents]
+                       if node != target):
+                    raise RuntimeError("Destino contem link simbolico: " + str(target))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    with archive.open(info) as inp, target.open("xb") as out:
+                        shutil.copyfileobj(inp, out)
+                    imported += 1
+                except Exception:
+                    target.unlink(missing_ok=True)
+                    raise
+        write_log("Anexos recuperados de %s: %d novos; %d uploads; %d XMLs. Banco intocado." %
+                  (selected.name, imported, details["uploads"], details["xmls"]))
+        return {"importados": imported, **details, "banco_alterado": False}
+
+
 def restore_empty(name, confirmation):
     # NUNCA restaura sobre banco real preenchido.
     if confirmation != "RESTAURAR EM BANCO VAZIO":
