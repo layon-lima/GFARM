@@ -38,20 +38,17 @@ try {
     '--specpath',"$build\spec",'--name','GFARM','launcher.py')
   & $Python @appArgs
   if ($LASTEXITCODE -ne 0) { throw 'Falha no GFARM.exe.' }
-  Write-Host '[4/5] Empacotando apenas arquivos oficiais do Git...'
-  $zip = Join-Path $build 'GFARM_APP.zip'
-  if (Test-Path $zip) { Remove-Item $zip -Force }
-  & $git.Source -C $repo archive --format=zip "--output=$zip" HEAD 'GFARM APP'
-  if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zip)) { throw 'Falha no pacote do aplicativo.' }
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
-  try {
-    $paths = @($archive.Entries | ForEach-Object { $_.FullName })
-    if ($paths -notcontains 'GFARM APP/backend/run_production.py') { throw 'Pacote sem backend GFARM.' }
-    if ($paths | Where-Object { $_ -like '*backend/.env' -or $_ -like '*node_modules/*' }) {
-      throw 'Pacote contem credenciais ou node_modules.'
-    }
-  } finally { $archive.Dispose() }
+  Write-Host '[4/5] Instalador online: sem empacotar o repositorio.'
+  # Remover pacote legado apenas na pasta temporaria de build.
+  # O instalador final passa a baixar GFARM APP do GitHub na instalacao.
+  $oldZip = Join-Path $build 'GFARM_APP.zip'
+  if (Test-Path -LiteralPath $oldZip -PathType Leaf) {
+    Remove-Item -LiteralPath $oldZip -Force
+  }
+  if (!(Test-Path (Join-Path $build 'GFARM.exe')) -or
+      !(Test-Path (Join-Path $build 'GFARM-Control.exe'))) {
+    throw 'Executaveis GFARM e GFARM-Control ausentes.'
+  }
   Write-Host '[5/5] Localizando Inno Setup 6 e compilando...'
   function Find-InnoSetup6 {
     # Inno Setup pode ser instalado em pasta personalizada ou apenas no perfil.
@@ -121,6 +118,12 @@ try {
   if (-not (Test-Path $exe)) { throw 'Instalador nao foi gerado.' }
   $sha = (Get-FileHash $exe -Algorithm SHA256).Hash
   Set-Content "$exe.sha256" "$sha  GFARM_Instalador_Definitivo.exe" -Encoding ascii
+  $desktop = [Environment]::GetFolderPath('Desktop')
+  if ($desktop -and (Test-Path -LiteralPath $desktop)) {
+    $desktopSetup = Join-Path $desktop 'GFARM_Instalador_Definitivo.exe'
+    Copy-Item -LiteralPath $exe -Destination $desktopSetup -Force
+    Write-Host "INSTALADOR NA AREA DE TRABALHO: $desktopSetup"
+  }
   Write-Host "INSTALADOR: $exe"
   Write-Host "SHA-256: $sha"
 } finally { Pop-Location }
