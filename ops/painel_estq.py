@@ -345,10 +345,29 @@ class Painel:
     def _python_for_venv(self):
         py = find_binary("py")
         if py:
-            return [str(py), "-3.13"]
+            result = subprocess.run(
+                [str(py), "-3.13", "--version"], capture_output=True,
+                text=True, timeout=10,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if result.returncode == 0 and "Python 3.13" in (result.stdout + result.stderr):
+                return [str(py), "-3.13"]
         python = find_binary("python")
-        if python and "313" in str(python):
-            return [str(python)]
+        candidates = [
+            python,
+            Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Python313" / "python.exe",
+            Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Programs" / "Python" / "Python313" / "python.exe",
+        ]
+        for candidate in candidates:
+            if not candidate or not candidate.is_file():
+                continue
+            result = subprocess.run(
+                [str(candidate), "--version"], capture_output=True,
+                text=True, timeout=10,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if result.returncode == 0 and "Python 3.13" in (result.stdout + result.stderr):
+                return [str(candidate)]
         raise RuntimeError("Python 3.13 não localizado. Reabra painel após instalar Python.")
 
     def _prepare(self, project):
