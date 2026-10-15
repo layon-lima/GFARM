@@ -12,7 +12,8 @@ $transcriptStarted = $false
 function Log([string]$msg) {
   $line = ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg)
   Write-Host $line
-  try { Add-Content -LiteralPath $diagnostic -Encoding UTF8 -Value $line } catch { }
+  # Start-Transcript grava a saida do Write-Host neste mesmo arquivo.
+  # Nao usar Add-Content nele: transcricao mantem o arquivo bloqueado.
   if (Test-Path -LiteralPath $root) {
     try { Add-Content -LiteralPath $logFile -Encoding UTF8 -Value $line } catch { }
   }
@@ -163,11 +164,19 @@ try {
   if (-not (Test-Path -LiteralPath $controlExe -PathType Leaf)) {
     throw 'GFARM-Control.exe nao foi encontrado na pasta do instalador.'
   }
-  $taskCommand = '"' + $controlExe + '"'
-  & schtasks.exe /Create /F /TN 'GFARM Control' /TR $taskCommand /SC ONSTART /RU SYSTEM /RL HIGHEST
-  if ($LASTEXITCODE -ne 0) { throw 'Falha ao cadastrar tarefa GFARM Control.' }
-  & schtasks.exe /Run /TN 'GFARM Control' | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw 'Falha ao iniciar tarefa GFARM Control.' }
+  # /TR do schtasks divide caminhos com espacos (C:\Program Files) na tarefa.
+  # ScheduledTasks aceita Execute e Arguments separadamente e salva o exe intacto.
+  $controlAction = New-ScheduledTaskAction -Execute $controlExe -WorkingDirectory $InstallDir
+  $controlTrigger = New-ScheduledTaskTrigger -AtStartup
+  $controlPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  $controlSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
+  Register-ScheduledTask -TaskName 'GFARM Control' -Action $controlAction -Trigger $controlTrigger -Principal $controlPrincipal -Settings $controlSettings -Force | Out-Null
+  $registered = (Get-ScheduledTask -TaskName 'GFARM Control').Actions | Select-Object -First 1
+  if (-not $registered -or [string]$registered.Execute -ne $controlExe) {
+    throw 'A tarefa GFARM Control foi criada com executavel diferente do esperado.'
+  }
+  Start-ScheduledTask -TaskName 'GFARM Control'
+  Log ('Tarefa de inicializacao configurada para: ' + [string]$registered.Execute)
 
   # schtasks /Run confirma SOMENTE o pedido de inicializacao;
   # ele nao garante que GFARM-Control.exe conseguiu atender a porta 8787.
