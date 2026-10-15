@@ -149,7 +149,7 @@ begin
     Arguments, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode)) or
     (ResultCode <> 0) then
     RaiseException('Falha na instalação GFARM. Código: ' + IntToStr(ResultCode) +
-      '. Veja o registro em C:\ProgramData\GFARM\instalacao.log.');
+      '. Leia o diagnostico da instalacao no terminal do PowerShell.');
 
   WizardForm.StatusLabel.Caption := 'GFARM instalado — abra o Control para conectar ao PostgreSQL.';
 end;
