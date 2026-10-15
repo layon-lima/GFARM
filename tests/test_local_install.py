@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from ops.local_install import (default_server_root, initial_server_root, is_estq_project,
@@ -92,9 +93,51 @@ class LocalInstallTests(unittest.TestCase):
         data = installer.read_text(encoding="utf-8")
         self.assertIn(r"DefaultDirName={sd}\Programas\GFARM", data)
         self.assertIn("ContemDadosDoServidor", data)
-        self.assertIn("UninstallDisplayName=GFARM - Painel de Controle", data)
+        self.assertIn("UninstallDisplayName=GFARM - Sistema de Estoque", data)
         self.assertNotIn("uninsalwaysuninstall", data.lower())
         self.assertNotIn("uninsdeletekeyifempty", data.lower())
+        self.assertIn('Key: "Servidor"; String: "{app}\\Servidor"', data)
+        self.assertIn('Parameters: "--install-gfarm"', data)
+        self.assertIn("runascurrentuser", data)
+        self.assertIn(r"Name: \"{app}\Servidor\"".replace(r"\"", '"'), data)
+
+    def test_instalador_instala_aplicacao_em_pasta_escolhida(self):
+        with tempfile.TemporaryDirectory() as base:
+            root = Path(base) / "GFARM"
+            root.mkdir()
+            manifest = root / "gfarm-install.ini"
+            manifest.write_text("[GFARM]\nServidor = " + str(root / "Servidor") + "\n", encoding="utf-8")
+            with patch("ops.local_install.sys.frozen", True, create=True), \
+                 patch("ops.local_install.sys.executable", str(root / "PAINEL_ESTQ.exe")):
+                self.assertEqual(default_server_root(), root / "Servidor")
+                self.assertEqual(initial_server_root({}), root / "Servidor")
+
+    def test_instalar_gfarm_nao_instala_duas_copias_se_servidor_online(self):
+        panel = Painel.__new__(Painel)
+        panel.project = lambda: Path("C:/Programas/GFARM/Servidor")
+        with patch("ops.painel_estq.api_ok", return_value=True), \
+             patch("ops.painel_estq.messagebox.showwarning") as warning, \
+             patch.object(panel, "run_background") as background:
+            panel.install_gfarm()
+            warning.assert_called_once()
+            background.assert_not_called()
+
+    def test_instalar_gfarm_rejeita_servidor_existente_mesmo_parado(self):
+        with tempfile.TemporaryDirectory() as base:
+            original = Path(base) / "estoque atual"
+            make_estq(original)
+            other = Path(base) / "GFARM" / "Servidor"
+            panel = Painel.__new__(Painel)
+            panel.project = lambda: other
+            with patch("ops.painel_estq.api_ok", return_value=False), \
+                 patch("ops.painel_estq.port_busy", return_value=False), \
+                 patch("ops.painel_estq.locate_projects",
+                       return_value=[{"path": original, "source": "pasta encontrada", "git": False}]), \
+                 patch("ops.painel_estq.messagebox.showwarning") as warning, \
+                 patch.object(panel, "run_background") as background:
+                panel.install_gfarm()
+                warning.assert_called_once()
+                background.assert_not_called()
 
     def test_nao_atualiza_pasta_sem_clone(self):
         with tempfile.TemporaryDirectory() as d:
