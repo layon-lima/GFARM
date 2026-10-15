@@ -422,6 +422,18 @@ class Painel:
                 "Localizar instalação em uso."
             )
             return
+        # Um servidor pode estar parado: localizar instalações anteriores
+        # antes de permitir clonar código ou criar outro banco no computador.
+        detected = locate_projects(current=project)
+        if detected and not any(item["path"] == project.resolve() for item in detected):
+            messagebox.showwarning(
+                "GFARM existente identificado",
+                "Já encontrei uma instalação do estoque em outra pasta:\n\n" +
+                "\n".join(str(item["path"]) for item in detected[:5]) +
+                "\n\nA instalação duplicada foi bloqueada. Use Localizar instalação "
+                "em uso para associar o painel ao servidor existente."
+            )
+            return
         try:
             safe_project_folder(project)
         except (OSError, RuntimeError) as exc:
