@@ -219,7 +219,9 @@ def validate_archive(path):
         m = json.loads(z.read("manifest.json"))
         if m.get("formato_banco") != "pg_dump custom":
             raise RuntimeError("Formato de banco nao reconhecido.")
-        if z.read("database.dump")[:5] != b"PGDMP":
+        with z.open("database.dump") as backup_dump:
+            dump_header = backup_dump.read(5)
+        if dump_header != b"PGDMP":
             raise RuntimeError("Dump PostgreSQL invalido.")
         return {"uploads": sum(n.startswith("uploads/") and not n.endswith("/") for n in names),
                 "xmls": sum(n.startswith("xml_inbox/") and not n.endswith("/") for n in names)}
@@ -401,6 +403,7 @@ def update(progress):
     with LOCK:
         cfg = load()
         before = project()
+        previous_version = cfg.get("version", "pacote-inicial")
         ensure_configured()
         ssh = ssh_environment()
         progress("Consultando GitHub privado...")
@@ -454,9 +457,14 @@ def update(progress):
             save(cfg)
             try:
                 # Nao faz copia/restauracao do banco: migrations identicas.
-                result = start()
+                result = start() if was_running else "Versao instalada (servidor permanece desligado)."
             except Exception:
-                cfg["app_path"], cfg["version"] = str(before), load().get("previous_version", "anterior")
+                if owned():
+                    try:
+                        stop()
+                    except Exception as x:
+                        write_log("Falha parando nova versao: " + str(x))
+                cfg["app_path"], cfg["version"] = str(before), previous_version
                 save(cfg)
                 if was_running:
                     try:
@@ -512,7 +520,7 @@ def save_database(data):
     DATA.mkdir(parents=True, exist_ok=True)
     path = DATA / "backend.env"
     tmp = path.with_suffix(".tmp")
-    tmp.write_text("\n".join(k + "=" + values[k] for k in allowed if values[k]) + "\n",
+    tmp.write_text("\n".join(k + "=" + json.dumps(values[k], ensure_ascii=False) for k in allowed if values[k]) + "\n",
                    encoding="utf-8")
     os.replace(tmp, path)
     p = project()
