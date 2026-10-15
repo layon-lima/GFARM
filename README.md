@@ -49,3 +49,15 @@ Consulte [MIGRACAO E CLOUD](ops/GUIA_MIGRACAO_E_CLOUD.md) para:
 No computador novo, use [PAINEL_ESTQ.exe — versão oficial](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest) gerado no GitHub Actions. O aplicativo portátil instala Git/Python/Node/PostgreSQL/Cloudflare, baixa a main, prepara o backend, restaura banco e arquivos e instala monitor de inicialização. Veja [guia de migração por painel](ops/PAINEL_UNICO_WINDOWS.md).
 
 Dados reais e credenciais **não estão** no GitHub nem no executável. O PC antigo precisa exportar primeiro o backup ZIP acompanhado do SHA256; o novo restaura somente em banco vazio. O Cloudflare Tunnel precisa de autorização separada para evitar dois servidores gravando no estoque.
+
+## Atualização remota pelo painel do seu PC
+
+O PAINEL_ESTQ.exe agora contém um modo **Controle remoto (Tailscale + SSH)** para
+atualizar o servidor Windows sem acessar fisicamente o computador servidor.
+O primeiro pareamento requer uma chave pública, autorização de administrador
+no servidor e confirmação manual do fingerprint SHA256. Depois, use
+**Testar conexão** e **ATUALIZAR SERVIDOR REMOTO**.
+
+Esta função não mexe nas rotas HTTP do ERP nem abre SSH na Internet pública.
+Mudanças de migrations/dependências e backend de outro inicializador são
+bloqueadas por segurança. Consulte [GUIA DE ATUALIZAÇÃO REMOTA](ops/GUIA_ATUALIZACAO_REMOTA.md).
