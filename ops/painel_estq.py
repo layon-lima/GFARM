@@ -33,7 +33,7 @@ from ops.local_install import (default_server_root, initial_server_root,
 REPO = "https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte.git"
 REPO_SLUG = "layon-lima/gest-o-de-estoque-novo-horizonte"
 REPO_BRANCH = "main"
-PANEL_VERSION = "1.3"
+PANEL_VERSION = "1.4"
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ESTQ-Painel"
 CONFIG = DATA / "painel.json"
 LOG = DATA / "painel.log"
@@ -134,6 +134,8 @@ class Painel:
         self._layout()
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.after(200, self._drain)
+        if "--install-gfarm" in sys.argv:
+            self.root.after(900, self.install_gfarm)
         # Não altera a instalação ao iniciar. Só oferece localização se a API
         # está neste computador e o caminho padrão não contém o ERP existente.
         if api_ok() and not is_estq_project(Path(self.project_value.get()).expanduser()):
@@ -172,6 +174,7 @@ class Painel:
         boxes.pack(fill="x")
         steps = [
             ("NOVO COMPUTADOR", [
+                ("INSTALAR GFARM COMPLETO", self.install_gfarm),
                 ("1. Instalar dependências", self.install_prerequisites),
                 ("2. Baixar e preparar app do GitHub", self.prepare_app),
                 ("3. Criar PostgreSQL vazio + configurar", self.setup_database),
@@ -268,8 +271,12 @@ class Painel:
                     self.status_value.set("API local online" if api_ok() else "API local indisponível — para outro PC use Testar conexão")
                     if isinstance(data, dict) and data.get("kind") == "discovery":
                         self._offer_discovered(data)
+                    elif isinstance(data, dict) and data.get("kind") == "gfarm-code-installed":
+                        self._wizard_install_database(Path(data["project"]))
+                    elif isinstance(data, dict) and data.get("kind") == "gfarm-db-installed":
+                        self._wizard_choose_backup(Path(data["project"]))
                     else:
-                        messagebox.showinfo("ESTQ", data)
+                        messagebox.showinfo("GFARM", str(data))
                 elif event == "fail":
                     self.busy = False
                     for button in self.buttons:
@@ -390,6 +397,141 @@ class Painel:
                 "\n\nUse Localizar instalação em uso. "
                 "Atualização bloqueada para não publicar no projeto errado."
             )
+
+    def install_gfarm(self):
+        """Instalador do SISTEMA completo; não instala apenas o painel.
+
+        Se há um servidor ativo, nunca prepara outra cópia no mesmo PC.
+        O fluxo novo inclui dependências, GitHub, frontend, backend e banco,
+        solicitando o backup real antes de iniciar a API de produção.
+        """
+        project = self.project()
+        if api_ok() or port_busy(8000):
+            messagebox.showwarning(
+                "GFARM já está em funcionamento",
+                "Existe um servidor respondendo neste computador. "
+                "A instalação não cria outra cópia e não muda o banco que está em uso. "
+                "Use Localizar instalação em uso para vincular o painel existente."
+            )
+            return
+        if is_estq_project(project) or (project / "backend" / ".env").exists():
+            messagebox.showinfo(
+                "Instalação existente",
+                "Já encontrei uma instalação GFARM configurada nessa pasta. "
+                "Nada foi recriado. Use Iniciar servidor, Diagnosticar ou "
+                "Localizar instalação em uso."
+            )
+            return
+        try:
+            safe_project_folder(project)
+        except (OSError, RuntimeError) as exc:
+            messagebox.showerror("Pasta protegida", str(exc))
+            return
+        if not messagebox.askyesno(
+            "Instalar SISTEMA GFARM",
+            f"Instalar o ESTOQUE completo em:\n\n{project}\n\n"
+            "O painel instalará dependências oficiais, baixará o código do GitHub, "
+            "preparará o backend e compilará o site. Depois configurará um banco "
+            "NOVO com sua autorização e poderá restaurar o backup do antigo PC.\n\n"
+            "Não substitui banco existente nem migra dados sem um backup verificado. "
+            "A instalação requer internet e permissão para gravar nessa pasta."
+        ):
+            return
+        self.run_background("INSTALAÇÃO COMPLETA DO GFARM — dependências e aplicativo",
+                            self._install_gfarm_code, project)
+
+    def _install_gfarm_code(self, project):
+        if api_ok() or port_busy(8000):
+            raise RuntimeError("Outro servidor iniciou durante a instalação. Cancelado.")
+        safe_project_folder(project)
+        self._log("1/3 — Instalando/verificando programas do Windows")
+        self._install_prerequisites()
+        # Se o winget exigir logout/reinicialização, a etapa seguinte explicará
+        # que é necessário abrir o instalador novamente, sem apagar nada.
+        self._log("2/3 — Baixando código oficial e construindo sistema GFARM")
+        self._prepare(project)
+        self._log("3/3 — Aplicação preparada. Configurando novo banco PostgreSQL.")
+        return {"kind": "gfarm-code-installed", "project": str(project)}
+
+    def _wizard_install_database(self, project):
+        if api_ok() or port_busy(8000):
+            messagebox.showwarning(
+                "Servidor já está ativo",
+                "Outro servidor está respondendo. O GFARM não criará "
+                "um banco concorrente. Confira a instalação em uso."
+            )
+            return
+        if (project / "backend" / ".env").is_file():
+            messagebox.showwarning(
+                "Banco já configurado",
+                "Foi encontrado backend/.env existente. Nada será alterado. "
+                "Selecione Iniciar servidor ou Diagnosticar após conferir os dados."
+            )
+            return
+        messagebox.showinfo(
+            "GFARM — Configurar dados",
+            "Código e dependências preparados. Agora vamos criar o banco "
+            "PostgreSQL EXCLUSIVO para a nova instalação. Se o PostgreSQL solicitou "
+            "reinicialização, reinicie o Windows antes desta etapa. "
+            "O banco antigo não será modificado."
+        )
+        password = simpledialog.askstring(
+            "PostgreSQL do novo servidor",
+            "Informe a senha do usuário postgres definida durante a instalação:",
+            show="*", parent=self.root,
+        )
+        if password is None:
+            messagebox.showinfo(
+                "Instalação aguardando configuração",
+                "O aplicativo já foi preparado. Depois você pode continuar em "
+                "'Criar PostgreSQL vazio + configurar'. Nenhum dado foi apagado."
+            )
+            return
+        if not password:
+            messagebox.showerror("Senha obrigatória", "Informe a senha de administração do PostgreSQL.")
+            return
+        self.run_background("GFARM — criando banco NOVO sem sobrescrever dados",
+                            self._wizard_setup_database, project, password)
+
+    def _wizard_setup_database(self, project, password):
+        self._setup_database(project, password)
+        return {"kind": "gfarm-db-installed", "project": str(project)}
+
+    def _wizard_choose_backup(self, project):
+        messagebox.showinfo(
+            "GFARM — banco instalado",
+            "O sistema e o banco novo foram configurados. Para usar os cadastros, "
+            "saldos, documentos, fotos e históricos do computador anterior, "
+            "vamos restaurar o pacote de transferência VERIFICADO."
+        )
+        archive = filedialog.askopenfilename(
+            title="Selecione o ZIP do backup real do servidor anterior",
+            filetypes=[("Backup verificado GFARM/ESTQ", "*.zip")],
+            parent=self.root
+        )
+        if not archive:
+            messagebox.showwarning(
+                "GFARM aguardando backup",
+                "O código e o banco já foram preparados, mas o servidor NÃO foi "
+                "iniciado com um banco vazio. Transfira o backup do computador antigo "
+                "e use 'Restaurar dados do computador antigo' no painel."
+            )
+            return
+        if not Path(archive + ".sha256").is_file():
+            messagebox.showerror(
+                "Backup incompleto",
+                "O arquivo de verificação ZIP.sha256 precisa estar ao lado do ZIP. "
+                "A restauração não foi executada."
+            )
+            return
+        if messagebox.askyesno(
+            "Restaurar no GFARM",
+            "Restaurar este pacote VERIFICADO somente no banco NOVO e vazio? "
+            "Não será iniciada outra instância sem sua confirmação."
+        ):
+            self.run_background("GFARM — restaurando banco e arquivos", self._restore,
+                                project, archive)
+
 
     def remote_install_tailscale(self):
         if messagebox.askyesno("Tailscale",
