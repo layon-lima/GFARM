@@ -14,6 +14,25 @@ import sys
 from pathlib import Path
 
 
+# O instalador do painel vive em C:\Programas\GFARM.
+# O servidor usa uma pasta própria e gravável, pois .env/uploads/.venv/dist
+# NÃO devem ser colocados em uma pasta protegida de programas do Windows.
+def default_server_root() -> Path:
+    local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+    return local / "GFARM" / "Servidor"
+
+
+def initial_server_root(config: dict) -> Path:
+    """Mantém a escolha antiga se ainda estiver válida; senão usa o padrão estável."""
+    value = config.get("project")
+    if isinstance(value, str) and value.strip():
+        path = Path(value).expanduser()
+        # Instalação antiga ou pasta clonada não deve ser substituída pelo setup.
+        if is_estq_project(path) or (path / ".git").exists():
+            return path
+    return default_server_root()
+
+
 def is_estq_project(folder: Path) -> bool:
     """Pasta precisa conter os arquivos característicos da INSTALAÇÃO, não só o .git."""
     try:
@@ -85,6 +104,7 @@ def probable_roots(current: Path | None = None) -> list[Path]:
         Path(os.environ.get("USERPROFILE", str(home))) / "Documents",
         Path("C:/ESTQ"), Path("C:/ESTQ_SERVIDOR"),
         Path("C:/INDEX ERP"), Path("C:/Estoque"),
+        default_server_root(),
     ]
     if current:
         bases.extend([current, current.parent])
