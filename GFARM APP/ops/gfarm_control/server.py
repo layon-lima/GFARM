@@ -359,7 +359,7 @@ if __name__ == "__main__":
                     "a", encoding="utf-8") as log:
                 from datetime import datetime
                 log.write(datetime.now().isoformat(timespec="seconds") +
-                          " | " + type(exc).__name__ + ": " + str(exc) + "\\n")
+                          " | " + type(exc).__name__ + ": " + str(exc) + "\n")
         except OSError:
             pass
         raise
