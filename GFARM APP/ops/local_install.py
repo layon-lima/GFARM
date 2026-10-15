@@ -35,7 +35,7 @@ def default_server_root() -> Path:
         except (OSError, ValueError, configparser.Error):
             pass
     local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-    return local / "GFARM" / "Servidor"
+    return local / "GFARM" / "Servidor" / "GFARM APP"
 
 
 def initial_server_root(config: dict) -> Path:
@@ -44,7 +44,9 @@ def initial_server_root(config: dict) -> Path:
     if isinstance(value, str) and value.strip():
         path = Path(value).expanduser()
         # Instalação antiga ou pasta clonada não deve ser substituída pelo setup.
-        if is_estq_project(path) or (path / ".git").exists():
+        if is_estq_project(path) or (path / ".git").exists() or (
+            path.name == "GFARM APP" and (path.parent / ".git").exists()
+        ):
             return path
     return default_server_root()
 
@@ -121,6 +123,7 @@ def probable_roots(current: Path | None = None) -> list[Path]:
         Path("C:/ESTQ"), Path("C:/ESTQ_SERVIDOR"),
         Path("C:/INDEX ERP"), Path("C:/Estoque"),
         default_server_root(),
+        Path("C:/Programas/GFARM/Servidor/GFARM APP"),
     ]
     if current:
         bases.extend([current, current.parent])
@@ -129,6 +132,7 @@ def probable_roots(current: Path | None = None) -> list[Path]:
     result: list[Path] = []
     for base in bases:
         result.append(base)
+        result.append(base / "GFARM APP")
         if not base.is_dir():
             continue
         # Apenas filhos diretos das pastas usuais; nunca varre o disco inteiro.
@@ -136,6 +140,7 @@ def probable_roots(current: Path | None = None) -> list[Path]:
             for child in base.iterdir():
                 if child.is_dir():
                     result.append(child)
+                    result.append(child / "GFARM APP")
         except (OSError, PermissionError):
             pass
     return result
@@ -164,6 +169,7 @@ def locate_projects(current: Path | None = None, processes: list[dict] | None = 
         seen.add(key)
         results.append({
             "path": path, "source": origin,
-            "git": (path / ".git").exists(),
+            "git": (path / ".git").exists() or (
+                path.name == "GFARM APP" and (path.parent / ".git").exists()),
         })
     return results
