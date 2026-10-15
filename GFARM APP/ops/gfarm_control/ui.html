@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0c201b">
+<title>GFARM Control</title>
+<style>
+:root{font-family:Inter,"Segoe UI",system-ui,sans-serif;color:#eaf6ef;background:#091512;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}button,input,select{font:inherit}button{cursor:pointer}
+#login{min-height:100vh;display:grid;place-items:center;padding:20px}
+.login-panel{max-width:420px;width:100%;background:#10251f;border:1px solid #254338;border-radius:18px;padding:32px}
+.logo{display:flex;gap:12px;align-items:center;font-weight:780;font-size:22px;letter-spacing:-.6px}
+.symbol{width:40px;height:40px;display:grid;place-items:center;background:#24c77e;color:#062016;border-radius:12px;font-weight:900}
+.muted{color:#9cb9ad;font-size:13px;line-height:1.6}
+label{display:block;color:#afc5ba;font-size:12px;margin:12px 0 6px}
+input{width:100%;padding:12px;border-radius:9px;border:1px solid #355247;background:#091d17;color:#fff;outline:none}
+input:focus{border-color:#38df91}button{border:1px solid #315b47;background:#17392b;color:#f0fff7;border-radius:10px;padding:10px 13px;font-weight:650}
+button:hover{background:#215a3e}button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:#1fc67e;border-color:#1fc67e;color:#06301a}button.primary:hover{background:#48d998}
+button.danger{background:#492321;border-color:#73403d;color:#ffd3d1}
+button.ghost{border-color:#304d42;background:transparent}
+.layout{display:grid;grid-template-columns:226px 1fr;min-height:100vh}
+nav{background:#10221b;border-right:1px solid #254236;padding:22px 12px}
+nav .brand{padding:6px 9px 24px}
+.nav-item{display:flex;width:100%;gap:12px;align-items:center;text-align:left;border:none;background:transparent;color:#a6c6b7;border-radius:10px;padding:12px 13px;margin-bottom:3px}
+.nav-item:hover,.nav-item.active{background:#204334;color:#fff}
+.icon{font-size:18px;font-family:"Segoe UI Symbol",sans-serif}
+main{min-width:0;padding:25px 30px;max-width:1500px;width:100%;margin:0 auto}
+.top{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:22px}
+h1{font-size:23px;margin:0 0 6px;letter-spacing:-.5px}h2{font-size:16px;margin:0 0 15px}
+.top small{color:#9cb9ad}.status-chip{font-size:12px;font-weight:650;padding:7px 11px;border-radius:999px;background:#193a29;color:#7df2af;white-space:nowrap}
+.status-chip.off{background:#34251f;color:#ffbf9c}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.metric{border:1px solid #264338;background:#11251e;padding:16px;border-radius:12px;min-width:0}
+.metric small{color:#9dbbae;display:block;font-size:12px;margin-bottom:10px}
+.metric b{font-size:15px;display:block;overflow-wrap:anywhere}
+.actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.actions button{padding:16px 10px;min-height:74px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.panel{background:#10221b;border:1px solid #264439;border-radius:14px;padding:19px;margin-top:16px}
+.two{display:grid;grid-template-columns:minmax(0,2fr) minmax(255px,1fr);gap:16px}
+.stack{display:grid;gap:12px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.hint{font-size:12px;color:#9ab4a7;line-height:1.7}
+.code{font-family:Consolas,monospace;overflow-wrap:anywhere;background:#081710;border:1px solid #264338;border-radius:8px;padding:12px;white-space:pre-wrap;font-size:12px;max-height:180px;overflow:auto}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 15px}
+.hidden{display:none!important}.notice{border:1px solid #325644;background:#102f21;color:#d2ffe2;border-radius:10px;padding:12px;font-size:13px;line-height:1.6}
+.notice.error{border-color:#6a3836;background:#331e1d;color:#ffd3ce}
+.list-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:11px 0;border-bottom:1px solid #234134}
+.list-row:last-child{border:0}.list-row b{overflow-wrap:anywhere;word-break:break-all;font-size:12px}
+.list-row button{flex:none}.spaced{margin-top:17px}.wide{width:100%}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font-size:12px;line-height:1.7;color:#bce6c9}
+footer{color:#7c9b8b;margin:32px 0;font-size:11px}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}main{padding:22px 16px}}
+@media(max-width:620px){.layout{display:block;padding-bottom:66px}nav{position:fixed;bottom:0;z-index:10;left:0;right:0;display:flex;overflow:auto;gap:2px;padding:6px;background:#10251e;border-top:1px solid #335040;border-right:0}nav .brand{display:none}.nav-item{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2px;font-size:10px;padding:6px 4px;min-width:65px;margin:0}.nav-item .icon{font-size:18px}.field-grid{grid-template-columns:1fr}.actions{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.actions button{font-size:11px}.top{align-items:flex-start}}
+</style>
+</head>
+<body>
+<section id="login">
+ <div class="login-panel">
+  <div class="logo"><span class="symbol">G</span> GFARM Control</div>
+  <p class="muted">Gerenciamento seguro e independente do servidor GFARM.</p>
+  <form id="login-form">
+   <label for="password">Senha de administrador</label>
+   <input id="password" type="password" autocomplete="current-password" placeholder="Digite sua senha" minlength="12" required>
+   <p id="login-error" class="hint"></p>
+   <button class="primary wide" type="submit">Entrar no painel</button>
+  </form>
+  <p class="hint">A senha é definida no instalador do GFARM. Acesso remoto somente por rede privada autorizada.</p>
+ </div>
+</section>
+<div id="workspace" class="layout hidden">
+ <nav>
+  <div class="brand"><div class="logo"><span class="symbol">G</span> GFARM</div><small class="muted">CONTROL</small></div>
+  <button class="nav-item active" data-page="overview"><span class="icon">▦</span> Visão geral</button>
+  <button class="nav-item" data-page="updates"><span class="icon">↻</span> Atualizações</button>
+  <button class="nav-item" data-page="server"><span class="icon">▣</span> Servidor</button>
+  <button class="nav-item" data-page="backups"><span class="icon">▤</span> Backups</button>
+  <button class="nav-item" data-page="remote"><span class="icon">◎</span> Acesso remoto</button>
+  <button class="nav-item" data-page="maintenance"><span class="icon">⚙</span> Manutenção</button>
+ </nav>
+ <main>
+  <header class="top">
+   <div><h1 id="page-title">Visão geral</h1><small>Central de gerenciamento do GFARM</small></div>
+   <span id="online-chip" class="status-chip off">Verificando...</span>
+  </header>
+  <div id="notice" class="notice hidden" role="status"></div>
+  <section id="page-overview">
+   <div class="grid">
+    <div class="metric"><small>GFARM</small><b id="m-app">Verificando</b></div>
+    <div class="metric"><small>PostgreSQL</small><b id="m-db">Verificando</b></div>
+    <div class="metric"><small>Versão</small><b id="m-version">—</b></div>
+    <div class="metric"><small>Backups disponíveis</small><b id="m-backups">—</b></div>
+   </div>
+   <div class="two">
+    <div class="panel">
+     <h2>Controles rápidos</h2>
+     <div class="actions">
+      <button data-action="start"><span class="icon">▶</span>Ligar GFARM</button>
+      <button data-action="stop"><span class="icon">■</span>Parar GFARM</button>
+      <button data-action="restart"><span class="icon">↻</span>Reiniciar</button>
+      <button data-action="update"><span class="icon">↓</span>Atualizar GitHub</button>
+      <button data-action="backup"><span class="icon">▤</span>Criar backup</button>
+      <button id="open-app"><span class="icon">↗</span>Abrir GFARM</button>
+     </div>
+    </div>
+    <div class="panel">
+     <h2>Operação em andamento</h2>
+     <div id="job-state" class="notice">Nenhuma operação iniciada</div>
+     <p id="job-message" class="hint">Tudo pronto.</p>
+     <p class="hint">As operações longas continuam no servidor mesmo se esta tela for fechada.</p>
+    </div>
+   </div>
+   <div class="panel"><h2>Instalação identificada</h2><pre id="m-path">—</pre></div>
+  </section>
+  <section id="page-updates" class="hidden">
+   <div class="panel">
+    <h2>Atualizar a partir do GitHub</h2>
+    <p class="muted">Repositório privado: <b>layon-lima/GFARM</b> · Branch <b>main</b>.</p>
+    <p class="muted">O Control baixa a nova versão separadamente, compila e testa antes de substituir o aplicativo em execução. Alterações nas migrations do banco são bloqueadas para revisão supervisionada.</p>
+    <div class="row spaced">
+     <button class="primary" data-action="update">Buscar e instalar versão mais recente</button>
+     <button class="ghost" data-page="remote">Configurar acesso ao GitHub</button>
+    </div>
+    <p class="hint">Para acessar o repositório privado como serviço do Windows, autorize a chave de implantação somente leitura no GitHub.</p>
+   </div>
+   <div class="panel"><h2>Progresso</h2><div id="update-state" class="notice">Aguardando</div><p id="update-message" class="hint"></p></div>
+  </section>
+  <section id="page-server" class="hidden">
+   <div class="panel">
+    <h2>Operações do servidor</h2>
+    <div class="row">
+     <button data-action="start">▶ Ligar servidor</button>
+     <button data-action="stop" class="danger">■ Desligar GFARM</button>
+     <button data-action="restart">↻ Reiniciar GFARM</button>
+    </div>
+    <p class="hint">O PostgreSQL continua ligado. O Control jamais executa comandos de exclusão do banco.</p>
+    <label class="row"><input style="width:auto" id="automatic" type="checkbox"> Manter GFARM iniciado automaticamente</label>
+   </div>
+   <div class="panel">
+    <h2>Conexão com PostgreSQL</h2>
+    <p class="muted">Informe os dados do banco existente. A configuração não recria nem limpa tabelas. Pare o GFARM antes de alterar.</p>
+    <form id="database-form">
+      <div class="field-grid">
+       <div><label>Servidor</label><input name="DB_HOST" value="127.0.0.1" required></div>
+       <div><label>Porta</label><input name="DB_PORT" value="5432" required></div>
+       <div><label>Nome do banco</label><input name="DB_NAME" placeholder="Nome existente" required></div>
+       <div><label>Usuário PostgreSQL</label><input name="DB_USER" required></div>
+       <div><label>Senha PostgreSQL</label><input name="DB_PASSWORD" type="password" autocomplete="new-password" required></div>
+       <div><label>Chave secreta do GFARM (preservar a original, se existir)</label><input name="SECRET_KEY" type="password" required></div>
+       <div><label>Porta da API</label><input name="APP_PORT" value="8000"></div>
+       <div><label>Pasta de XMLs (opcional)</label><input name="ESTQ_XML_TICKET_DIR" placeholder="C:\Caminho\XML ERP"></div>
+      </div>
+      <input type="hidden" name="APP_HOST" value="127.0.0.1">
+      <button class="primary spaced" type="submit">Salvar conexão existente</button>
+    </form>
+   </div>
+  </section>
+  <section id="page-backups" class="hidden">
+   <div class="panel">
+    <h2>Backups completos</h2>
+    <p class="muted">Banco PostgreSQL, fotos, documentos e XMLs. O Control interrompe temporariamente a API gerenciada durante a captura e a reinicia ao concluir.</p>
+    <button class="primary" data-action="backup">Criar backup completo agora</button>
+    <p class="hint">Os arquivos ficam fora da pasta do aplicativo, em ProgramData\GFARM\backups.</p>
+   </div>
+   <div class="panel"><h2>Backups disponíveis</h2><div id="backup-list" class="stack"><p class="muted">Carregando...</p></div></div>
+   <div class="panel">
+    <h2>Restaurar em banco vazio</h2>
+    <p class="hint">Proteção obrigatória: a restauração é recusada se o banco contiver tabelas ou se os diretórios de fotos e XMLs contiverem arquivos. O Control nunca sobrescreve um banco em produção.</p>
+    <label>Nome do backup</label><input id="restore-file" placeholder="GFARM_COMPLETO_....zip">
+    <label>Digite: RESTAURAR EM BANCO VAZIO</label><input id="restore-confirmation" autocomplete="off">
+    <button id="restore-button" class="danger spaced">Restaurar banco vazio</button>
+   </div>
+  </section>
+  <section id="page-remote" class="hidden">
+   <div class="panel">
+    <h2>Gerenciamento remoto seguro</h2>
+    <p class="muted">O Control escuta apenas no próprio computador por padrão. Para acesso externo, instale o Tailscale no servidor e no dispositivo administrador e habilite o IP privado da rede Tailscale abaixo.</p>
+    <label>IP Tailscale do servidor (100.x.x.x) ou 127.0.0.1 para somente local</label>
+    <input id="remote-ip" value="127.0.0.1" placeholder="100.100.100.100">
+    <button class="primary spaced" id="save-remote">Salvar configuração</button>
+    <p class="hint">Configure permissões ACL/grants no Tailscale. Não encaminhe a porta 8787 diretamente no roteador ou em um túnel público.</p>
+   </div>
+   <div class="panel">
+    <h2>Autorização de leitura do GitHub privado</h2>
+    <p class="muted">O serviço utiliza uma chave SSH própria. Adicione a chave pública em <b>GitHub → Repositório GFARM → Settings → Deploy keys</b>, SEM permitir escrita.</p>
+    <button id="generate-key">Mostrar chave pública</button>
+    <div id="public-key" class="code spaced hidden"></div>
+    <p class="hint">Não compartilhe a chave privada. Apenas a chave pública deve ser copiada para o GitHub.</p>
+   </div>
+  </section>
+  <section id="page-maintenance" class="hidden">
+   <div class="panel">
+    <h2>Diagnóstico do GFARM</h2>
+    <p class="muted">Verifique status, instalação, operações e erros. O Control não remove dados nem executa reparos destrutivos automaticamente.</p>
+    <button id="refresh-logs">Atualizar registros</button>
+    <button id="copy-logs">Copiar log</button>
+    <div class="code spaced" id="logs">Aguardando...</div>
+   </div>
+   <div class="panel">
+    <h2>Sessão</h2>
+    <button class="ghost" id="logout">Sair do GFARM Control</button>
+   </div>
+  </section>
+  <footer>GFARM Control · Gerenciamento local ou pela rede Tailscale · Servidor e banco independentes</footer>
+ </main>
+</div>
+<script defer src="/app.js"></script>
+</body>
+</html>
