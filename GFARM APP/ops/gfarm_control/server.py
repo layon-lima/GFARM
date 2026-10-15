@@ -107,6 +107,8 @@ def job_start(action, options):
             elif action == "restore":
                 result = engine.restore_empty(options.get("name", ""),
                                               options.get("confirmation", ""))
+            elif action == "import_files":
+                result = engine.import_assets_only(options.get("path", ""))
             elif action == "update":
                 result = engine.update(report)
             else:
@@ -268,7 +270,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send(200, {"ok": True}, cookie="gfarm_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict")
             elif path == "/api/action":
                 action = str(data.get("action", ""))
-                if action not in ("start", "stop", "restart", "backup", "verify", "restore", "update"):
+                if action not in ("start", "stop", "restart", "backup", "verify", "restore", "import_files", "update"):
                     raise RuntimeError("Acao nao autorizada.")
                 job_start(action, data)
                 self.send(202, {"ok": True, "job": dict(CURRENT_JOB)})
