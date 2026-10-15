@@ -136,6 +136,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       message("A API do GFARM nao esta exposta na porta 8000 para acesso remoto. Abra o sistema pelo endereco HTTPS habitual.", true);
     }
   });
+  $("import-assets-button").addEventListener("click", () => {
+    const selected = $("assets-backup-path").value.trim();
+    if (!selected) return message("Informe o caminho completo do ZIP local.", true);
+    if (!confirm("Importar somente fotos, documentos e XMLs? O banco de dados permanecerá intocado.")) return;
+    operate("import_files", {path:selected});
+  });
   $("restore-button").addEventListener("click", () => operate("restore", {
     name:$("restore-file").value.trim(), confirmation:$("restore-confirmation").value.trim()
   }));
