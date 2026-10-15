@@ -54,12 +54,44 @@ try {
   } finally { $archive.Dispose() }
   Write-Host '[5/5] Localizando Inno Setup 6 e compilando...'
   function Find-InnoSetup6 {
-    $locations = @(
-      (Join-Path ([Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) 'Inno Setup 6\ISCC.exe'),
-      (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
-      (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')
+    # Inno Setup pode ser instalado em pasta personalizada ou apenas no perfil.
+    # Priorizar caminhos descobertos no Registro do Windows.
+    $candidates = New-Object 'System.Collections.Generic.List[string]'
+    if ($env:INNO_SETUP_ISCC) { $candidates.Add($env:INNO_SETUP_ISCC) }
+    $command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+    if ($command) { $candidates.Add($command.Source) }
+
+    $registryPaths = @(
+      'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+      'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+      'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+      'HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
     )
-    foreach ($candidate in $locations) {
+    foreach ($regPath in $registryPaths) {
+      foreach ($appInfo in @(Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue)) {
+        if ([string]$appInfo.DisplayName -notmatch '^Inno Setup (6|7)(\s|$)') { continue }
+        if ($appInfo.InstallLocation) {
+          $candidates.Add((Join-Path ([string]$appInfo.InstallLocation) 'ISCC.exe'))
+        }
+        $uninstaller = [string]$appInfo.UninstallString
+        if ($uninstaller -match '(?i)([a-z]:\\[^"]*?)\\unins\d+\.exe') {
+          $candidates.Add((Join-Path $Matches[1] 'ISCC.exe'))
+        }
+      }
+    }
+    $bases = @(
+      [Environment]::GetEnvironmentVariable('ProgramFiles(x86)'),
+      $env:ProgramFiles,
+      $env:LOCALAPPDATA,
+      (Join-Path $env:LOCALAPPDATA 'Programs')
+    )
+    foreach ($base in $bases) {
+      if (-not $base) { continue }
+      foreach ($directory in @('Inno Setup 6', 'Inno Setup 7')) {
+        $candidates.Add((Join-Path $base (Join-Path $directory 'ISCC.exe')))
+      }
+    }
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
       if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
         return $candidate
       }
@@ -80,7 +112,7 @@ try {
     $iscc = Find-InnoSetup6
   }
   if (-not $iscc) {
-    throw 'Inno Setup 6 foi instalado, mas ISCC.exe nao foi encontrado nos caminhos conhecidos. Reinicie o VS Code e execute novamente.'
+    throw 'O Inno Setup esta registrado como instalado, mas ISCC.exe nao foi localizado. Informe seu caminho com $env:INNO_SETUP_ISCC = ''C:\caminho\ISCC.exe'' e execute novamente.'
   }
   Write-Host "Compilador Inno Setup: $iscc"
   & $iscc (Join-Path $here 'GFARM_Definitivo.iss')
