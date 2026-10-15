@@ -4,7 +4,7 @@
 
 ## Estado
 
-Os fontes estão implementados. O executável Windows ainda precisa ser compilado e testado no Windows 11. O GitHub Actions da conta estava bloqueado antes de iniciar executores por configuração de faturamento, portanto NÃO foi possível gerar ou validar um EXE pelo Actions. Não instalar em produção antes de testar atualização/backup com banco descartável.
+Os fontes foram implementados e o primeiro instalador Windows foi compilado com sucesso pelo usuário em 15/10/2026. **Após essa compilação, a arquitetura foi alterada para instalador online; esta nova versão precisa ser recompilada e validada no Windows.** O GitHub Actions da conta estava bloqueado antes de iniciar executores por configuração de faturamento, portanto NÃO foi possível gerar ou validar um EXE pelo Actions. Não instalar em produção antes de testar atualização/backup com banco descartável.
 
 ## Gerar e instalar com um clique
 
@@ -14,7 +14,7 @@ Uma versao alternativa do preparador tambem esta versionada no repositorio como 
 
 ## Como gerar o instalador no Windows
 
-Requer Windows 11, Git, Python 3.13, Inno Setup 6 e internet. No diretório GFARM APP/ops/gfarm_control execute:
+Para compilar requer Windows 11, Git, Python 3.13, Inno Setup 6 e internet. **Para instalar** precisa de internet e acesso autorizado ao GitHub privado, pois o instalador clona apenas o GFARM; pode abrir a autenticação do GitHub no navegador durante a instalação. No diretório GFARM APP/ops/gfarm_control execute:
 
     powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
 
@@ -23,11 +23,11 @@ Gera:
     build\GFARM_Instalador_Definitivo.exe
     build\GFARM_Instalador_Definitivo.exe.sha256
 
-O script verifica sintaxe Python, usa PyInstaller e Pillow para gerar os dois programas e ícones, empacota somente código rastreado do Git, e compila o instalador Inno Setup. Nenhuma credencial nem backup é incluído no instalador.
+O script verifica a sintaxe Python, usa PyInstaller e Pillow para gerar os dois iniciadores e ícones, e compila um **instalador online compacto** no Inno Setup. **O código do GFARM NÃO é incluído no .exe**: durante a instalação ele é obtido da branch `main` do repositório privado no GitHub, usando checkout parcial apenas de `GFARM APP` (a pasta `BACKUPS` não é baixada). Nenhuma credencial nem backup é incluído no instalador. O instalador final também é copiado para a **Área de Trabalho**; a pasta `build` contém os arquivos intermediários.
 
 ## Três etapas
 
-1. GFARM — aplicativo convencional Windows com atalho, ícone, desinstalador, backend FastAPI e frontend React.
+1. GFARM — instala o iniciador Windows, baixa a versão atual do aplicativo diretamente do GitHub privado e prepara backend FastAPI e frontend React.
 2. GFARM Control — aplicativo de gerenciamento independente em http://127.0.0.1:8787, senha administrativa e inicialização pelo Agendador de Tarefas como SYSTEM no boot, sem abrir terminal.
 3. Servidor — identificar PostgreSQL instalado e cadastrar banco já existente no GFARM Control > Servidor. Não apaga nem cria automaticamente bancos, tabelas, usuários ou registros.
 
