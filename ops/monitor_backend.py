@@ -6,6 +6,7 @@ a porta está livre e o projeto/ambiente de produção são válidos.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import socket
 import subprocess
@@ -82,13 +83,49 @@ def main() -> int:
     log(f"Monitor iniciado: projeto={root}, porta={args.port}")
     last_start = 0.0
     child = None
+    restart_token = None
+
+    def state():
+        """Estado exposto somente ao atualizador local via filesystem do usuário."""
+        record = {
+            "timestamp": time.time(),
+            "owns_backend": bool(child and child.poll() is None and health(args.port)),
+        }
+        dest = log_dir / "monitor_state.json"
+        tmp = log_dir / "monitor_state.tmp"
+        tmp.write_text(json.dumps(record), encoding="utf-8")
+        tmp.replace(dest)
+
     while True:
         try:
+            state()
+            request = log_dir / "restart.request"
+            if request.is_file() and not (log_dir / "maintenance.flag").is_file():
+                pending = request.read_text(encoding="ascii").strip()
+                if pending and child is not None and child.poll() is None:
+                    log("Reinício solicitado pela atualização remota autenticada.")
+                    child.terminate()
+                    try:
+                        child.wait(timeout=25)
+                    except subprocess.TimeoutExpired:
+                        log("Backend não encerrou em 25 s; reinício bloqueado por segurança.")
+                        time.sleep(10)
+                        continue
+                    request.unlink(missing_ok=True)
+                    restart_token = pending
+                    last_start = 0.0
+                    state()
+                # Se o processo pertence a outro inicializador, não encerrá-lo.
             if (log_dir / "maintenance.flag").is_file():
                 # Durante backup de migração, não reiniciar a API.
                 time.sleep(max(args.intervalo, 5))
                 continue
             if health(args.port):
+                if restart_token and child is not None and child.poll() is None:
+                    (log_dir / "restart.ack").write_text(restart_token, encoding="ascii")
+                    log("Novo backend confirmou saúde após atualização.")
+                    restart_token = None
+                state()
                 time.sleep(max(args.intervalo, 5))
                 continue
             if port_open(args.port):
@@ -122,6 +159,11 @@ def main() -> int:
             for _ in range(36):
                 if health(args.port):
                     log(f"Backend online, PID={child.pid}.")
+                    if restart_token:
+                        (log_dir / "restart.ack").write_text(restart_token, encoding="ascii")
+                        log("Reinício autenticado concluído e conferido.")
+                        restart_token = None
+                    state()
                     break
                 if child.poll() is not None:
                     log(f"Backend encerrou com código {child.returncode}; veja backend-startup.log.")
