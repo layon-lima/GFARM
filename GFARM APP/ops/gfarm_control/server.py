@@ -318,8 +318,13 @@ def remote_listener():
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--setup-password-file", type=Path)
+    p.add_argument("--open", action="store_true")
     p.add_argument("--port", type=int, default=PORT)
     args = p.parse_args()
+    if args.open:
+        import webbrowser
+        webbrowser.open("http://127.0.0.1:%d/" % args.port)
+        return
     if args.setup_password_file:
         password = args.setup_password_file.read_text(encoding="utf-8").strip()
         try:
