@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import socket
 import shutil
 import subprocess
 import sys
@@ -93,8 +94,29 @@ def exportar(destino_dir: Path, confirmada_parada: bool) -> None:
         raise RuntimeError("Não salve arquivos de migração dentro do repositório GitHub.")
     destino_dir.mkdir(parents=True, exist_ok=True)
     from app.services.backup_erp import criar_backup
+    from app.core.config import settings
+
+    def api_ativa() -> bool:
+        try:
+            with socket.create_connection(
+                ("127.0.0.1", settings.APP_PORT), timeout=3
+            ):
+                return True
+        except OSError:
+            return False
+
+    if api_ativa():
+        raise RuntimeError(
+            "A API ainda está no ar: pause o monitor e desligue o backend "
+            "no painel antes do backup final."
+        )
 
     backup = criar_backup(origem="transferencia_servidor")
+    if api_ativa():
+        raise RuntimeError(
+            "A API voltou a iniciar durante o backup. Exportação recusada "
+            "para evitar divergência entre banco e uploads."
+        )
     origem = Path(backup["caminho"])
     destino = destino_dir / origem.name
     if destino.exists() or Path(str(destino) + ".sha256").exists():
