@@ -29,10 +29,11 @@ function createBrowser(fetch) {
     console: { warn() {} },
     setTimeout() {},
     fetch,
+    confirm() { return true; },
   };
   vm.runInNewContext(
     source + '\n' +
-    'globalThis.testApi = { request, status };',
+    'globalThis.testApi = { request, status, operate };',
     context,
     { filename: 'app.js' }
   );
@@ -71,4 +72,16 @@ test('Perda de conexão durante monitoramento fica visível e impede novas açõ
   assert.equal(browser.element('update-state').textContent, 'Sem conexão com o Control');
   assert.match(browser.element('notice').textContent, /Conexão.*interrompida/);
   assert.equal(browser.buttons.every((btn) => btn.disabled), true);
+});
+
+test('Botão Atualizar não reenvia POST quando a resposta se perde', async () => {
+  let chamadas = 0;
+  const browser = createBrowser(async () => {
+    chamadas += 1;
+    throw new TypeError('Failed to fetch');
+  });
+  await browser.api.operate('update');
+  assert.equal(chamadas, 1);
+  assert.equal(browser.buttons.every((btn) => btn.disabled), true);
+  assert.match(browser.element('notice').textContent, /Não foi possível confirmar/);
 });
