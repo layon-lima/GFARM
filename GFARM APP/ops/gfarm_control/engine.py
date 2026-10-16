@@ -618,9 +618,9 @@ def link_uploads(folder):
 
 
 
-# O bootstrap GFARM-Control.exe fica estavel apos instalacao.
-# O painel web (Python, JS e HTML) e atualizado como parte do codigo do app.
-CONTROL_SOURCES = ("server.py", "engine.py", "app.js", "ui.html", "control_reload.py")
+# O unico EXE do GFARM e o instalador. Servico Control roda por Python do Windows.
+# O painel web (Python, JS e HTML) e atualizado pela branch main.
+CONTROL_SOURCES = ("server.py", "engine.py", "app.js", "ui.html", "control_reload.py", "control_bootstrap.py")
 
 
 def control_fingerprint(folder):
@@ -644,21 +644,18 @@ def control_web_changed(before, after):
 
 
 def schedule_web_control_reload(before, previous_version, after):
-    """Reinicia bootstrap estavel, sem rebuild, nova Release ou troca de EXE."""
+    """Reinicia servico web com o Python ja instalado, sem compilacao/EXE."""
     global CONTROL_UPGRADE_PENDING
-    if not getattr(sys, "frozen", False) or os.name != "nt":
+    if os.name != "nt":
         return False
-    # O Control do installer sempre esta em Program Files/GFARM.
-    current = Path(sys.executable).resolve()
-    expected = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "GFARM" / "GFARM-Control.exe"
-    if os.path.normcase(str(current)) != os.path.normcase(str(expected.resolve())):
-        raise RuntimeError("GFARM Control nao esta no local oficial de instalacao.")
+    bootstrap = ROOT / "control_bootstrap.py"
+    if not bootstrap.is_file():
+        raise RuntimeError("Iniciador web do Control ausente. Use o instalador corrigido.")
     helper = Path(after) / "ops" / "gfarm_control" / "control_reload.py"
     if not helper.is_file():
         raise RuntimeError("Helper de recarga do GFARM Control ausente no GitHub.")
-    # Nao parar a API pertencente a outro processo.
     if port_busy(backend_port()) and not owned():
-        raise RuntimeError("GFARM esta executando fora do Control; reinicio bloqueado.")
+        raise RuntimeError("GFARM executando fora do Control; atualizacao bloqueada.")
     python = executable(after)
     ready = ROOT / "control-reload" / "ready.txt"
     ready.parent.mkdir(parents=True, exist_ok=True)
@@ -668,8 +665,7 @@ def schedule_web_control_reload(before, previous_version, after):
     child = subprocess.Popen([
         str(python), str(helper),
         "--home", str(ROOT), "--parent-pid", str(os.getpid()),
-        "--ready", str(ready),
-        "--previous-app", str(before),
+        "--ready", str(ready), "--previous-app", str(before),
         "--previous-version", str(previous_version),
         "--expected-app", str(after),
     ], cwd=str(helper.parent), stdin=subprocess.DEVNULL,
@@ -679,16 +675,15 @@ def schedule_web_control_reload(before, previous_version, after):
         if ready.is_file() and ready.read_text(encoding="ascii") == str(os.getpid()):
             break
         if child.poll() is not None:
-            raise RuntimeError("Reiniciador do Control falhou; executavel permanece ativo.")
+            raise RuntimeError("Reiniciador web do Control falhou; servico antigo preservado.")
         time.sleep(0.2)
     else:
-        raise RuntimeError("Reiniciador do Control nao respondeu; executavel preservado.")
+        raise RuntimeError("Reiniciador web nao respondeu; servico antigo preservado.")
     if owned():
         stop(temporary=True)
     CONTROL_UPGRADE_PENDING = True
-    write_log("Nova versao WEB do Control preparada. Reiniciando bootstrap existente.")
+    write_log("Novo codigo WEB do Control preparado. Reinicio do servico agendado.")
     return True
-
 
 def consume_control_restart():
     global CONTROL_UPGRADE_PENDING
@@ -760,7 +755,8 @@ def update(progress):
                 run([str(py), "-m", "py_compile",
                      str(control_source / "server.py"),
                      str(control_source / "engine.py"),
-                     str(control_source / "control_reload.py")], timeout=90)
+                     str(control_source / "control_reload.py"),
+                     str(control_source / "control_bootstrap.py")], timeout=90)
             progress("Criando backup obrigatorio antes da atualizacao...")
             create_backup()
             progress("Publicando a nova versao e validando API...")
