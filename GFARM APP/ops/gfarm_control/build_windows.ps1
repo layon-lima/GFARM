@@ -6,7 +6,7 @@ $here = $PSScriptRoot
 $repo = (Resolve-Path (Join-Path $here '..\..\..')).Path
 $build = Join-Path $here 'build'
 New-Item -ItemType Directory -Path $build -Force | Out-Null
-foreach ($file in @('server.py','engine.py','launcher.py','app.js','ui.html','GFARM_Definitivo.iss','install_windows.ps1')) {
+foreach ($file in @('server.py','engine.py','launcher.py','control_reload.py','preinstall_guard.ps1','test_control.py','app.js','ui.html','GFARM_Definitivo.iss','install_windows.ps1')) {
   if (-not (Test-Path (Join-Path $here $file))) { throw "Arquivo obrigatorio ausente: $file" }
 }
 $git = Get-Command git.exe -ErrorAction Stop
@@ -16,22 +16,24 @@ Write-Host "GFARM, commit $rev"
 Push-Location $here
 try {
   Write-Host '[1/5] Validando PowerShell do instalador e sintaxe Python...'
-  $installerTokens = $null
-  $installerErrors = $null
-  $null = [System.Management.Automation.Language.Parser]::ParseFile(
-    (Join-Path $here 'install_windows.ps1'),
-    [ref]$installerTokens,
-    [ref]$installerErrors
-  )
-  if ($installerErrors -and $installerErrors.Count -gt 0) {
-    foreach ($parseError in $installerErrors) {
-      Write-Host ("ERRO POWERSHELL: " + $parseError.ToString()) -ForegroundColor Red
+  foreach ($script in @('install_windows.ps1', 'preinstall_guard.ps1')) {
+    $tokens = $null
+    $errors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile(
+      (Join-Path $here $script), [ref]$tokens, [ref]$errors
+    )
+    if ($errors -and $errors.Count -gt 0) {
+      foreach ($parseError in $errors) {
+        Write-Host ("ERRO POWERSHELL (" + $script + "): " + $parseError.ToString()) -ForegroundColor Red
+      }
+      throw "Script $script contem erro de sintaxe. EXE nao sera gerado."
     }
-    throw 'O instalador tem erro de sintaxe PowerShell. EXE NAO sera gerado.'
   }
-  Write-Host 'Script de instalacao PowerShell validado.'
-  & $Python -3.13 -m py_compile server.py engine.py launcher.py create_icons.py
+  Write-Host 'Scripts de instalacao e reparo validados.'
+  & $Python -3.13 -m py_compile server.py engine.py launcher.py control_reload.py create_icons.py
   if ($LASTEXITCODE -ne 0) { throw 'Erro de sintaxe Python.' }
+  & $Python -3.13 test_control.py
+  if ($LASTEXITCODE -ne 0) { throw 'Testes do GFARM Control falharam. Compilacao bloqueada.' }
   Write-Host '[2/5] Instalando utilitarios de build...'
   & $Python -3.13 -m pip install pyinstaller pillow
   if ($LASTEXITCODE -ne 0) { throw 'Instale PyInstaller e Pillow.' }
