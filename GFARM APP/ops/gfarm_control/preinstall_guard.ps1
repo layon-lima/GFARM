@@ -30,11 +30,14 @@ function Wait-NoListeners([int]$listenPort, [int]$seconds) {
     return (@(Get-ListeningPids $listenPort).Count -eq 0)
 }
 function Get-ControlProcesses {
-    if (-not (Test-Path -LiteralPath $controlExe -PathType Leaf)) { return @() }
     $wanted = [IO.Path]::GetFullPath($controlExe)
-    return @(Get-CimInstance Win32_Process -Filter "Name='GFARM-Control.exe'" -ErrorAction Stop |
-        Where-Object { $_.ExecutablePath -and
-            ([IO.Path]::GetFullPath([string]$_.ExecutablePath) -ieq $wanted) })
+    $webPython = [IO.Path]::GetFullPath((Join-Path $root 'control-runtime\Scripts\pythonw.exe'))
+    $bootstrap = Join-Path $root 'control_bootstrap.py'
+    return @(Get-CimInstance Win32_Process -Filter "Name='GFARM-Control.exe' OR Name='pythonw.exe' OR Name='python.exe'" -ErrorAction Stop |
+        Where-Object { $_.ExecutablePath -and (
+            ([IO.Path]::GetFullPath([string]$_.ExecutablePath) -ieq $wanted) -or (
+            [IO.Path]::GetFullPath([string]$_.ExecutablePath) -ieq $webPython -and
+            ([string]$_.CommandLine).IndexOf($bootstrap, [StringComparison]::OrdinalIgnoreCase) -ge 0)) })
 }
 function Wait-ControlStopped([int]$seconds) {
     for ($i=0; $i -lt $seconds; $i++) {
@@ -66,6 +69,26 @@ try {
         }
     }
 
+    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($task) {
+        # Nunca parar uma tarefa alterada para apontar a outro executavel.
+        $action = @($task.Actions | Select-Object -First 1)[0]
+        if ($action -and $action.Execute) {
+            $taskExe = [Environment]::ExpandEnvironmentVariables(
+                [string]$action.Execute.Trim('"'))
+            $expectedExe = [IO.Path]::GetFullPath($controlExe)
+            $webPython = [IO.Path]::GetFullPath((Join-Path $root 'control-runtime\Scripts\pythonw.exe'))
+            $bootstrap = Join-Path $root 'control_bootstrap.py'
+            $isWebTask = ([IO.Path]::GetFullPath($taskExe) -ieq $webPython -and
+                ([string]$action.Arguments).Trim('"') -ieq $bootstrap)
+            if ([IO.Path]::GetFullPath($taskExe) -ine $expectedExe -and -not $isWebTask) {
+                throw 'A tarefa GFARM Control aponta para executavel diferente. Instalacao bloqueada por seguranca.'
+            }
+        }
+        Note 'Solicitando parada da tarefa oficial GFARM Control...'
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    }
+
     $owners = @(Get-ListeningPids $port)
     if ($owners.Count -gt 0) {
         Note ("API porta $port: PID(s) " + ($owners -join ', ') + ".")
@@ -73,11 +96,13 @@ try {
         # o run_production.py da instalacao configurada em control.json.
         foreach ($ownerPid in $owners) {
             $process = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerPid" -ErrorAction Stop
+            if (-not $process) { continue } # O job do Control pode te-lo encerrado.
             $cmd = [string]$process.CommandLine
             $exe = [string]$process.ExecutablePath
             $pythonValid = ($process.Name -match '^pythonw?\.exe$')
-            $scriptValid = $cmd -match '(?i)run_production\.py'
+            $scriptValid = ($cmd -match '(?i)run_production\.py' -or $cmd -match '(?i)-m\s+uvicorn\s+app\.main:app')
             $pathValid = (($cmd.IndexOf($backend, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+                ($cmd.IndexOf($expectedPython, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or
                 ($exe -and [IO.Path]::GetFullPath($exe) -ieq $expectedPython))
             if (-not ($pythonValid -and $scriptValid -and $pathValid)) {
                 throw ("Porta $port pertence ao processo PID $ownerPid, nao confirmado como GFARM. " +
@@ -95,21 +120,6 @@ try {
         Note "Nenhum processo ouvindo na porta GFARM $port."
     }
 
-    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if ($task) {
-        # Nunca parar uma tarefa alterada para apontar a outro executavel.
-        $action = @($task.Actions | Select-Object -First 1)[0]
-        if ($action -and $action.Execute) {
-            $taskExe = [Environment]::ExpandEnvironmentVariables(
-                [string]$action.Execute.Trim('"'))
-            $expectedExe = [IO.Path]::GetFullPath($controlExe)
-            if ([IO.Path]::GetFullPath($taskExe) -ine $expectedExe) {
-                throw 'A tarefa GFARM Control aponta para executavel diferente. Instalacao bloqueada por seguranca.'
-            }
-        }
-        Note 'Solicitando parada da tarefa oficial GFARM Control...'
-        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    }
     if (-not (Wait-ControlStopped 8)) {
         foreach ($instance in @(Get-ControlProcesses)) {
             $controlPid = [int]$instance.ProcessId

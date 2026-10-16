@@ -2,6 +2,13 @@
 import importlib
 import json
 import os
+import shutil
+import subprocess
+import sys
+import threading
+import urllib.request
+import http.cookiejar
+import http.server
 import tempfile
 import unittest
 import zipfile
@@ -91,7 +98,7 @@ class TestGFARMControl(unittest.TestCase):
         # ProgramData\\GFARM pode negar qualquer leitura ao usuario.
         import server
         with (mock.patch("sys.argv", ["GFARM-Control.exe", "--open"]),
-              mock.patch.object(server, "_installed_web_control",
+              mock.patch.object(server.engine, "load",
                                 side_effect=PermissionError("Access denied")),
               mock.patch("webbrowser.open") as browser):
             server.start_control()
@@ -101,7 +108,7 @@ class TestGFARMControl(unittest.TestCase):
         import server
         with (mock.patch("sys.argv", ["GFARM-Control.exe",
                                       "--setup-password-file", "senha.tmp"]),
-              mock.patch.object(server, "_installed_web_control",
+              mock.patch.object(server.engine, "load",
                                 side_effect=PermissionError("Access denied")),
               mock.patch.object(server, "main") as first_run):
             server.start_control()
@@ -218,6 +225,373 @@ class TestGFARMControl(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Confirme"):
             self.engine.restore_empty("GFARM_COMPLETO_dummy.zip", "nao")
         self.assertFalse((Path(self.folder.name) / "data" / "backend.env").exists())
+
+
+class IncrementalUpdateTest(unittest.TestCase):
+    """Git REAL local, comandos de build simulados e nenhum banco/servidor real."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.override = mock.patch.dict(os.environ, {"GFARM_HOME": str(self.root / "control")})
+        self.override.start()
+        self.addCleanup(self.override.stop)
+        import engine
+        self.engine = importlib.reload(engine)
+        self.repo = self.root / "origin"
+        self.repo.mkdir()
+        self.git("init", "-b", "main")
+        self.git("config", "user.name", "GFARM Test")
+        self.git("config", "user.email", "gfarm-test@example.invalid")
+        files = {
+            "backend/run_production.py": "# backend\n",
+            "backend/requirements.txt": "# pinned fixture\n",
+            "backend/alembic/versions/initial.py": "# schema\n",
+            "src/main.jsx": "old source\n",
+            "src/obsolete.js": "old file\n",
+            "src/unchanged.js": "unchanged\n",
+            "package.json": "{}\n",
+        }
+        source = Path(__file__).resolve().parent
+        for name in self.engine.CONTROL_SOURCES:
+            files["ops/gfarm_control/" + name] = (source / name).read_text(encoding="utf-8")
+        for name, text in files.items():
+            self.put(name, text)
+        self.git("add", ".")
+        self.git("commit", "-m", "installed")
+        self.previous = self.git("rev-parse", "HEAD")
+        self.app = self.root / "installed" / "GFARM APP"
+        shutil.copytree(self.repo / "GFARM APP", self.app)
+        (self.app / "node_modules").mkdir()
+        (self.app / "dist").mkdir()
+        (self.app / "dist/index.html").write_text('old <div id="root"></div>')
+        (self.app / "dist/same.css").write_bytes(b"unchanged generated asset")
+        (self.app / "backend/.env").write_text("fixture-persistent-configuration")
+        (self.app / "backend/uploads").mkdir()
+        (self.app / "backend/uploads/photo.jpg").write_bytes(b"persistent-photo")
+        self.engine.save({"app_path": str(self.app), "version": self.previous,
+                          "desired_running": False, "automatic": True})
+        self.put("src/main.jsx", "new source\n")
+        self.put("src/new.js", "new file\n")
+        (self.repo / "GFARM APP/src/obsolete.js").unlink()
+        self.git("add", ".")
+        self.git("commit", "-m", "available")
+        self.revision = self.git("rev-parse", "HEAD")
+        self.commands = []
+        self.real_run = self.engine.run
+        self.fail_build = False
+        self.patches = [
+            mock.patch.object(self.engine, "REPO", str(self.repo)),
+            mock.patch.object(self.engine, "ssh_environment", return_value={}),
+            mock.patch.object(self.engine, "executable", return_value=Path(sys.executable)),
+            mock.patch.object(self.engine, "npm_command", side_effect=lambda *args: ["npm", *args]),
+            mock.patch.object(self.engine, "port_busy", return_value=False),
+            mock.patch.object(self.engine, "run", side_effect=self.command),
+            mock.patch.object(self.engine, "schedule_web_control_reload", return_value=False),
+        ]
+        for patch in self.patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def git(self, *args):
+        return subprocess.run(["git", *args], cwd=self.repo, capture_output=True,
+                              text=True, check=True).stdout.strip()
+
+    def put(self, name, text):
+        path = self.repo / "GFARM APP" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def commit(self):
+        self.git("add", ".")
+        self.git("commit", "-m", "additional change")
+        return self.git("rev-parse", "HEAD")
+
+    def command(self, args, **kwargs):
+        cmd = list(map(str, args))
+        self.commands.append(cmd)
+        if cmd[0] == "git":
+            return self.real_run(args, **kwargs)
+        if cmd[:3] == ["npm", "run", "build"]:
+            if self.fail_build:
+                raise RuntimeError("simulated build failure")
+            output = Path(cmd[cmd.index("--outDir") + 1])
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "index.html").write_text('new <div id="root"></div>')
+            (output / "same.css").write_bytes(b"unchanged generated asset")
+        return ""
+
+    def update(self):
+        return self.engine.update(lambda *args: None)
+
+    def assert_persistent(self):
+        self.assertEqual((self.app / "backend/.env").read_text(), "fixture-persistent-configuration")
+        self.assertEqual((self.app / "backend/uploads/photo.jpg").read_bytes(), b"persistent-photo")
+        self.assertEqual(self.engine.project(), self.app)
+
+    def test_real_git_updates_only_changed_files_in_same_installation(self):
+        unchanged = (self.app / "src/unchanged.js").stat().st_mtime_ns
+        asset_time = (self.app / "dist/same.css").stat().st_mtime_ns
+        result = self.update()
+        self.assertIn(self.revision[:12], result)
+        self.assertEqual((self.app / "src/main.jsx").read_text(), "new source\n")
+        self.assertTrue((self.app / "src/new.js").is_file())
+        self.assertFalse((self.app / "src/obsolete.js").exists())
+        self.assertEqual((self.app / "src/unchanged.js").stat().st_mtime_ns, unchanged)
+        self.assertEqual((self.app / "dist/same.css").stat().st_mtime_ns, asset_time)
+        self.assertEqual(self.engine.load()["version"], self.revision)
+        self.assertFalse(any("clone" in cmd or "checkout" in cmd for cmd in self.commands))
+        blobs = [cmd[-1] for cmd in self.commands if "cat-file" in cmd]
+        self.assertEqual(len(blobs), 2)  # new main.jsx + new.js; deletion has no download.
+        self.assertFalse((self.engine.ROOT / "releases").exists())
+        self.assertFalse((self.engine.ROOT / "update/pending.json").exists())
+        self.assert_persistent()
+        count = len(self.commands)
+        self.assertIn("ultima versao", self.update())
+        self.assertEqual(len(self.commands) - count, 1)
+
+    def test_build_failure_restores_replaced_deleted_and_added_files(self):
+        self.fail_build = True
+        with self.assertRaisesRegex(RuntimeError, "simulated build failure"):
+            self.update()
+        self.assertEqual((self.app / "src/main.jsx").read_text(), "old source\n")
+        self.assertTrue((self.app / "src/obsolete.js").is_file())
+        self.assertFalse((self.app / "src/new.js").exists())
+        self.assertEqual((self.app / "dist/index.html").read_text(), 'old <div id="root"></div>')
+        self.assertEqual(self.engine.load()["version"], self.previous)
+        self.assert_persistent()
+
+    def test_local_edit_is_preserved_and_update_blocked(self):
+        (self.app / "src/main.jsx").write_text("local work")
+        with self.assertRaisesRegex(RuntimeError, "diverge"):
+            self.update()
+        self.assertEqual((self.app / "src/main.jsx").read_text(), "local work")
+        self.assertEqual(self.engine.load()["version"], self.previous)
+
+    def test_changed_migration_blocks_before_installation_changes(self):
+        self.put("backend/alembic/versions/initial.py", "# unsafe new schema\n")
+        self.commit()
+        with self.assertRaisesRegex(RuntimeError, "migrations"):
+            self.update()
+        self.assertEqual((self.app / "src/main.jsx").read_text(), "old source\n")
+        self.assert_persistent()
+
+    def test_incoming_persistent_file_is_rejected(self):
+        self.put("backend/uploads/photo.jpg", "incoming overwrite")
+        self.commit()
+        with self.assertRaisesRegex(RuntimeError, "protegido"):
+            self.update()
+        self.assert_persistent()
+
+    def test_control_reload_failure_rolls_back_entire_update(self):
+        self.put("ops/gfarm_control/ui.html", "new control UI")
+        self.commit()
+        with mock.patch.object(self.engine, "schedule_web_control_reload", side_effect=RuntimeError("helper failed")):
+            with self.assertRaisesRegex(RuntimeError, "helper failed"):
+                self.update()
+        self.assertEqual((self.app / "src/main.jsx").read_text(), "old source\n")
+        self.assertEqual(self.engine.load()["version"], self.previous)
+        self.assert_persistent()
+
+    def test_backend_only_update_skips_npm_and_preserves_frontend(self):
+        # Revert source changes in available commit, then alter backend only.
+        self.git("reset", "--hard", self.previous)  # exclusively disposable test origin.
+        self.put("backend/run_production.py", "# changed backend\n")
+        self.commit()
+        self.update()
+        self.assertFalse(any(cmd[0] == "npm" for cmd in self.commands))
+        self.assertEqual((self.app / "dist/index.html").read_text(), 'old <div id="root"></div>')
+
+    def test_crlf_windows_checkout_is_accepted_without_rewriting_unchanged_file(self):
+        (self.app / "src/main.jsx").write_bytes(b"old source\r\n")
+        self.update()
+        self.assert_persistent()
+
+    def test_download_failure_leaves_installed_code_and_version_untouched(self):
+        original = self.command
+        def fail_blob(args, **kwargs):
+            if "cat-file" in args:
+                raise RuntimeError("network unavailable")
+            return original(args, **kwargs)
+        with mock.patch.object(self.engine, "run", side_effect=fail_blob):
+            with self.assertRaisesRegex(RuntimeError, "network unavailable"):
+                self.update()
+        self.assertEqual((self.app / "src/main.jsx").read_text(), "old source\n")
+        self.assertEqual(self.engine.load()["version"], self.previous)
+        self.assertFalse((self.engine.ROOT / "update/pending.json").exists())
+
+    def test_blob_integrity_failure_is_detected_before_any_installation_write(self):
+        original = self.command
+        def corrupt(args, **kwargs):
+            return b"corrupt blob" if "cat-file" in args else original(args, **kwargs)
+        with mock.patch.object(self.engine, "run", side_effect=corrupt):
+            with self.assertRaisesRegex(RuntimeError, "Integridade Git"):
+                self.update()
+        self.assertEqual((self.app / "src/main.jsx").read_text(), "old source\n")
+        self.assert_persistent()
+
+    def test_second_update_reuses_cache_and_downloads_only_next_changed_blob(self):
+        self.update()
+        self.commands.clear()
+        self.put("backend/run_production.py", "# subsequent version\n")
+        revision = self.commit()
+        self.update()
+        self.assertEqual(len([cmd for cmd in self.commands if "cat-file" in cmd]), 1)
+        self.assertEqual(self.engine.load()["version"], revision)
+        self.assert_persistent()
+
+
+class FileRecoveryTest(unittest.TestCase):
+    def setUp(self):
+        from update_transaction import FileUpdate
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name)
+        self.app = self.home / "installed"
+        self.app.mkdir()
+        (self.app / "module.py").write_bytes(b"previous\n")
+        (self.home / "control.json").write_text(json.dumps({"app_path": str(self.app), "version": "old"}))
+        self.update = FileUpdate(self.home, self.app, "old", "new")
+
+    def test_interrupted_update_restores_files_before_bootstrap_imports_server(self):
+        from update_transaction import recover_pending
+        self.update.apply("module.py", b"new\n")
+        self.update.apply("added.py", b"new file\n")
+        recover_pending(self.home)
+        self.assertEqual((self.app / "module.py").read_bytes(), b"previous\n")
+        self.assertFalse((self.app / "added.py").exists())
+        self.assertFalse(self.update.pending.exists())
+
+    def test_candidate_control_has_only_one_attempt_before_automatic_recovery(self):
+        from update_transaction import FileUpdate, recover_pending
+        self.update.apply("module.py", b"new\n")
+        self.update.state("awaiting_control")
+        recover_pending(self.home)
+        self.assertEqual(FileUpdate(self.home).info["state"], "checking_control")
+        self.assertEqual((self.app / "module.py").read_bytes(), b"new\n")
+        recover_pending(self.home)
+        self.assertEqual((self.app / "module.py").read_bytes(), b"previous\n")
+
+    def test_commit_retains_new_files_and_clears_pending_journal(self):
+        from update_transaction import recover_pending
+        self.update.apply("module.py", b"new\n")
+        self.update.finish()
+        recover_pending(self.home)
+        self.assertEqual((self.app / "module.py").read_bytes(), b"new\n")
+
+    def test_rollback_does_not_touch_another_active_installation(self):
+        self.update.apply("module.py", b"new\n")
+        (self.home / "control.json").write_text(json.dumps({"app_path": str(self.home / "other")}))
+        with self.assertRaisesRegex(RuntimeError, "ativa mudou"):
+            self.update.rollback()
+        self.assertEqual((self.app / "module.py").read_bytes(), b"new\n")
+
+    def test_corrupted_file_backup_blocks_rollback_before_overwriting_any_program(self):
+        self.update.apply("module.py", b"new\n")
+        (self.update.folder / "files/0").write_bytes(b"corrupted")
+        with self.assertRaisesRegex(RuntimeError, "corrompido"):
+            self.update.rollback()
+        self.assertEqual((self.app / "module.py").read_bytes(), b"new\n")
+
+    def test_failed_control_start_restores_files_and_restarts_previous_control(self):
+        import control_reload
+        self.update.apply("module.py", b"new\n")
+        self.update.info.update(fingerprint="candidate", previous_fingerprint="previous", port=8000)
+        self.update.state("awaiting_control")
+        with (mock.patch.object(control_reload, "task") as task,
+              mock.patch.object(control_reload, "online", side_effect=[False, True]),
+              mock.patch.object(control_reload.time, "sleep"),
+              mock.patch.object(control_reload.socket, "create_connection", side_effect=OSError)):
+            control_reload.complete_reload(self.home, self.update)
+        self.assertEqual(task.call_args_list, [mock.call("/Run"), mock.call("/End"), mock.call("/Run")])
+        self.assertEqual((self.app / "module.py").read_bytes(), b"previous\n")
+
+    def test_unconfirmed_control_stop_keeps_journal_without_overwriting_active_code(self):
+        import control_reload
+        self.update.apply("module.py", b"new\n")
+        self.update.info.update(fingerprint="candidate", previous_fingerprint="previous", port=8000)
+        self.update.state("awaiting_control")
+        with (mock.patch.object(control_reload, "task", side_effect=[None, RuntimeError("cannot stop")]),
+              mock.patch.object(control_reload, "online", return_value=False),
+              mock.patch.object(control_reload.time, "sleep")):
+            with self.assertRaisesRegex(RuntimeError, "cannot stop"):
+                control_reload.complete_reload(self.home, self.update)
+        self.assertEqual((self.app / "module.py").read_bytes(), b"new\n")
+        self.assertTrue(self.update.pending.exists())
+
+    def test_unsafe_paths_and_persistent_data_are_never_captured(self):
+        from update_transaction import program_path
+        for name in ("../outside", "/outside", "backend/.env", "backend/uploads/photo",
+                     "data/secret", "x:y", "x\\y", "folder./x"):
+            with self.subTest(name=name), self.assertRaises(RuntimeError):
+                program_path(self.app, name)
+
+    def test_symlink_cannot_redirect_writes_outside_app(self):
+        if os.name == "nt":
+            self.skipTest("Windows junction verificado em teste proprio do CI")
+        from update_transaction import program_path
+        (self.app / "linked").symlink_to(self.home, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "Link/junction"):
+            program_path(self.app, "linked/private.py")
+
+    @unittest.skipUnless(os.name == "nt", "Requer Windows Job Objects")
+    def test_windows_job_ends_only_owned_backend_child(self):
+        import engine
+        process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], creationflags=0x4)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        handle = engine.own_child(process, suspended=True)
+        engine.close_child_job(handle)
+        process.wait(timeout=10)
+        self.assertIsNotNone(process.returncode)
+
+
+    @unittest.skipUnless(os.name == "nt", "Requer junction Windows")
+    def test_windows_junction_cannot_redirect_updates_to_data(self):
+        from update_transaction import program_path
+        junction = self.app / "linked"
+        subprocess.run(["cmd.exe", "/c", "mklink", "/J", str(junction), str(self.home)],
+                       capture_output=True, check=True)
+        with self.assertRaisesRegex(RuntimeError, "Link/junction"):
+            program_path(self.app, "linked/private.py")
+
+
+class ControlHTTPTest(unittest.TestCase):
+    def test_web_control_login_and_status_work_without_backend_or_database(self):
+        import engine
+        import server
+        with tempfile.TemporaryDirectory() as folder:
+            with mock.patch.dict(os.environ, {"GFARM_HOME": folder}):
+                importlib.reload(engine)
+                with (mock.patch.object(server, "PASSWORD_PATH", Path(folder) / "control-auth.json"),
+                      mock.patch.object(engine, "running_health", return_value=False)):
+                    server.provision("isolated-test-password")
+                    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+                    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+                    thread.start()
+                    try:
+                        base = "http://127.0.0.1:%d" % httpd.server_address[1]
+                        client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+                        for path, expected in (("/", b"GFARM"), ("/app.js", b"renderStatus")):
+                            with client.open(base + path, timeout=5) as response:
+                                self.assertEqual(response.status, 200)
+                                self.assertIn(expected, response.read())
+                        with client.open(base + "/api/bootstrap", timeout=5) as response:
+                            self.assertEqual(json.load(response)["control_fingerprint"], server.CONTROL_FINGERPRINT)
+                        request = urllib.request.Request(base + "/api/login",
+                            data=json.dumps({"password": "isolated-test-password"}).encode(),
+                            headers={"Content-Type": "application/json", "Origin": base})
+                        with client.open(request, timeout=5) as response:
+                            self.assertEqual(response.status, 200)
+                        with client.open(base + "/api/status", timeout=5) as response:
+                            status = json.load(response)
+                            self.assertFalse(status["system"]["database_configured"])
+                            self.assertFalse(status["system"]["app_online"])
+                        self.assertFalse((Path(folder) / "data/backend.env").exists())
+                    finally:
+                        httpd.shutdown()
+                        httpd.server_close()
+                        thread.join(timeout=5)
 
 
 if __name__ == "__main__":

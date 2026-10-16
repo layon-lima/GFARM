@@ -41,6 +41,7 @@ Source: "preinstall_guard.ps1"; Flags: dontcopy
 Source: "build\GFARM.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM-Control.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "control_bootstrap.py"; DestDir: "{commonappdata}\GFARM"; Flags: ignoreversion
+Source: "update_transaction.py"; DestDir: "{commonappdata}\GFARM"; Flags: ignoreversion
 Source: "install_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]

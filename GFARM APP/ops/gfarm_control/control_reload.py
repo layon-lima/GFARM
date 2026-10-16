@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import socket
 import os
 import subprocess
 import time
@@ -16,6 +17,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+
+from update_transaction import FileUpdate
 
 
 def log(home, text):
@@ -52,32 +55,65 @@ def task(operation):
         raise RuntimeError("Agendador do Windows: " + (result.stderr or result.stdout)[-500:])
 
 
-def online(seconds=65):
+def online(fingerprint, seconds=65):
     for _ in range(seconds):
         try:
             with urllib.request.urlopen("http://127.0.0.1:8787/api/bootstrap", timeout=2) as response:
                 if (response.status == 200 and
-                        response.headers.get("Server", "").startswith("GFARMControl/")):
+                        response.headers.get("Server", "").startswith("GFARMControl/") and
+                        json.load(response).get("control_fingerprint") == fingerprint):
                     return True
-        except (OSError, TimeoutError, urllib.error.URLError):
+        except (OSError, ValueError, TimeoutError, urllib.error.URLError):
             pass
         time.sleep(1)
     return False
 
 
-def rollback(home, previous_app, previous_version, expected_current):
-    config = home / "control.json"
-    data = json.loads(config.read_text(encoding="utf-8"))
-    if Path(data.get("app_path", "")).resolve() != expected_current.resolve():
-        raise RuntimeError("A instalacao ativa mudou. Rollback automatico bloqueado.")
-    if not (previous_app / "ops" / "gfarm_control" / "server.py").is_file():
-        raise RuntimeError("Codigo antigo do Control ausente. Revisao manual necessaria.")
-    data["app_path"] = str(previous_app)
-    data["version"] = previous_version
-    temporary = config.with_suffix(".rollback.tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(temporary, config)
-    log(home, "Configuracao de aplicativo revertida sem tocar no PostgreSQL.")
+def backend_online(port, seconds=65):
+    for _ in range(seconds):
+        try:
+            base = "http://127.0.0.1:%d" % port
+            with urllib.request.urlopen(base + "/api/health", timeout=2) as response:
+                healthy = json.load(response).get("status") == "online"
+            with urllib.request.urlopen(base + "/", timeout=2) as response:
+                if healthy and b'id="root"' in response.read():
+                    return True
+        except (OSError, ValueError, TimeoutError):
+            pass
+        time.sleep(1)
+    return False
+
+
+def complete_reload(home, update):
+    try:
+        time.sleep(2)
+        task("/Run")
+        if not online(update.info["fingerprint"]):
+            raise RuntimeError("O novo Control nao confirmou o codigo carregado.")
+        if update.info.get("was_running") and not backend_online(update.info["port"]):
+            raise RuntimeError("O GFARM nao confirmou API e interface apos reiniciar.")
+        # Recarregar o journal alterado pelo bootstrap (checking_control).
+        FileUpdate(home).finish()
+        log(home, "Atualizacao incremental validada: GFARM e Control na mesma pasta.")
+    except Exception as exc:
+        log(home, "Falha ao validar a atualizacao: " + str(exc))
+        # O job Windows do Control encerra apenas o backend filho iniciado por ele.
+        # Se nao pudermos parar a tarefa, NAO substituir codigo em uso.
+        task("/End")
+        for _ in range(30):
+            try:
+                with socket.create_connection(("127.0.0.1", update.info["port"]), timeout=0.3):
+                    pass
+            except OSError:
+                break
+            time.sleep(1)
+        else:
+            raise RuntimeError("Backend ainda ativo; rollback preservado para revisao segura.")
+        update.rollback()
+        task("/Run")
+        if not online(update.info["previous_fingerprint"]):
+            raise RuntimeError("Arquivos revertidos; Control antigo requer verificacao local.")
+        log(home, "Arquivos anteriores recuperados sem restaurar/modificar o PostgreSQL.")
 
 
 def main():
@@ -85,48 +121,22 @@ def main():
     parser.add_argument("--home", required=True, type=Path)
     parser.add_argument("--parent-pid", required=True, type=int)
     parser.add_argument("--ready", required=True, type=Path)
-    parser.add_argument("--previous-app", required=True, type=Path)
-    parser.add_argument("--previous-version", required=True)
-    parser.add_argument("--expected-app", required=True, type=Path)
     args = parser.parse_args()
     home = args.home.resolve(strict=True)
-
-    # Envia sinal de pronto ao processo antigo antes do fechamento.
-    ready_file = args.ready.resolve()
-    if (home / "control-reload" not in ready_file.parents or
-            ready_file.name != "ready.txt"):
-        raise RuntimeError("Local do sinal de reinicio nao autorizado.")
-    ready_file.parent.mkdir(parents=True, exist_ok=True)
-    ready_file.write_text(str(args.parent_pid), encoding="ascii")
+    update = FileUpdate(home)
+    ready = update.folder / "ready.txt"
+    if args.ready.resolve() != ready.resolve():
+        raise RuntimeError("Sinal de reinicio fora da transacao atual.")
+    ready.write_text(str(args.parent_pid), encoding="ascii")
     try:
         wait_parent(args.parent_pid)
     finally:
-        ready_file.unlink(missing_ok=True)
-
-    try:
-        time.sleep(2)
-        task("/Run")
-        if not online():
-            raise RuntimeError("Novo codigo web do Control nao respondeu na porta 8787.")
-        log(home, "Codigo atualizado do GFARM Control ativo na porta 8787.")
-    except Exception as exc:
-        log(home, "Falha na abertura do novo Control: " + str(exc))
-        try:
-            task("/End")
-        except Exception as stop_exc:
-            log(home, "Falha encerrando task durante rollback: " + str(stop_exc))
-        rollback(home, args.previous_app, args.previous_version, args.expected_app)
-        time.sleep(3)
-        task("/Run")
-        if not online():
-            raise RuntimeError("Rollback configurado mas Control antigo nao iniciou; consulte os logs.")
-        log(home, "Rollback concluido; Control anterior voltou ao ar.")
+        ready.unlink(missing_ok=True)
+    update = FileUpdate(home)
+    if update.info["state"] != "awaiting_control":
+        raise RuntimeError("Transacao cancelada; reinicio nao sera executado.")
+    complete_reload(home, update)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as exc:
-        # stderr disponivel quando chamado manualmente; log do helper registra
-        # detalhes do fluxo principal; dados e banco permanecem intactos.
-        raise
+    main()

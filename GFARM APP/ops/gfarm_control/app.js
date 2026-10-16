@@ -53,10 +53,20 @@ function renderStatus(payload) {
   txt("job-message", j.message);
   txt("update-message", j.message);
   txt("job-state", j.state === "running" ? "Operação em andamento" : j.state === "done" ? "Concluída" : j.state === "error" ? "Falha" : "Pronto");
-  txt("update-state", j.state === "running" ? "Atualizando ou processando..." : j.state === "done" ? "Concluído" : j.state === "error" ? "Falhou" : "Aguardando");
+  txt("update-state", ["running", "restarting"].includes(j.state) ? "Atualizando ou reiniciando..." : j.state === "done" ? "Concluído" : j.state === "error" ? "Falhou" : "Aguardando");
   $("job-state").classList.toggle("error", j.state === "error");
   $("update-state").classList.toggle("error", j.state === "error");
-  busy = j.state === "running";
+  const progress = $("update-progress");
+  if (progress) {
+    if (j.progress && j.progress.total > 0) {
+      progress.max = j.progress.total;
+      progress.value = j.progress.completed;
+    } else {
+      progress.removeAttribute("value");
+    }
+    progress.hidden = !["running", "restarting"].includes(j.state);
+  }
+  busy = ["running", "restarting"].includes(j.state);
   document.querySelectorAll("[data-action]").forEach(btn => btn.disabled = busy);
 }
 async function status() {

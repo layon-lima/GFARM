@@ -1,66 +1,110 @@
-# GFARM + GFARM Control — instalador e atualizacoes
+# GFARM e GFARM Control
 
-## Arquitetura definitiva
+O unico executavel proprio distribuido e **GFARM_Instalador_Definitivo.exe**.
+O GFARM e uma aplicacao React/FastAPI na porta 8000. O Control e um painel web
+independente na porta 8787, executado por Python/pythonw na tarefa SYSTEM do
+Windows. Os atalhos abrem as URLs; nao precisam ler arquivos protegidos nem
+executar GFARM.exe ou GFARM-Control.exe.
 
-O `GFARM_Instalador_Definitivo.exe` serve **somente para instalar/reparar as duas aplicacoes WEB locais** e configurar os atalhos/tarefa do Windows.
+## Atualizar GitHub: mesma pasta, somente arquivos alterados
 
-- **GFARM:** interface web React/FastAPI, servida no PC em `http://127.0.0.1:8000`.
-- **GFARM Control:** interface web do painel em `http://127.0.0.1:8787`.
-- **GFARM-Control.exe:** bootstrap fixo para iniciar o Control. Depois da instalacao, carrega `server.py`, `engine.py`, `ui.html` e `app.js` diretamente do codigo instalado via GitHub. Nao precisa ser recompilado a cada alteracao.
-- **Atualizar pelo GitHub:** baixa `main` em pasta nova; valida migrations, compila frontend/backend, executa backup e troca versao com rollback. Se o codigo web do Control mudou, reinicia somente o bootstrap para carregar a nova versao. **Nao atualiza o instalador nem cria Releases.**
-- O `GFARM.exe` tambem apenas abre o sistema web; o servidor real e mantido pelo Control.
+O botao **Atualizar GitHub** mantem `control.json.app_path` e o diretorio instalado.
+Nao clona uma copia completa nem cria uma pasta de aplicativo a cada versao.
 
-## Instalador: tres caminhos
+1. Consulta a main e compara seu commit com o instalado.
+2. Reutiliza `github-cache.git`, um cache bare com partial clone/blob:none. Busca
+   metadados Git e baixa apenas os blobs de programa alterados. BACKUPS/ do
+   repositorio nao e baixado pelo atualizador.
+3. Confere hash Git dos downloads, caminhos protegidos, sintaxe Python e
+   conflitos com arquivos locais. Mudancas em migrations/configuracao Alembic
+   bloqueiam a operacao antes de substituir programas.
+4. Preserva os arquivos que serao substituidos/removidos em `update/history/`.
+   Se o banco estiver configurado, cria tambem o backup completo validado antes
+   de alterar programas. Para somente a API pertencente ao proprio Control.
+5. Substitui/adiciona/remove os arquivos do diff **na mesma instalacao**.
+   Arquivos sem alteracao conservam seu conteudo e data. Reutiliza a venv;
+   instala requisitos Python e pacotes npm apenas quando necessario.
+6. Compila/verifica o backend e executa os testes isolados existentes. Quando o
+   frontend muda, compila em diretorio temporario, valida o index.html e aplica
+   somente os artefatos dist diferentes, removendo os artefatos obsoletos.
+7. Reinicia o GFARM se ele estava ligado. O inicio verifica, somente por leitura,
+   o schema e a revisao Alembic do banco existente; **nao executa migrations**.
+   Verifica a resposta da API e a pagina React.
+8. Se o codigo em uso do Control mudou, um helper independente aguarda seu PID
+   encerrar e reabre a tarefa Python. Confere o fingerprint do codigo realmente
+   carregado e, se aplicavel, a API e a interface do GFARM.
+9. Em caso de falha, restaura os arquivos/dependencias anteriores. O journal
+   persistente permite recuperar uma substituicao interrompida antes de importar
+   novamente o servidor. O rollback nao restaura nem altera o PostgreSQL.
 
-**Primeira instalacao:** baixa o GFARM da `main`, configura dependencias e a tarefa que inicia o painel. Abre o GFARM Control para configurar a conexao com o PostgreSQL existente.
+Os arquivos temporarios e o backup de arquivos alterados nao sao uma segunda
+instalacao. O cache Git nao e um checkout executavel. Arquivos persistentes
+(.env, uploads, XMLs, chaves, senha, dados e backups) ficam fora do diff permitido.
+Links/junctions, alteracoes locais conflitantes e processos desconhecidos sao
+bloqueados. No Windows, um Job Object vincula apenas o backend filho ao Control,
+impedindo que um crash/reinicio deixe uma API orfa ocupando a porta.
 
-**Reparar / instalar por cima (padrao):** reinstala os iniciadores e revalida o codigo local **sem trocar a versao do estoque**. Mantem banco, fotos, configuracao, senha do Control e backups. O Control novo inclui uma versao de recuperacao embutida se o codigo web local for legado; depois basta clicar em **Atualizar pelo GitHub**.
+A primeira passagem de uma instalacao que ainda executa o atualizador antigo
+continua sujeita ao comportamento desse codigo antigo. A regra incremental
+entra em vigor quando o novo Control estiver instalado. A publicacao no GitHub
+nao modifica automaticamente o computador do usuario.
 
-**Reinstalar os programas:** baixa um checkout novo do GFARM da `main` em pasta separada, verifica que migrations permanecem compativeis, reaproveita `backend.env` e os mesmos `uploads`, compila e **so entao** altera `control.json` para a nova versao. A versao anterior permanece disponivel. Nao apaga nem restaura o banco e nem substitui os dados persistentes. Se houver mudanca nas migrations, bloqueia a troca para revisao supervisionada.
+## Instalacao e reparo
 
-O instalador interrompe somente os processos **verificados** do GFARM e do GFARM Control existentes antes de substituir os arquivos, sem interromper o servico do PostgreSQL. Se detectar API nao identificada, cancela antes de trocar o executavel.
+- **Primeira instalacao:** instala/identifica dependencias, baixa o codigo privado,
+  prepara runtimes Python, frontend, atalhos e tarefa web. Configura a senha do
+  painel e abre a conexao segura com o PostgreSQL existente. Nao cria banco real.
+- **Reparar / instalar por cima:** conserva a versao do codigo, dados e senha;
+  revalida dependencias, atalhos e tarefa. O preflight reconhece tanto a tarefa
+  Python atual como o EXE legado e so encerra processos identificados.
+- **Reinstalar os programas:** operacao explicita de recuperacao, diferente da
+  atualizacao normal: permite preparar codigo/ambientes limpos e validar antes
+  da ativacao, preservando os dados e a possibilidade de voltar a configuracao
+  anterior. Migrations diferentes continuam bloqueadas.
 
-## Onde ficam os dados
+O instalador so remove iniciadores EXE legados depois de verificar o Control
+web. Os antigos scripts de compilacao/troca de GFARM-Control.exe foram retirados;
+o fluxo normal e o botao GitHub, e a migracao/reparacao e feita pelo instalador.
 
-- Programas e atalhos: `C:\Program Files\GFARM`.
-- Codigo e versoes: `C:\ProgramData\GFARM\installed` e `C:\ProgramData\GFARM\releases`.
-- Dados persistentes: `C:\ProgramData\GFARM\data`.
-- Configuracao: `C:\ProgramData\GFARM\control.json`.
-- Senha do painel: `C:\ProgramData\GFARM\control-auth.json`.
-- Chave privada GitHub: `C:\ProgramData\GFARM\secrets\github_deploy`.
-- Backups: `C:\ProgramData\GFARM\backups`.
+## Dados e autenticacao
 
-Nao compartilhar senhas, `backend.env`, `control-auth.json` ou chaves privadas.
+- Codigo instalado: caminho existente indicado por `control.json.app_path`.
+- Configuracao: ProgramData/GFARM/control.json.
+- Conexao oficial e chave da aplicacao: ProgramData/GFARM/data/backend.env,
+  disponibilizada ao backend/.env instalado.
+- Uploads: ProgramData/GFARM/data/uploads, vinculado ao backend/uploads.
+- XMLs: configuracao ESTQ_XML_TICKET_DIR ou ProgramData/GFARM/data/xml-inbox;
+  o processo da API recebe o mesmo caminho utilizado pelo backup.
+- Senha do painel: ProgramData/GFARM/control-auth.json.
+- Deploy key privada: ProgramData/GFARM/secrets/github_deploy.
+- Backups: ProgramData/GFARM/backups.
+- Journal/backup de programas: ProgramData/GFARM/update/history.
 
-## Primeiro acesso ao GitHub privado
+O instalador aceita autenticacao GitHub do administrador no primeiro uso.
+Reutiliza a deploy key existente em reparos/reinstalacoes. O Control SYSTEM usa
+uma deploy key de leitura autorizada em [Deploy keys](https://github.com/layon-lima/GFARM/settings/keys).
+Nunca compartilhar arquivos de credenciais, senha, .env ou chaves privadas.
 
-O instalador aceita autenticacao GitHub do administrador no primeiro uso. Em maquinas que **ja possuem deploy key** de leitura, a reinstalacao a reutiliza automaticamente. Para o Control funcionar como servico SYSTEM, autorize uma unica vez a chave publica pelo painel **Acesso remoto → Mostrar chave publica** em [Deploy keys do GFARM](https://github.com/layon-lima/GFARM/settings/keys), sem acesso de escrita. Depois, atualizacoes futuras nao precisam da conta pessoal.
+Em **Backups > Recuperar fotos e documentos**, o ZIP e enviado pelo navegador e
+somente uploads/XMLs sao importados. O banco e os anexos existentes nao sao
+sobrescritos. PC e mobile usam o mesmo servidor e os caminhos /uploads.
 
-## Backup e fotos
+## Validacao e compilacao sem publicacao
 
-Em **Backups → Recuperar fotos e documentos**, escolher o ZIP completo pelo seletor de arquivo, enviar e recuperar apenas `uploads/` e `xml_inbox/`. O PostgreSQL nao e restaurado nesse fluxo. O mobile carrega imagens do mesmo servidor local por `/uploads/`.
+O CI executa os testes Python do Control em Linux e Windows, incluindo os casos
+incrementais com Git local real, rollback, caminhos protegidos, o Job Object e
+junctions Windows. Valida scripts PowerShell e compila somente o instalador
+Inno Setup, sem publicar Release. O teste HTTP do Control exercita pagina, JS,
+login e status sem banco/API do estoque.
 
-## Validar instalador Windows sem publicar
+Para o responsavel Windows gerar o instalador aprovado, executar o gerador
+versionado GERAR_INSTALADOR.cmd. O build valida PowerShell, Python e testes;
+qualquer falha interrompe a geracao. A publicacao continua exigindo o parametro
+VersaoAprovada do PUBLICAR_INSTALADOR_GITHUB.ps1: substitui os arquivos da unica
+Release oficial, preservando seu link, e nao cria Releases novas.
 
-Para compilar com dois cliques, atualize o clone pelo GitHub e execute `GFARM APP/ops/gfarm_control/GERAR_INSTALADOR.cmd`. O gerador valida o codigo e coloca o EXE na Area de Trabalho, **sem publicar Release**.
-
-Alternativa no PowerShell, na raiz do clone:
-
-```powershell
-git pull --ff-only origin main
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_control\build_windows.ps1"
-```
-
-O script verifica sintaxe dos PowerShell, testes Python, compila o bootstrap, cria o instalador Inno Setup e imprime o SHA-256; **nao publica Release**.
-
-Depois de testar o EXE numa maquina Windows, a publicacao **somente com aprovacao explicita** utiliza:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_control\PUBLICAR_INSTALADOR_GITHUB.ps1" -VersaoAprovada
-```
-
-Esse comando **substitui os arquivos da unica Release** [GFARM Instalador Oficial](https://github.com/layon-lima/GFARM/releases/tag/gfarm-instalador-01aab5398bed), usando `gh release upload --clobber`. Nenhuma Release nova e criada.
-
-### Confiabilidade
-
-A compilacao e o teste funcional do EXE devem ser executados no Windows. Nao considerar o instalador validado ate verificar: primeira instalacao, reparo sobre dois programas rodando, reinstalacao preservando dados e uso do botao GitHub para atualizar ambas as interfaces web.
+Ainda e obrigatorio testar numa maquina Windows 11: instalacao nova, reparo,
+reinstalacao e migracao do EXE antigo, reinicializacao do Windows, autoatualizacao
+real do Control, recuperacao apos interrupcao, permissoes SYSTEM/usuario comum e
+imagens em PC/mobile. Simulacoes e compilacao do instalador nao comprovam esses
+comportamentos de ponta a ponta.

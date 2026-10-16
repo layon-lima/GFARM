@@ -41,6 +41,7 @@ function Locate-Installed([string]$cmd) {
       (Join-Path $base (Join-Path 'Git\cmd' $cmd)),
       (Join-Path $base (Join-Path 'Git\bin' $cmd)),
       (Join-Path $base (Join-Path 'nodejs' $cmd)),
+      (Join-Path $base (Join-Path 'Python313' $cmd)),
       (Join-Path $base (Join-Path 'Programs\Git\cmd' $cmd)),
       (Join-Path $base (Join-Path 'Programs\nodejs' $cmd)),
       (Join-Path $base (Join-Path 'Programs\Python\Python313' $cmd)),
@@ -58,7 +59,7 @@ function Program([string]$cmd, [string]$id) {
   $wg = Get-Command 'winget.exe' -ErrorAction SilentlyContinue
   if (-not $wg) { throw "$cmd ausente. Instale $id e execute o instalador novamente." }
   Log "Instalando dependencia: $id"
-  & $wg.Source install --id $id --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+  & $wg.Source install --id $id --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
   if ($LASTEXITCODE -ne 0) { throw "Erro $LASTEXITCODE ao instalar $id." }
   $found = Locate-Installed $cmd
   if (-not $found) { throw "$id instalado, mas $cmd nao foi localizado. Verifique a instalacao antes de continuar." }
@@ -295,7 +296,7 @@ try {
   $controlAction = New-ScheduledTaskAction -Execute $controlPythonW -Argument ('"' + $bootstrap + '"') -WorkingDirectory $root
   $controlTrigger = New-ScheduledTaskTrigger -AtStartup
   $controlPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-  $controlSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
+  $controlSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
   Register-ScheduledTask -TaskName 'GFARM Control' -Action $controlAction -Trigger $controlTrigger -Principal $controlPrincipal -Settings $controlSettings -Force | Out-Null
   $registered = (Get-ScheduledTask -TaskName 'GFARM Control').Actions | Select-Object -First 1
   if (-not $registered -or [string]$registered.Execute -ne $controlPythonW) {

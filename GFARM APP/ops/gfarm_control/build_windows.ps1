@@ -6,7 +6,7 @@ $here = $PSScriptRoot
 $repo = (Resolve-Path (Join-Path $here '..\..\..')).Path
 $build = Join-Path $here 'build'
 New-Item -ItemType Directory -Path $build -Force | Out-Null
-foreach ($file in @('server.py','engine.py','control_bootstrap.py','control_reload.py','preinstall_guard.ps1','test_control.py','app.js','ui.html','GFARM_Definitivo.iss','install_windows.ps1')) {
+foreach ($file in @('server.py','engine.py','update_transaction.py','control_bootstrap.py','control_reload.py','preinstall_guard.ps1','test_control.py','app.js','ui.html','GFARM_Definitivo.iss','install_windows.ps1')) {
   if (-not (Test-Path (Join-Path $here $file))) { throw "Arquivo obrigatorio ausente: $file" }
 }
 $git = Get-Command git.exe -ErrorAction Stop
@@ -30,7 +30,7 @@ try {
     }
   }
   Write-Host 'Scripts de instalacao e reparo validados.'
-  & $Python -3.13 -m py_compile server.py engine.py control_bootstrap.py control_reload.py create_icons.py
+  & $Python -3.13 -m py_compile server.py engine.py update_transaction.py control_bootstrap.py control_reload.py create_icons.py
   if ($LASTEXITCODE -ne 0) { throw 'Erro de sintaxe Python.' }
   & $Python -3.13 test_control.py
   if ($LASTEXITCODE -ne 0) { throw 'Testes do GFARM Control falharam. Compilacao bloqueada.' }

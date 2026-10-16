@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -20,13 +21,14 @@ ROOT = Path(os.environ.get("GFARM_HOME") or
             (Path(os.environ.get("PROGRAMDATA", str(Path.home()))) / "GFARM"))
 DATA = ROOT / "data"
 APP = ROOT / "installed" / "GFARM APP"
-RELEASES = ROOT / "releases"
+GIT_CACHE = ROOT / "github-cache.git"
 BACKUPS = ROOT / "backups"
 CONFIG = ROOT / "control.json"
 LOG = ROOT / "control.log"
 REPO = "git@github.com:layon-lima/GFARM.git"
 LOCK = threading.RLock()
 PROCESS = None
+PROCESS_JOB = None
 LAST_START = 0.0
 CONTROL_UPGRADE_PENDING = False
 CONTROL_VERSION_FILE = ROOT / "control-version.json"
@@ -99,6 +101,100 @@ def port_busy(port):
 
 def owned():
     return PROCESS is not None and PROCESS.poll() is None
+
+
+def own_child(process, suspended=False):
+    """Windows Job: um crash/reinicio do Control nao deixa APIs orfas."""
+    if os.name != "nt":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class Limits(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64),
+                    ("PerJobUserTimeLimit", ctypes.c_int64), ("LimitFlags", wintypes.DWORD),
+                    ("MinimumWorkingSetSize", ctypes.c_size_t), ("MaximumWorkingSetSize", ctypes.c_size_t),
+                    ("ActiveProcessLimit", wintypes.DWORD), ("Affinity", ctypes.c_size_t),
+                    ("PriorityClass", wintypes.DWORD), ("SchedulingClass", wintypes.DWORD)]
+
+    class IO(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_uint64) for name in
+                    ("ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                     "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class ExtendedLimits(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", Limits), ("IoInfo", IO),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    kernel.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    kernel.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.CreateJobObjectW(None, None)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    info = ExtendedLimits()
+    info.BasicLimitInformation.LimitFlags = 0x00002000  # KILL_ON_JOB_CLOSE
+    if (not kernel.SetInformationJobObject(handle, 9, ctypes.byref(info), ctypes.sizeof(info))
+            or not kernel.AssignProcessToJobObject(handle, int(process._handle))):
+        error = ctypes.get_last_error()
+        kernel.CloseHandle(handle)
+        raise ctypes.WinError(error)
+    if suspended:
+        # Retomar somente depois de vincular ao job: o launcher de uma venv
+        # Windows pode criar outro Python antes de o pai receber o PID.
+        class ThreadEntry(ctypes.Structure):
+            _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                        ("th32ThreadID", wintypes.DWORD), ("th32OwnerProcessID", wintypes.DWORD),
+                        ("tpBasePri", wintypes.LONG), ("tpDeltaPri", wintypes.LONG),
+                        ("dwFlags", wintypes.DWORD)]
+        kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel.Thread32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(ThreadEntry)]
+        kernel.Thread32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(ThreadEntry)]
+        kernel.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.OpenThread.restype = wintypes.HANDLE
+        kernel.ResumeThread.argtypes = [wintypes.HANDLE]
+        kernel.ResumeThread.restype = wintypes.DWORD
+        snapshot = kernel.CreateToolhelp32Snapshot(0x4, 0)
+        try:
+            if snapshot == ctypes.c_void_p(-1).value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            entry = ThreadEntry()
+            entry.dwSize = ctypes.sizeof(entry)
+            found = kernel.Thread32First(snapshot, ctypes.byref(entry))
+            while found:
+                if entry.th32OwnerProcessID == process.pid:
+                    thread = kernel.OpenThread(0x2, False, entry.th32ThreadID)
+                    if not thread:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    try:
+                        if kernel.ResumeThread(thread) == 0xFFFFFFFF:
+                            raise ctypes.WinError(ctypes.get_last_error())
+                    finally:
+                        kernel.CloseHandle(thread)
+                    break
+                found = kernel.Thread32Next(snapshot, ctypes.byref(entry))
+            else:
+                raise RuntimeError("Thread inicial do GFARM nao identificada.")
+        except Exception:
+            kernel.CloseHandle(handle)
+            raise
+        finally:
+            if snapshot != ctypes.c_void_p(-1).value:
+                kernel.CloseHandle(snapshot)
+    return handle
+
+
+def close_child_job(handle):
+    if handle is not None:
+        import ctypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel.CloseHandle(handle)
 
 
 def executable(root):
@@ -179,7 +275,7 @@ def resolve_program(program):
     )
 
 
-def run(args, *, cwd=None, timeout=1800, env=None):
+def run(args, *, cwd=None, timeout=1800, env=None, binary=False):
     cmd = [str(a) for a in args]
     if not cmd:
         raise RuntimeError("Comando vazio.")
@@ -193,7 +289,8 @@ def run(args, *, cwd=None, timeout=1800, env=None):
         options.update(env)
     try:
         p = subprocess.run(cmd, cwd=str(cwd) if cwd else None,
-                           env=options, text=True, encoding="utf-8", errors="replace",
+                           env=options, text=not binary,
+                           **({} if binary else {"encoding": "utf-8", "errors": "replace"}),
                            capture_output=True, timeout=timeout,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except OSError as exc:
@@ -201,9 +298,11 @@ def run(args, *, cwd=None, timeout=1800, env=None):
             "Nao foi possivel iniciar " + str(args[0]) + ": " + str(exc)
         ) from exc
     if p.returncode:
-        raise RuntimeError("%s falhou: %s" %
-                           (Path(str(args[0])).name, (p.stderr or p.stdout)[-1200:]))
-    return p.stdout.strip()
+        detail = p.stderr or p.stdout
+        if binary:
+            detail = detail.decode("utf-8", errors="replace")
+        raise RuntimeError("%s falhou: %s" % (Path(str(args[0])).name, detail[-1200:]))
+    return p.stdout if binary else p.stdout.strip()
 
 
 def ensure_configured():
@@ -217,33 +316,80 @@ def ensure_configured():
     return p
 
 
+def validate_database(p):
+    """Somente leitura: banco vazio ou com migrations pendentes nao inicia."""
+    script = '''from pathlib import Path
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from app.db.database import engine
+cfg = Config("alembic.ini")
+cfg.set_main_option("script_location", str(Path("alembic").resolve()))
+expected = set(ScriptDirectory.from_config(cfg).get_heads())
+with engine.connect() as db:
+    db.exec_driver_sql("SET TRANSACTION READ ONLY")
+    for table in ("users", "estoque_saldos", "alembic_version"):
+        assert db.exec_driver_sql("SELECT to_regclass(%s)", (table,)).scalar(), "Banco GFARM incompleto"
+    actual = set(db.exec_driver_sql("SELECT version_num FROM alembic_version").scalars())
+    assert actual == expected, "Migrations pendentes: requer procedimento supervisionado"
+print("GFARM_DATABASE_READY")
+'''
+    result = run([executable(p), "-c", script], cwd=p / "backend", timeout=30)
+    if result != "GFARM_DATABASE_READY":
+        raise RuntimeError("O banco oficial nao confirmou integridade de schema; inicio bloqueado.")
+
+
+def frontend_health():
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:%d/" % backend_port(), timeout=2) as response:
+            return response.status == 200 and b'id="root"' in response.read()
+    except (OSError, ValueError, TimeoutError):
+        return False
+
+
 def start():
-    global PROCESS, LAST_START
+    global PROCESS, PROCESS_JOB, LAST_START
     with LOCK:
         p = ensure_configured()
         cfg = load()
         cfg["desired_running"] = True
         save(cfg)
         if owned():
-            return "Servidor ja esta iniciado pelo Control."
+            if running_health() and frontend_health():
+                return "Servidor ja esta iniciado e validado pelo Control."
+            raise RuntimeError("Processo GFARM ativo, mas a aplicacao nao responde corretamente.")
+        close_child_job(PROCESS_JOB)
+        PROCESS_JOB = None
         if port_busy(backend_port()):
             raise RuntimeError("Porta do GFARM ja ocupada. Nao iniciaremos outra API.")
+        validate_database(p)
         py = executable(p)
+        options = os.environ.copy()
+        options["ESTQ_XML_TICKET_DIR"] = env_values().get("ESTQ_XML_TICKET_DIR") or str(DATA / "xml-inbox")
         log = ROOT / "backend.log"
         out = log.open("ab")
         try:
             PROCESS = subprocess.Popen(
-                [str(py), str(p / "backend" / "run_production.py")],
+                # Migrations NUNCA sao aplicadas como efeito colateral do start.
+                [str(py), "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
+                 "--port", str(backend_port()), "--workers", "1"],
                 cwd=str(p / "backend"), stdin=subprocess.DEVNULL,
+                env=options,
                 stdout=out, stderr=subprocess.STDOUT,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) |
+                               (0x4 if os.name == "nt" else 0)),  # CREATE_SUSPENDED
                 close_fds=True)
+            try:
+                PROCESS_JOB = own_child(PROCESS, suspended=os.name == "nt")
+            except Exception:
+                PROCESS.terminate()
+                PROCESS.wait(timeout=10)
+                raise
         finally:
             out.close()
         LAST_START = time.monotonic()
         write_log("Iniciando GFARM, PID %d" % PROCESS.pid)
     for _ in range(50):
-        if running_health():
+        if owned() and running_health() and frontend_health():
             return "GFARM iniciado e validado."
         if PROCESS.poll() is not None:
             raise RuntimeError("Backend encerrou; confira control.log/backend.log.")
@@ -252,13 +398,15 @@ def start():
 
 
 def stop(temporary=False):
-    global PROCESS
+    global PROCESS, PROCESS_JOB
     with LOCK:
         if not temporary:
             cfg = load()
             cfg["desired_running"] = False
             save(cfg)
         if not owned():
+            close_child_job(PROCESS_JOB)
+            PROCESS_JOB = None
             if port_busy(backend_port()):
                 raise RuntimeError("API pertence a outro processo. Control nao vai encerra-lo.")
             return "GFARM ja esta parado."
@@ -270,6 +418,8 @@ def stop(temporary=False):
             PROCESS.kill()
             PROCESS.wait(timeout=10)
         PROCESS = None
+        close_child_job(PROCESS_JOB)
+        PROCESS_JOB = None
         write_log("GFARM parado pelo Control.")
         return "GFARM desligado."
 
@@ -323,7 +473,7 @@ def validate_archive(path):
                 "xmls": sum(n.startswith("xml_inbox/") and not n.endswith("/") for n in names)}
 
 
-def create_backup():
+def create_backup(restart_after=True):
     with LOCK:
         # A API pode continuar ativa ate aqui; bloqueio de escrita e prioridade.
         # Para manter banco e anexos coerentes, paramos a API CONTROLADA.
@@ -373,7 +523,7 @@ def create_backup():
             write_log("Backup validado: %s (%s)" % (dest.name, details))
             return {"arquivo": dest.name, "bytes": dest.stat().st_size, **details}
         finally:
-            if was_running:
+            if was_running and restart_after:
                 try:
                     start()
                 except Exception as ex:
@@ -606,9 +756,13 @@ def link_uploads(folder):
     data_uploads = DATA / "uploads"
     data_uploads.mkdir(parents=True, exist_ok=True)
     dest = folder / "backend" / "uploads"
-    if dest.exists() and not dest.is_symlink():
+    if dest.is_symlink() or (hasattr(dest, "is_junction") and dest.is_junction()):
+        if dest.resolve() != data_uploads.resolve():
+            raise RuntimeError("Uploads vinculados a outro diretorio; revisao necessaria.")
+        return
+    if dest.exists():
         if any(dest.iterdir()):
-            raise RuntimeError("Novo release contem uploads nao vazios.")
+            raise RuntimeError("A pasta instalada contem uploads locais; preserve-os antes de vincular.")
         dest.rmdir()
     if os.name == "nt":
         run(["cmd", "/c", "mklink", "/J", str(dest), str(data_uploads)], timeout=20)
@@ -620,7 +774,7 @@ def link_uploads(folder):
 
 # O unico EXE do GFARM e o instalador. Servico Control roda por Python do Windows.
 # O painel web (Python, JS e HTML) e atualizado pela branch main.
-CONTROL_SOURCES = ("server.py", "engine.py", "app.js", "ui.html", "control_reload.py", "control_bootstrap.py")
+CONTROL_SOURCES = ("server.py", "engine.py", "app.js", "ui.html", "control_reload.py", "control_bootstrap.py", "update_transaction.py")
 
 
 def control_fingerprint(folder):
@@ -643,31 +797,29 @@ def control_web_changed(before, after):
         return True
 
 
-def schedule_web_control_reload(before, previous_version, after):
-    """Reinicia servico web com o Python ja instalado, sem compilacao/EXE."""
+def schedule_web_control_reload(transaction, fingerprint):
+    """Helper independente observa a nova instancia e restaura arquivos se falhar."""
     global CONTROL_UPGRADE_PENDING
     if os.name != "nt":
         return False
-    bootstrap = ROOT / "control_bootstrap.py"
-    if not bootstrap.is_file():
-        raise RuntimeError("Iniciador web do Control ausente. Use o instalador corrigido.")
-    helper = Path(after) / "ops" / "gfarm_control" / "control_reload.py"
-    if not helper.is_file():
-        raise RuntimeError("Helper de recarga do GFARM Control ausente no GitHub.")
-    if port_busy(backend_port()) and not owned():
-        raise RuntimeError("GFARM executando fora do Control; atualizacao bloqueada.")
-    python = executable(after)
-    ready = ROOT / "control-reload" / "ready.txt"
-    ready.parent.mkdir(parents=True, exist_ok=True)
+    helper = transaction.folder / "runner" / "control_reload.py"
+    helper.parent.mkdir(parents=True, exist_ok=True)
+    source = project() / "ops" / "gfarm_control"
+    # Executar uma copia estavel: o proprio Control pode ser revertido em disco.
+    for name in ("control_reload.py", "update_transaction.py"):
+        shutil.copy2(source / name, helper.parent / name)
+    ready = transaction.folder / "ready.txt"
     ready.unlink(missing_ok=True)
+    transaction.info["fingerprint"] = fingerprint
+    transaction.persist()
+    python = ROOT / "control-runtime" / "Scripts" / "python.exe"
+    if not python.is_file():
+        raise RuntimeError("Runtime independente do Control ausente. Execute o reparo.")
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
         subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     child = subprocess.Popen([
-        str(python), str(helper),
-        "--home", str(ROOT), "--parent-pid", str(os.getpid()),
-        "--ready", str(ready), "--previous-app", str(before),
-        "--previous-version", str(previous_version),
-        "--expected-app", str(after),
+        str(python), str(helper), "--home", str(ROOT),
+        "--parent-pid", str(os.getpid()), "--ready", str(ready),
     ], cwd=str(helper.parent), stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         close_fds=True, creationflags=flags)
@@ -675,14 +827,14 @@ def schedule_web_control_reload(before, previous_version, after):
         if ready.is_file() and ready.read_text(encoding="ascii") == str(os.getpid()):
             break
         if child.poll() is not None:
-            raise RuntimeError("Reiniciador web do Control falhou; servico antigo preservado.")
+            raise RuntimeError("Reiniciador do Control falhou; restaurando arquivos anteriores.")
         time.sleep(0.2)
     else:
-        raise RuntimeError("Reiniciador web nao respondeu; servico antigo preservado.")
+        raise RuntimeError("Reiniciador do Control nao respondeu.")
     if owned():
         stop(temporary=True)
+    transaction.state("awaiting_control")
     CONTROL_UPGRADE_PENDING = True
-    write_log("Novo codigo WEB do Control preparado. Reinicio do servico agendado.")
     return True
 
 def consume_control_restart():
@@ -693,109 +845,197 @@ def consume_control_restart():
     return False
 
 
+def npm_command(*args):
+    npm = Path(resolve_program("npm.cmd" if os.name == "nt" else "npm"))
+    if os.name == "nt":
+        # CreateProcess nao executa .cmd de forma confiavel sob SYSTEM.
+        cli = npm.parent / "node_modules" / "npm" / "bin" / "npm-cli.js"
+        if not cli.is_file():
+            raise RuntimeError("npm-cli.js ausente junto ao Node.js. Execute o reparo.")
+        return [resolve_program("node.exe"), str(cli), *args]
+    return [str(npm), *args]
+
+
+def git_manifest(revision, ssh):
+    output = run(["git", "--git-dir", str(GIT_CACHE), "ls-tree", "-rz", revision,
+                  "--", "GFARM APP/"], env=ssh, binary=True)
+    result = {}
+    for record in output.split(b"\0"):
+        if not record:
+            continue
+        meta, name = record.split(b"\t", 1)
+        mode, kind, oid = meta.decode("ascii").split()
+        name = name.decode("utf-8").removeprefix("GFARM APP/")
+        if kind != "blob" or mode not in ("100644", "100755"):
+            raise RuntimeError("Tipo de arquivo Git nao permitido: " + name)
+        result[name] = oid
+    if "backend/run_production.py" not in result:
+        raise RuntimeError("Estrutura do GitHub inesperada.")
+    return result
+
+
+def git_blob_hash(content):
+    return hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + b"\0" + content).hexdigest()
+
+
+def local_matches(path, oid):
+    content = path.read_bytes()
+    # Git para Windows pode materializar arquivos de texto com CRLF.
+    return (git_blob_hash(content) == oid or
+            (b"\0" not in content and git_blob_hash(content.replace(b"\r\n", b"\n")) == oid))
+
+
 def update(progress):
+    try:
+        from .update_transaction import FileUpdate
+    except ImportError:
+        from update_transaction import FileUpdate
     with LOCK:
-        cfg = load()
-        before = project()
-        previous_version = cfg.get("version", "pacote-inicial")
-        ensure_configured()
+        cfg, app = load(), project()
+        previous = cfg.get("version", "")
+        if not re.fullmatch(r"[a-f0-9]{40}", previous):
+            raise RuntimeError("Commit instalado desconhecido. Execute o reparo antes de atualizar.")
+        if (ROOT / "update" / "pending.json").exists():
+            raise RuntimeError("Ha uma atualizacao pendente. Reinicie o Control para recuperar.")
         ssh = ssh_environment()
-        progress("Consultando GitHub privado...")
+        progress("Consultando commit instalado e main do GitHub...")
         remote = run(["git", "ls-remote", REPO, "refs/heads/main"], timeout=90, env=ssh)
-        revision = remote.split()[0]
-        if len(revision) != 40:
+        revision = remote.split()[0] if remote.split() else ""
+        if not re.fullmatch(r"[a-f0-9]{40}", revision):
             raise RuntimeError("Nao foi possivel confirmar a versao main.")
-        if cfg.get("version") == revision:
+        if previous == revision:
             return "GFARM e GFARM Control ja estao na ultima versao."
-        RELEASES.mkdir(parents=True, exist_ok=True)
-        # Tentativas anteriores podem ter sido interrompidas antes da troca
-        # definitiva. Um caminho novo permite tentar de novo sem tocar na
-        # versao ativa nem exigir exclusao manual de arquivos.
-        from uuid import uuid4
-        target = RELEASES / (revision[:12] + "-" + uuid4().hex[:8])
-        progress("Baixando versao em pasta separada...")
-        run(["git", "clone", "--depth", "1", "--filter=blob:none", "--sparse",
-             "--branch", "main", REPO, str(target)], timeout=900, env=ssh)
+        if not GIT_CACHE.is_dir():
+            run(["git", "init", "--bare", str(GIT_CACHE)], timeout=60)
+        # Idempotente inclusive se o processo caiu entre init e config.
+        run(["git", "--git-dir", str(GIT_CACHE), "config", "remote.origin.url", REPO])
+        run(["git", "--git-dir", str(GIT_CACHE), "config", "remote.origin.promisor", "true"])
+        run(["git", "--git-dir", str(GIT_CACHE), "config", "remote.origin.partialclonefilter", "blob:none"])
+        for commit in dict.fromkeys((previous, revision)):
+            run(["git", "--git-dir", str(GIT_CACHE), "-c", "fetch.fsckObjects=true",
+                 "fetch", "--no-tags", "--depth=1", "--filter=blob:none", "origin", commit],
+                timeout=900, env=ssh)
+        old, new = git_manifest(previous, ssh), git_manifest(revision, ssh)
+        changed = sorted(p for p in old.keys() | new.keys() if old.get(p) != new.get(p))
+        if any(p.startswith("backend/alembic/") or p == "backend/alembic.ini" for p in changed):
+            raise RuntimeError("Nova versao altera migrations do PostgreSQL: requer procedimento supervisionado.")
+        for name in changed:
+            try:
+                from .update_transaction import program_path
+            except ImportError:
+                from update_transaction import program_path
+            target = program_path(app, name)
+            if target.exists() and (name not in old or not target.is_file()
+                                    or not local_matches(target, old[name])):
+                raise RuntimeError("Arquivo local diverge do commit instalado: " + name
+                                   + ". Preservado para revisao.")
+        if not changed:
+            cfg["version"] = revision
+            save(cfg)
+            return "Codigo do aplicativo inalterado; referencia main atualizada."
+        transaction = FileUpdate(ROOT, app, previous, revision)
         try:
-            run(["git", "-C", str(target), "sparse-checkout", "set", "GFARM APP"], env=ssh)
-            actual_revision = run(["git", "-C", str(target), "rev-parse", "HEAD"], env=ssh)
-            if actual_revision.strip() != revision:
-                raise RuntimeError("A branch main mudou durante o download; tente atualizar novamente.")
-            release = target / "GFARM APP"
-            if not (release / "backend" / "run_production.py").is_file():
-                raise RuntimeError("Estrutura do GitHub inesperada.")
-            # Atualizar com migrations nao verificadas pode alterar o banco ao iniciar.
-            # Bloqueamos se o conjunto de migrations divergir da versao instalada.
-            migrations = Path("backend/alembic/versions")
-            old_set = {x.name: hashlib.sha256(x.read_bytes()).hexdigest()
-                       for x in (before / migrations).glob("*.py")}
-            new_set = {x.name: hashlib.sha256(x.read_bytes()).hexdigest()
-                       for x in (release / migrations).glob("*.py")}
-            if old_set != new_set:
-                raise RuntimeError("Nova versao altera migrations do PostgreSQL: requer procedimento supervisionado.")
-            progress("Preparando backend e interface...")
-            (release / "backend" / ".env").write_bytes((DATA / "backend.env").read_bytes())
-            link_uploads(release)
-            run(["python", "-m", "venv", str(release / "backend" / ".venv")], timeout=180)
-            py = executable(release)
-            run([str(py), "-m", "pip", "install", "-r", str(release / "backend" / "requirements.txt")],
-                timeout=1800)
-            run(["npm.cmd" if os.name == "nt" else "npm", "ci", "--no-audit", "--no-fund"],
-                cwd=release, timeout=1800)
-            run(["npm.cmd" if os.name == "nt" else "npm", "run", "build"],
-                cwd=release, timeout=1200)
-            if not (release / "dist" / "index.html").is_file():
-                raise RuntimeError("Compilacao do GFARM nao gerou dist/index.html.")
-            # O Control e uma aplicacao WEB local: validar os modulos novos,
-            # sem recompilar ou substituir o bootstrap EXE.
-            changed_control = control_web_changed(before, release)
-            if changed_control:
-                progress("Validando novo codigo WEB do GFARM Control...")
-                control_source = release / "ops" / "gfarm_control"
-                run([str(py), "-m", "py_compile",
-                     str(control_source / "server.py"),
-                     str(control_source / "engine.py"),
-                     str(control_source / "control_reload.py"),
-                     str(control_source / "control_bootstrap.py")], timeout=90)
-            progress("Criando backup obrigatorio antes da atualizacao...")
-            create_backup()
-            progress("Publicando a nova versao e validando API...")
+            staged = {}
+            for index, name in enumerate(changed, 1):
+                progress("Baixando somente arquivos alterados: %d/%d — %s" % (index, len(changed), name),
+                         index - 1, len(changed))
+                if name in new:
+                    content = run(["git", "--git-dir", str(GIT_CACHE), "cat-file", "blob", new[name]],
+                                  timeout=180, env=ssh, binary=True)
+                    if git_blob_hash(content) != new[name]:
+                        raise RuntimeError("Integridade Git invalida: " + name)
+                    if name.endswith(".py"):
+                        compile(content, name, "exec")
+                    staged[name] = content
+                else:
+                    staged[name] = None
+                transaction.capture(name)
             was_running = owned()
             if port_busy(backend_port()) and not was_running:
-                raise RuntimeError("Servidor iniciado fora do Control. Atualizacao bloqueada.")
-            if was_running:
+                raise RuntimeError("API pertence a outro processo; atualizacao bloqueada.")
+            transaction.info["was_running"] = was_running
+            transaction.info["port"] = backend_port()
+            transaction.info["previous_fingerprint"] = control_fingerprint(app)
+            transaction.persist()
+            if (DATA / "backend.env").is_file():
+                progress("Criando backup validado antes de alterar programas...")
+                create_backup(restart_after=False)
+            if owned():
                 stop(temporary=True)
-            cfg["app_path"], cfg["version"] = str(release), revision
+            py = executable(app)
+            # Bootstrap e recuperacao estaveis ANTES da primeira troca de codigo.
+            source = Path(__file__).resolve().parent
+            for name in ("update_transaction.py", "control_bootstrap.py"):
+                transaction.apply("@" + name, (source / name).read_bytes())
+            progress("Substituindo arquivos na mesma pasta instalada...")
+            for name, content in staged.items():
+                transaction.apply(name, content)
+            if "backend/requirements.txt" in changed:
+                rollback_index = next(i for i, entry in enumerate(transaction.info["entries"])
+                                      if entry["path"] == "backend/requirements.txt")
+                saved_requirements = transaction.folder / "files" / str(rollback_index)
+                transaction.restore_command([py, "-m", "pip", "install", "-r", saved_requirements], app)
+                run([py, "-m", "pip", "install", "-r", app / "backend" / "requirements.txt"], cwd=app)
+            run([py, "-m", "pip", "check"], cwd=app)
+            run([py, "-m", "compileall", "-q", "app"], cwd=app / "backend")
+            # Testes do backend usam apenas fixtures/mocks, jamais PostgreSQL real.
+            if (app / "backend" / "tests").is_dir():
+                progress("Validando backend com os testes isolados...")
+                run([py, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+                    cwd=app / "backend", env={"DB_HOST": "127.0.0.1", "DB_PORT": "5432",
+                    "DB_NAME": "teste", "DB_USER": "teste", "DB_PASSWORD": "teste",
+                    "SECRET_KEY": "ci-test-secret"})
+            frontend = any(p.startswith(("src/", "public/")) or
+                           p in ("index.html", "package.json", "package-lock.json", ".npmrc") or
+                           p.endswith(".config.js") for p in changed)
+            if frontend:
+                if any(p in changed for p in ("package.json", "package-lock.json", ".npmrc")) or not (app / "node_modules").is_dir():
+                    ci = npm_command("ci", "--no-audit", "--no-fund")
+                    transaction.restore_command(ci, app)
+                    run(ci, cwd=app)
+                progress("Compilando frontend; arquivos atuais preservados ate concluir...")
+                build = transaction.folder / "build"
+                run(npm_command("run", "build", "--", "--outDir", str(build), "--emptyOutDir"), cwd=app)
+                if not (build / "index.html").is_file():
+                    raise RuntimeError("Compilacao nao gerou index.html.")
+                generated = {p.relative_to(build).as_posix(): p.read_bytes()
+                             for p in build.rglob("*") if p.is_file()}
+                dist = app / "dist"
+                existing = {p.relative_to(dist).as_posix(): p.read_bytes()
+                            for p in dist.rglob("*") if p.is_file()}
+                for name in sorted(existing.keys() | generated.keys()):
+                    if existing.get(name) != generated.get(name):
+                        transaction.apply("dist/" + name, generated.get(name))
+            # Validar todo o Control, inclusive imports, antes do reinicio externo.
+            control_fingerprint(app)
+            run([py, "-m", "compileall", "-q", "ops/gfarm_control"], cwd=app)
+            transaction.apply("@control_bootstrap.py", (app / "ops/gfarm_control/control_bootstrap.py").read_bytes())
+            cfg = load()  # Preservar preferencias alteradas enquanto baixava.
+            if Path(cfg["app_path"]).resolve() != app.resolve():
+                raise RuntimeError("A instalacao ativa mudou durante a atualizacao.")
+            cfg["version"] = revision  # app_path NAO MUDA.
             save(cfg)
-            try:
-                # Nao faz copia/restauracao do banco: migrations identicas.
-                result = start() if was_running else "Versao instalada (servidor permanece desligado)."
-            except Exception:
-                if owned():
-                    try:
-                        stop(temporary=True)
-                    except Exception as x:
-                        write_log("Falha parando nova versao: " + str(x))
-                cfg["app_path"], cfg["version"] = str(before), previous_version
-                save(cfg)
-                if was_running:
-                    try:
-                        start()
-                    except Exception as x:
-                        write_log("CRITICO: rollback nao reiniciou backend: " + str(x))
-                raise
-            restarting_control = False
-            if changed_control:
-                progress("GFARM atualizado; reiniciando codigo WEB do Control...")
-                restarting_control = schedule_web_control_reload(before, previous_version, release)
-            progress("Nova versao do GFARM publicada; versao anterior preservada.")
-            write_log("Atualizado: " + revision)
-            return (result + (" Control web reiniciando." if restarting_control else "")
-                    + " Commit: " + revision[:12])
+            result = start() if was_running else "Arquivos atualizados; GFARM permanece desligado."
+            control_changed = any(p in {"ops/gfarm_control/" + n for n in CONTROL_SOURCES} for p in changed)
+            if control_changed and schedule_web_control_reload(transaction, control_fingerprint(app)):
+                progress("Arquivos aplicados; aguardando validacao do Control apos reinicio...")
+                return result + " Control reiniciando para validar. Commit: " + revision[:12]
+            transaction.finish()
+            progress("Atualizacao incremental concluida na mesma pasta.")
+            write_log("Atualizacao incremental: " + revision)
+            return result + " Commit: " + revision[:12]
         except Exception:
-            # Pastas preparadas nao alteram a instalacao ativa.
-            if project() != target / "GFARM APP":
-                shutil.rmtree(target, ignore_errors=True)
+            if transaction.info["state"] != "prepared":
+                if owned():
+                    stop(temporary=True)
+                transaction.rollback()
+                if transaction.info.get("was_running"):
+                    start()
+            else:
+                transaction.state("cancelled")
+                transaction.pending.unlink(missing_ok=True)
+                if transaction.info.get("was_running") and not owned():
+                    start()
             raise
 
 

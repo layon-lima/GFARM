@@ -427,6 +427,16 @@ Testar o endpoint/fluxo que a UI realmente usa.
 
 # 13. DEPLOY
 
+## Atualizacao incremental (regra de 16/10/2026)
+
+- O botao **Atualizar GitHub** atualiza GFARM e GFARM Control na MESMA pasta instalada, mantendo `app_path`.
+- Usar cache Git de metadados/objetos e baixar somente os blobs alterados; nao clonar o aplicativo inteiro nem criar uma instalacao por versao em atualizacoes normais.
+- Adicionar, substituir e remover somente arquivos de programa identificados pelo diff de commits. Preservar os arquivos sem alteracao e bloquear conflitos locais.
+- Staging temporario dos arquivos alterados, compilacao temporaria de `dist` e backup dos arquivos substituidos sao permitidos para validacao/rollback; nao sao instalacoes paralelas.
+- Preservar integralmente PostgreSQL, `.env`, anexos, XMLs, backups, chaves e senha do Control. Migrations diferentes exigem procedimento supervisionado; iniciar o servico nao aplica migrations.
+- Os dois aplicativos rodam como servicos/web por Python. O unico EXE proprio distribuido e `GFARM_Instalador_Definitivo.exe`; preservar suporte de migracao das instalacoes antigas.
+- Preparar branch e PR; nao integrar a `main` nem substituir o instalador da Release sem aprovacao explicita do usuario.
+
 O usuário possui painel local com a ação:
 
 **“Atualizar do GitHub e publicar”**

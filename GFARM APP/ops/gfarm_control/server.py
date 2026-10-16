@@ -25,6 +25,9 @@ except ImportError:
     import engine
 
 PORT = 8787
+# Calculado ao carregar o processo: nao confundir arquivos novos em disco com
+# o codigo Python que a instancia antiga ainda esta executando em memoria.
+CONTROL_FINGERPRINT = engine.control_fingerprint(Path(__file__).resolve().parents[2])
 PASSWORD_PATH = engine.ROOT / "control-auth.json"
 SESSIONS = {}
 RATE = {}
@@ -90,14 +93,17 @@ def valid_host(header):
 
 def job_start(action, options):
     with JOB_LOCK:
-        if CURRENT_JOB["state"] == "running":
+        if (CURRENT_JOB["state"] in ("running", "restarting") or
+                (engine.ROOT / "update" / "pending.json").is_file()):
             raise RuntimeError("Ja existe uma operacao em andamento.")
         CURRENT_JOB.update(state="running", action=action, message="Iniciando...", ended=None)
 
     def worker():
-        def report(message):
+        def report(message, completed=None, total=None):
             with JOB_LOCK:
                 CURRENT_JOB["message"] = message
+                CURRENT_JOB["progress"] = ({"completed": completed, "total": total}
+                                           if total else None)
             engine.write_log(action + ": " + message)
         try:
             report("Executando " + action + "...")
@@ -121,7 +127,7 @@ def job_start(action, options):
             else:
                 raise RuntimeError("Acao nao permitida.")
             with JOB_LOCK:
-                CURRENT_JOB.update(state="done", message=str(result),
+                CURRENT_JOB.update(state="restarting" if engine.CONTROL_UPGRADE_PENDING else "done", message=str(result),
                                    ended=time.time())
             engine.write_log(action + " concluido.")
             if action == "update" and engine.consume_control_restart():
@@ -236,7 +242,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/bootstrap":
             self.send(200, {"installed": PASSWORD_PATH.is_file(),
-                            "authenticated": bool(self.session())})
+                            "authenticated": bool(self.session()),
+                            "control_fingerprint": CONTROL_FINGERPRINT})
             return
         session = self.authorized()
         if session is None:
@@ -249,7 +256,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/log":
             log = engine.LOG
             lines = log.read_text(encoding="utf-8", errors="replace").splitlines()[-120:] if log.is_file() else []
-            upgrade_log = engine.ROOT / "control-selfupdate.log"
+            upgrade_log = engine.ROOT / "control-reload.log"
             if upgrade_log.is_file():
                 lines.append("--- Atualizacoes do GFARM Control ---")
                 lines.extend(upgrade_log.read_text(encoding="utf-8", errors="replace").splitlines()[-50:])

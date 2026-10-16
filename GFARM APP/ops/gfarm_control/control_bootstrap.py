@@ -17,6 +17,11 @@ from pathlib import Path
 
 def start(home=None):
     home = Path(home or (Path(os.environ.get("PROGRAMDATA", str(Path.home()))) / "GFARM"))
+    recovery = home / "update_transaction.py"
+    if (home / "update" / "pending.json").is_file():
+        if not recovery.is_file():
+            raise RuntimeError("Atualizacao interrompida sem recuperador; execute o reparo.")
+        runpy.run_path(str(recovery))["recover_pending"](home)
     config = home / "control.json"
     if not config.is_file():
         raise RuntimeError("GFARM Control ainda nao tem instalacao configurada.")
