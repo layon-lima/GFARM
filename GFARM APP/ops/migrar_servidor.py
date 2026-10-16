@@ -107,8 +107,8 @@ def exportar(destino_dir: Path, confirmada_parada: bool) -> None:
 
     if api_ativa():
         raise RuntimeError(
-            "A API ainda está no ar: pause o monitor e desligue o backend "
-            "no painel antes do backup final."
+            "A API ainda está no ar: execute GFARM.ps1 -Acao Parar "
+            "antes do backup final de transferência."
         )
 
     backup = criar_backup(origem="transferencia_servidor")

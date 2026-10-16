@@ -1,6 +1,6 @@
 # AGENTS.md — REGRAS OFICIAIS DO PROJETO ESTQ
 
-> Última atualização: 07/10/2026
+> Última atualização: 16/10/2026
 >
 > Este arquivo é a referência permanente de trabalho do projeto **ESTQ / ESTOQUE_NOVO_HORIZONTE**.
 > Antes de qualquer alteração no projeto, este arquivo deve ser lido primeiro.
@@ -388,7 +388,7 @@ Fluxo obrigatório (decisão mais recente do proprietário, 16/10/2026):
 2. Antes de alterar qualquer arquivo, consultar o HEAD atual da `main` e conferir o fluxo real.
 3. Alterar somente arquivos necessários, validar testes e diff e publicar commits pequenos e focados na `main`, sem force push.
 4. Não depender de GitHub Actions. Fazer verificações locais ou isoladas sem criar workflows.
-5. O GFARM Control atualiza a instalação **somente a partir da `main`** pelo botão Atualizar GitHub; não solicitar `git pull` manual ao usuário.
+5. O script PowerShell oficial atualiza a instalação somente a partir da branch main com a acao Atualizar; GFARM Control e instalador EXE foram removidos.
 6. Preservar PostgreSQL, dados, segredos, anexos e versões existentes. Publicar no GitHub não significa que o PC já foi atualizado.
 7. Não misturar mudanças não relacionadas nem substituir instalador/Release sem aprovação explícita.
 
@@ -425,43 +425,27 @@ Testar o endpoint/fluxo que a UI realmente usa.
 - Hospedagem externa deve manter PostgreSQL e uploads persistentes, rede de banco privada, HTTPS, healthchecks, backups EXTERNOS e nenhum segredo no GitHub.
 - Balanca Web Serial depende do navegador/USB do PC operador; pasta local XML requer transferencia segura para VPS.
 
-## 12.2 PAINEL ÚNICO E TRANSFERÊNCIA PARA OUTRO WINDOWS
+## 12.2 GERENCIADOR ÚNICO POWERSHELL — WINDOWS (16/10/2026)
 
-- Entrega para novo PC: **um unico GFARM_Instalador_Definitivo.exe**, compilado pelo build_windows.ps1 versionado. GFARM e GFARM Control sao aplicativos web executados por Python; nao gerar PAINEL_ESTQ.exe, GFARM.exe ou GFARM-Control.exe.
-- No novo PC, o instalador prepara dependencias e codigo privado. O Control web configura a conexao com o PostgreSQL existente e oferece restauracao verificada somente em destino vazio, com confirmacao explicita; nao criar/reinicializar banco automaticamente.
-- Toda a operação de instalação, atualização, início, diagnóstico, exportação e restauração deve estar acessível pelo painel.
-- Banco, uploads, XMLs e chaves privadas NÃO estão no GitHub ou no EXE; transferir dados reais em pacote ZIP + SHA256 via meio privado criptografado e exigir confirmação da fonte antes do corte.
-- Preservar identidade, contas, históricos, custos, saldos oficiais do motor, tickets e arquivos; não reinicializar banco antigo, não criar um banco paralelo, não reescrever registros.
-- Nunca abrir backend no destino com banco vazio. Não permitir restore sobre tabelas ou uploads existentes; não iniciar o túnel público novo antes de parar o antigo para escrita.
-- Cloudflare Tunnel precisa de autorização pelo próprio dono no novo PC; não gravar token no GitHub, painel ou logs. Dispositivos Web Serial necessitam de nova permissão no navegador.
-- O painel deve operar com duplo clique no Windows e exibir erro/progresso, sem exigir git pull, Python ou scripts manuais ao usuário como fluxo principal.
+- O aplicativo no PC é somente **GFARM** (React/FastAPI, normalmente 127.0.0.1:8000). O GFARM Control na porta 8787 e o instalador EXE foram descontinuados.
+- Fonte de verdade de código: GitHub branch main. Instalacao, migracao, atualizacao, inicializacao, parada, status, logs e backup sao operacoes do script versionado em GFARM APP/ops/windows/GFARM.ps1.
+- O Windows deve manter uma tarefa **GFARM Servidor** que inicia diretamente pythonw.exe e o GFARM-Servico.py, sem dependencia do GFARM Control ou processo pai.
+- O comando de primeira migracao (-Acao Migrar) deve detectar o caminho ativo pelo legado ProgramData/GFARM/control.json, quando presente, e reutilizar backend.env, chave de autenticacao, PostgreSQL, uploads e XMLs. Nao criar, resetar nem restaurar bancos automaticamente.
+- Baixar e validar apenas codigo de GFARM APP, executar verificacao de dependencies e frontend ANTES de interromper o servidor atual. A transferencia para nova tarefa ocorre somente apos staging pronto.
+- A tarefa do GFARM Control somente pode ser eliminada depois que o novo GFARM responder em /api/health e servir a pagina React. Falha na troca deve tentar restaurar a instalacao anterior sem apagar dados.
+- Atualizar baixa a main do GitHub privado e nunca executa migrations; caso as migrations instaladas difiram, interromper e exigir procedimento supervisionado. Nunca rodar run_production.py como parte de update silencioso.
+- O script nao deve expor segredos, apagar ProgramData/GFARM/data, desinstalar PostgreSQL nem mexer em Cloudflare Tunnel.
+- Administracao operacional ocorre diretamente no PowerShell, sem painel Control, instalador EXE, GitHub Actions, branches extras ou Pull Requests.
+- Apos confirmacao de migracao, remover codigo e tarefas antigas do Control; preservar backup externo e arquivos operacionais do GFARM. Nao declarar PC migrado apenas porque a main foi modificada.
+- No PC novo, exigir backend.env transferido privadamente e banco existente; o script nao inventa credenciais, schema ou dados.
 
-# 13. DEPLOY
+# 13. PUBLICAÇÃO E ATUALIZAÇÃO
 
-- O usuario quer validar a instalacao no proprio PC e corrigir erros concretos conforme aparecerem; nao exigir outro computador ou maquina virtual como pre-requisito.
-- Para esta entrega solicitada, a publicacao pode substituir o instalador da Release oficial apos os testes e a compilacao Windows. O marcador de commit `[instalar-no-pc]` solicita essa entrega; commits comuns nao publicam instaladores.
-
-## Atualizacao incremental (regra de 16/10/2026)
-
-- O botao **Atualizar GitHub** atualiza GFARM e GFARM Control na MESMA pasta instalada, mantendo `app_path`.
-- Usar cache Git de metadados/objetos e baixar somente os blobs alterados; nao clonar o aplicativo inteiro nem criar uma instalacao por versao em atualizacoes normais.
-- Adicionar, substituir e remover somente arquivos de programa identificados pelo diff de commits. Preservar os arquivos sem alteracao e bloquear conflitos locais.
-- Staging temporario dos arquivos alterados, compilacao temporaria de `dist` e backup dos arquivos substituidos sao permitidos para validacao/rollback; nao sao instalacoes paralelas.
-- Preservar integralmente PostgreSQL, `.env`, anexos, XMLs, backups, chaves e senha do Control. Migrations diferentes exigem procedimento supervisionado; iniciar o servico nao aplica migrations.
-- Os dois aplicativos rodam como servicos/web por Python. O unico EXE proprio distribuido e `GFARM_Instalador_Definitivo.exe`; preservar suporte de migracao das instalacoes antigas.
-- Desenvolver diretamente na `main`, sem criar branch ou PR. Nao substituir o instalador da Release sem aprovacao explicita do usuario.
-
-O usuário possui painel local com a ação:
-
-**“Atualizar do GitHub e publicar”**
-
-Depois de colocar a alteração na `main`, orientar o usuário a usar esse botão.
-
-Não mandar o usuário fazer `git pull` manual como fluxo normal.
-
-Não assumir acesso ao computador local do usuário.
-
-Não afirmar que o deploy local ocorreu só porque o GitHub foi atualizado.
+- Alteracoes sao publicadas diretamente na main, apos leitura deste AGENTS, verificacao de codigo e testes possiveis.
+- O fluxo no PC e baixar GFARM.ps1 do GitHub privado uma vez e executar -Acao Migrar como administrador. Depois usar ProgramData/GFARM/GFARM.ps1 -Acao Atualizar.
+- A instalacao local depende de acesso ao repositorio privado (deploy key de leitura autorizada ou login do usuario); nenhuma Release/EXE, acao Actions ou copia paralela permanente e necessaria.
+- A troca valida aplicacao no ar antes de desativar a tarefa antiga. Staging e rollback temporario de codigo podem ser utilizados para preservacao; nunca remover dados por conveniencia.
+- Nao instruir o usuario a usar o botao de um Control descontinuado. Nao alegar que o Windows foi atualizado ate o script concluir com health HTTP.
 
 ---
 
@@ -595,8 +579,8 @@ Se alguma resposta for problemática, **não fazer merge** até corrigir.
 
 # 21. ORGANIZAÇÃO GFARM (15/10/2026)
 
-- Código, instalador, painel, backend, frontend e testes ficam em **GFARM APP/**.
+- Código GFARM, PowerShell de manutencao, backend, frontend e testes ficam em **GFARM APP/**. Os arquivos do GFARM Control e o instalador EXE foram retirados.
 - **BACKUPS/** permanece separado na raiz.
-- **.github/workflows/** permanece na raiz, com builds executados em **GFARM APP/**.
+- Nao criar nem executar workflows GitHub Actions para instalacao; verificacoes devem ser feitas sem creditos de Actions.
 - Caminhos relativos descritos nas regras anteriores são interpretados a partir de **GFARM APP/**.
-- A instalação antiga do servidor não deve ser atualizada automaticamente para este layout sem plano de migração seguro.
+- A instalacao anterior gerenciada por Control deve ser migrada apenas pelo script PowerShell que valida o novo servico antes de remover a tarefa legada.

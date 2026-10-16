@@ -1,23 +1,22 @@
 # GFARM APP
 
-Código atual do estoque Novo Horizonte.
+Código oficial do estoque Novo Horizonte.
 
-- `src/`, `public/`, `package*.json`: frontend React/Vite.
-- `backend/app/`, `backend/alembic/`: FastAPI, motor de estoque, autenticação e migrations do banco.
-- `ops/gfarm_control/`: gerenciador e instalador oficial Windows.
-- `ops/migrar_servidor.py`, `deploy/cloud/`: utilitários atuais para migração controlada e hospedagem alternativa.
-- `tests/`: testes atuais.
+- src/, public/, package*.json: frontend React/Vite.
+- backend/app/, backend/alembic/: FastAPI, motor oficial, autenticação e schema PostgreSQL.
+- ops/windows/GFARM.ps1: único gerenciador de instalação e atualização Windows.
+- ops/windows/GFARM-Servico.py: serviço independente iniciado pelo Windows.
+- ops/migrar_servidor.py: exportação/restauração supervisionada de dados.
+- deploy/cloud/: implantação Linux separada.
+- tests/ e backend/tests/: regressões.
 
-## Instalação Windows
+**GFARM Control foi removido.** A porta 8787 e o instalador EXE não são mais
+necessários. O servidor roda pelo Agendador com a tarefa **GFARM Servidor**.
 
-Utilize `GFARM_Instalador_Definitivo.exe` na [área Releases](https://github.com/layon-lima/GFARM/releases). Ele instala GFARM + Control no Windows e baixa o sistema do GitHub privado.
+## Instalação / atualização Windows
 
-O banco PostgreSQL existente **não é excluído**. Configure-o no Control; não execute restaurações sobre bancos com dados.
+Consulte [ops/windows/README.md](ops/windows/README.md). O primeiro acesso a um
+PC exige o arquivo privado backend.env do banco já existente, obtido por
+transferência segura — o script não cria banco de produção.
 
-## Desenvolvimento
-
-```powershell
-npm ci
-npm run build
-npm run lint
-```
+As atualizações vêm somente de main e não alteram o PostgreSQL.

@@ -1,23 +1,24 @@
 # GFARM — ESTOQUE NOVO HORIZONTE
 
-Repositório do sistema atual: frontend React/Vite, backend FastAPI, PostgreSQL e **GFARM Control**.
+Sistema de estoque privado. Interface React/Vite, API FastAPI e banco PostgreSQL existente.
 
-- [GFARM APP](GFARM%20APP/) — frontend, backend, migrations e testes.
-- [GFARM Control e instalador](GFARM%20APP/ops/gfarm_control/) — inicialização, atualizações e backups.
-- [**Única Release oficial**](https://github.com/layon-lima/GFARM/releases/tag/gfarm-instalador-01aab5398bed) — download do instalador Windows.
-- [BACKUPS](BACKUPS/) — backup histórico com dados reais, preservado para recuperação.
+**O GFARM Control e o instalador EXE foram descontinuados e removidos.** O servidor
+Windows é independente: a tarefa **GFARM Servidor** executa o FastAPI na porta
+configurada (normalmente 8000). Instalação, atualizações, backup e manutenção são
+executados diretamente por um script PowerShell versionado na branch **main**.
 
-## Política de publicação — somente versões aprovadas
+- [Aplicativo GFARM](GFARM%20APP/) — frontend, API, banco e testes.
+- [Gerenciador PowerShell](GFARM%20APP/ops/windows/GFARM.ps1) — instalação e manutenção.
+- [Guia de migração e atualização](GFARM%20APP/ops/windows/README.md).
+- [Migração de dados para outro servidor](GFARM%20APP/ops/migrar_servidor.py).
 
-Atualizações de código são enviadas para `main` **sem criar Releases**. O workflow de instaladores antigos foi removido.
+O PostgreSQL, os anexos, XMLs e segredos são dados persistentes **fora do
+repositório**. Atualizar o código não recria banco, não executa migrations nem
+apaga históricos. Alterações de schema exigem procedimento supervisionado.
 
-Após a versão ser **testada e explicitamente aprovada**, no Windows o responsável pode executar:
+O repositório é privado: o download para o PC precisa de login do GitHub ou da
+deploy key somente leitura já configurada. Não colocar senhas, arquivos .env,
+chaves privadas ou dumps em commits.
 
-```powershell
-git pull --ff-only origin main
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_control\PUBLICAR_INSTALADOR_GITHUB.ps1" -VersaoAprovada
-```
-
-O script **não cria nova Release**, nem novas tags; ele recompila e **substitui o `GFARM_Instalador_Definitivo.exe` e o `.sha256` da Release existente**. Se a Release oficial estiver ausente ou houver mais de uma, o envio é bloqueado para revisão. Não há publicação automática por push no GitHub.
-
-O PostgreSQL, as migrations e os backups não são apagados pelo processo.
+Os scripts são executados manualmente no Windows, sem GitHub Actions, PRs,
+releases ou instalador compilado.
