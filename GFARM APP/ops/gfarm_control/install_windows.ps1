@@ -25,19 +25,41 @@ function Refresh-Path {
   $env:PATH = [Environment]::GetEnvironmentVariable('PATH','Machine') + ';' +
               [Environment]::GetEnvironmentVariable('PATH','User')
 }
-function Program([string]$cmd, [string]$id) {
+function Locate-Installed([string]$cmd) {
   Refresh-Path
   $found = Get-Command $cmd -ErrorAction SilentlyContinue
   if ($found) { return $found.Source }
+  $bases = @($env:ProgramFiles,
+             [Environment]::GetEnvironmentVariable('ProgramFiles(x86)'),
+             $env:LOCALAPPDATA)
+  foreach ($base in $bases) {
+    if (-not $base) { continue }
+    $candidates = @(
+      (Join-Path $base (Join-Path 'Git\cmd' $cmd)),
+      (Join-Path $base (Join-Path 'Git\bin' $cmd)),
+      (Join-Path $base (Join-Path 'nodejs' $cmd)),
+      (Join-Path $base (Join-Path 'Programs\Git\cmd' $cmd)),
+      (Join-Path $base (Join-Path 'Programs\nodejs' $cmd)),
+      (Join-Path $base (Join-Path 'Programs\Python\Python313' $cmd)),
+      (Join-Path $base (Join-Path 'Programs\Python\Python314' $cmd))
+    )
+    foreach ($candidate in $candidates) {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+  }
+  return $null
+}
+function Program([string]$cmd, [string]$id) {
+  $found = Locate-Installed $cmd
+  if ($found) { return $found }
   $wg = Get-Command 'winget.exe' -ErrorAction SilentlyContinue
   if (-not $wg) { throw "$cmd ausente. Instale $id e execute o instalador novamente." }
   Log "Instalando dependencia: $id"
   & $wg.Source install --id $id --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
   if ($LASTEXITCODE -ne 0) { throw "Erro $LASTEXITCODE ao instalar $id." }
-  Refresh-Path
-  $found = Get-Command $cmd -ErrorAction SilentlyContinue
-  if (-not $found) { throw "$id instalado, mas $cmd nao foi localizado. Reinicie o Windows." }
-  return $found.Source
+  $found = Locate-Installed $cmd
+  if (-not $found) { throw "$id instalado, mas $cmd nao foi localizado. Verifique a instalacao antes de continuar." }
+  return $found
 }
 
 try {
@@ -64,6 +86,25 @@ try {
   $git = Program 'git.exe' 'Git.Git'
   $env:GCM_INTERACTIVE = 'always'
   $env:GIT_TERMINAL_PROMPT = '1'
+  # Nas maquinas ja autorizadas, preferir deploy key de leitura: reinstalar
+  # nao precisa autenticar novamente com conta pessoal no GitHub.
+  $repoUrl = 'https://github.com/layon-lima/GFARM.git'
+  $deployKey = Join-Path $root 'secrets\github_deploy'
+  if (Test-Path -LiteralPath $deployKey -PathType Leaf) {
+    $ssh = Locate-Installed 'ssh.exe'
+    if (-not $ssh) {
+      $gitRoot = Split-Path (Split-Path $git -Parent) -Parent
+      $candidate = Join-Path $gitRoot 'usr\bin\ssh.exe'
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { $ssh = $candidate }
+    }
+    if ($ssh) {
+      $env:GIT_SSH_COMMAND = '"' + $ssh + '" -i "' + $deployKey +
+        '" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new'
+      $env:GIT_TERMINAL_PROMPT = '0'
+      $repoUrl = 'git@github.com:layon-lima/GFARM.git'
+      Log 'Deploy key ja configurada: usando acesso de leitura ao GitHub.'
+    }
+  }
   $config = $null
   $previousApp = $null
   $source = Join-Path $installed 'source'
@@ -85,7 +126,7 @@ try {
     # validar e compilar antes de trocar o app_path em control.json.
     $staged = Join-Path $installed ('nova-versao-' + [Guid]::NewGuid().ToString('N'))
     Log 'Baixando codigo novo da branch main do GitHub em pasta separada...'
-    & $git clone --depth 1 --filter=blob:none --sparse --single-branch --branch main 'https://github.com/layon-lima/GFARM.git' $staged
+    & $git clone --depth 1 --filter=blob:none --sparse --single-branch --branch main $repoUrl $staged
     if ($LASTEXITCODE -ne 0) {
       throw 'Falha no download do GitHub. O GFARM existente continua preservado.'
     }
