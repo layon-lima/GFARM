@@ -36,12 +36,13 @@ Name: "desktopicon"; Description: "Criar atalhos dos dois aplicativos na área d
 Name: "{commonappdata}\GFARM"
 
 [Files]
+; Extrair o preflight antes dos EXEs para minimizar tempo com solid compression.
+Source: "preinstall_guard.ps1"; Flags: dontcopy
 Source: "build\GFARM.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM-Control.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM-Control.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "install_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
-Source: "preinstall_guard.ps1"; Flags: dontcopy
 
 [Icons]
 Name: "{autoprograms}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\GFARM.ico"
@@ -122,19 +123,33 @@ begin
   RepairOption.Left := 0;
   RepairOption.Top := 8;
   RepairOption.Width := ModePage.SurfaceWidth;
-  RepairOption.Height := 42;
-  RepairOption.WordWrap := True;
-  RepairOption.Caption := 'REPARAR / INSTALAR POR CIMA - manter codigo local, banco, fotos e configuracoes.';
+  RepairOption.Height := 22;
+  RepairOption.Caption := 'REPARAR / INSTALAR POR CIMA';
   RepairOption.Checked := True;
+  Txt := TNewStaticText.Create(ModePage);
+  Txt.Parent := ModePage.Surface;
+  Txt.Left := 22;
+  Txt.Top := 33;
+  Txt.Width := ModePage.SurfaceWidth - 25;
+  Txt.Height := 42;
+  Txt.WordWrap := True;
+  Txt.Caption := 'Mantem o codigo instalado. Repara os iniciadores e dependencias; preserva banco, fotos, backups e senha.';
   ReinstallOption := TNewRadioButton.Create(ModePage);
   ReinstallOption.Parent := ModePage.Surface;
   ReinstallOption.Left := 0;
-  ReinstallOption.Top := 66;
+  ReinstallOption.Top := 91;
   ReinstallOption.Width := ModePage.SurfaceWidth;
-  ReinstallOption.Height := 68;
-  ReinstallOption.WordWrap := True;
-  ReinstallOption.Caption := 'REINSTALAR OS PROGRAMAS - baixar novamente o GFARM do GitHub e reconfigurar somente os programas. Preservar banco, fotos, backups, usuario e senha do Control.';
+  ReinstallOption.Height := 22;
+  ReinstallOption.Caption := 'REINSTALAR OS PROGRAMAS';
   ReinstallOption.Enabled := PreviousInstallation();
+  Txt := TNewStaticText.Create(ModePage);
+  Txt.Parent := ModePage.Surface;
+  Txt.Left := 22;
+  Txt.Top := 116;
+  Txt.Width := ModePage.SurfaceWidth - 25;
+  Txt.Height := 62;
+  Txt.WordWrap := True;
+  Txt.Caption := 'Baixa os programas atuais em pasta nova. Preserva o banco PostgreSQL, imagens, XMLs, backups, configuracoes e senha.';
 
   PasswordPage := CreateInputQueryPage(ModePage.ID, '2/3 — GFARM CONTROL',
     'Senha do painel independente de administração.',
