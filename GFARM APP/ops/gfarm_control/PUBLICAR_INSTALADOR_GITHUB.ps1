@@ -86,7 +86,7 @@ try {
     & $gh auth login --hostname github.com --git-protocol https --web
     Fail-OnExit 'Nao foi possivel autenticar no GitHub'
   }
-  Write-Host '[4/5] Enviando o EXE e o SHA256 para GitHub Releases...'
+  Write-Host '[4/6] Enviando o EXE e o SHA256 para GitHub Releases...'
   $existingJson = & $gh release list --repo $repoId --json tagName --limit 100
   Fail-OnExit 'Nao foi possivel listar Releases'
   $releases = @($existingJson | ConvertFrom-Json)
@@ -99,12 +99,41 @@ try {
     & $gh release create $tag $exe $hashFile --repo $repoId --target $current --title "GFARM - Instalador Windows ($short)" --notes $notes
     Fail-OnExit 'Falha ao publicar Release'
   }
-  Write-Host '[5/5] Conferindo arquivos publicados...'
+  Write-Host '[5/6] Conferindo arquivos publicados...'
   $publishedJson = & $gh release view $tag --repo $repoId --json assets,url
   Fail-OnExit 'Nao foi possivel verificar a Release'
   $published = $publishedJson | ConvertFrom-Json
   $asset = @($published.assets | Where-Object { $_.name -eq 'GFARM_Instalador_Definitivo.exe' })
   if ($asset.Count -ne 1) { throw 'A Release nao confirmou a presenca do instalador EXE.' }
+
+  # Somente APOS confirmar que o novo EXE esta publicado:
+  # remover antigos GFARM_Instalador.exe, preservando PAINEL_ESTQ.exe,
+  # arquivos dos painéis e as próprias Releases históricas.
+  Write-Host '[6/6] Removendo instaladores GFARM antigos das Releases painel-estq...'
+  $legacyJson = & $gh api "repos/$repoId/releases?per_page=100"
+  Fail-OnExit 'Falha ao buscar as Releases antigas; nenhuma exclusao iniciada'
+  $legacyReleases = @($legacyJson | ConvertFrom-Json)
+  $removed = 0
+  foreach ($oldRelease in $legacyReleases) {
+    if ([string]$oldRelease.tag_name -notmatch '^painel-estq-\d+
+  Write-Host ('LINK: ' + $published.url)
+  Write-Host ('SHA-256: ' + $hash)
+} finally {
+  Pop-Location
+}
+) { continue }
+    foreach ($oldAsset in @($oldRelease.assets)) {
+      $fileName = [string]$oldAsset.name
+      if ($fileName -ne 'GFARM_Instalador.exe' -and
+          $fileName -ne 'GFARM_Instalador.exe.sha256') { continue }
+      Write-Host ("Removendo antigo: " + $oldRelease.tag_name + " / " + $fileName)
+      & $gh api --method DELETE ("repos/$repoId/releases/assets/" + [string]$oldAsset.id)
+      Fail-OnExit ("Falha ao remover $fileName da Release " + $oldRelease.tag_name)
+      $removed++
+    }
+  }
+  Write-Host "Arquivos antigos de instaladores removidos: $removed"
+
   Write-Host ''
   Write-Host 'INSTALADOR PUBLICADO NO GITHUB COM SUCESSO!' -ForegroundColor Green
   Write-Host ('LINK: ' + $published.url)
