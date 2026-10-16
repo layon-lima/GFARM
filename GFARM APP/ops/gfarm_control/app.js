@@ -2,6 +2,7 @@
 let CSRF = "";
 let busy = false;
 let logsCache = "";
+let connectionLost = false;
 const $ = id => document.getElementById(id);
 const txt = (id, value) => { const el = $(id); if (el) el.textContent = String(value ?? "—"); };
 
@@ -12,7 +13,20 @@ async function request(path, method = "GET", data = null) {
     options.headers["X-GFARM-CSRF"] = CSRF;
     options.body = JSON.stringify(data || {});
   }
-  const resp = await fetch(path, options);
+  let resp;
+  try {
+    resp = await fetch(path, options);
+  } catch (cause) {
+    // Sem resposta HTTP: nao confundir reinicio/desligamento do Control com
+    // uma falha do GitHub. NUNCA tentar repetir um POST automaticamente.
+    const error = new Error(
+      "Sem conexão com o GFARM Control. Verifique http://127.0.0.1:8787/api/bootstrap " +
+      "no PC do servidor. O serviço pode estar reiniciando ou parado."
+    );
+    error.network = true;
+    error.cause = cause;
+    throw error;
+  }
   let result;
   try { result = await resp.json(); } catch { throw new Error("Resposta inválida do servidor Control."); }
   if (resp.status === 401 && path !== "/api/login") {
@@ -70,7 +84,30 @@ function renderStatus(payload) {
   document.querySelectorAll("[data-action]").forEach(btn => btn.disabled = busy);
 }
 async function status() {
-  try { renderStatus(await request("/api/status")); } catch (ex) { console.warn(ex.message); }
+  try {
+    const payload = await request("/api/status");
+    renderStatus(payload);
+    if (connectionLost) {
+      connectionLost = false;
+      message("Conexão com o GFARM Control restabelecida. Confira o resultado da operação no painel.");
+    }
+  } catch (ex) {
+    if (ex.network) {
+      if (!connectionLost) {
+        connectionLost = true;
+        message(
+          "Conexão com o GFARM Control interrompida. Se estava atualizando, " +
+          "o serviço pode estar reiniciando; a confirmação ficará disponível após reconectar.",
+          true
+        );
+      }
+      busy = true;
+      document.querySelectorAll("[data-action]").forEach(btn => btn.disabled = true);
+      txt("update-state", "Sem conexão com o Control");
+    } else {
+      console.warn(ex.message);
+    }
+  }
 }
 async function operate(action, data = {}) {
   if (busy) return message("Uma operação ainda está em andamento.", true);
@@ -79,9 +116,21 @@ async function operate(action, data = {}) {
   if (action === "restore" && !confirm("A restauração só será permitida se banco e diretórios estiverem vazios. Confirmar?")) return;
   try {
     await request("/api/action", "POST", { action, ...data });
+    message("Solicitação recebida pelo Control. Acompanhe o progresso no painel.");
     await status();
-    message("Operação iniciada. Acompanhe o progresso no painel.");
-  } catch (ex) { message(ex.message, true); }
+  } catch (ex) {
+    if (ex.network && action === "update") {
+      // A conexao pode cair depois de o servidor receber a ordem.
+      // Nao repetir a atualizacao sem verificar status/log.
+      message(
+        "Não foi possível confirmar se o Control recebeu a atualização. " +
+        "Não clique novamente antes de verificar o estado do servidor. " + ex.message,
+        true
+      );
+    } else {
+      message(ex.message, true);
+    }
+  }
 }
 async function importSelectedAssets() {
   if (busy) return message("Aguarde a operação em andamento.", true);
