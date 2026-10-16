@@ -41,6 +41,10 @@ def resource(name):
     # revisao local dos arquivos Python, apos atualizar via GitHub.
     root = Path(__file__).resolve().parent
     path = root / name
+    if not path.is_file() and getattr(sys, "frozen", False):
+        # Primeira instalacao sem codigo em disco ainda usa as telas
+        # incorporadas ao bootstrap. Apos instalar, o codigo e servido do Git.
+        path = Path(getattr(sys, "_MEIPASS", root)) / name
     if not path.is_file():
         raise RuntimeError("Arquivo do Control nao encontrado: " + name)
     return path.read_bytes()
