@@ -469,6 +469,12 @@ def _installed_web_control():
 
 
 def start_control():
+    # O atalho e a tela final do instalador rodam com o usuario comum.
+    # O servico GFARM Control roda como SYSTEM, com acesso aos segredos.
+    # NUNCA ler control.json / ProgramData ao apenas abrir o navegador.
+    # A configuracao inicial de senha tambem e tratada pelo bootstrap local.
+    if "--open" in sys.argv[1:] or "--setup-password-file" in sys.argv[1:]:
+        return main()
     live = _installed_web_control()
     if live:
         live.main()
