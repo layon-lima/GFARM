@@ -1,7 +1,7 @@
 ; GFARM - Instalador Windows em 3 etapas.
 ; Instalador leve: baixa os arquivos do GFARM diretamente do GitHub privado.
 #define AppName "GFARM"
-#define AppVersion "2.0.0"
+#define AppVersion "2.1.0"
 
 [Setup]
 AppId={{F07ED2B2-26D1-4B38-AE42-A6043556E6E8}
@@ -23,7 +23,7 @@ SetupIconFile=build\GFARM.ico
 UninstallDisplayIcon={app}\GFARM.exe
 DisableProgramGroupPage=yes
 ChangesAssociations=no
-CloseApplications=yes
+CloseApplications=no
 RestartApplications=no
 
 [Languages]
@@ -41,6 +41,7 @@ Source: "build\GFARM-Control.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM-Control.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "install_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "preinstall_guard.ps1"; Flags: dontcopy
 
 [Icons]
 Name: "{autoprograms}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\GFARM.ico"
@@ -58,12 +59,43 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""GFARM Control"" /F"; 
 [Code]
 var
   Stage1: TWizardPage;
+  ModePage: TWizardPage;
+  RepairOption: TNewRadioButton;
+  ReinstallOption: TNewRadioButton;
   PasswordPage: TInputQueryWizardPage;
   Stage3: TWizardPage;
 
 function PasswordNeeded(): Boolean;
 begin
   Result := not FileExists(ExpandConstant('{commonappdata}\GFARM\control-auth.json'));
+end;
+
+function PreviousInstallation(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{commonappdata}\GFARM\control.json')) or
+    FileExists(ExpandConstant('{app}\GFARM-Control.exe'));
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (PageID = PasswordPage.ID) and not PasswordNeeded();
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Parameters: String;
+  ExitCode: Integer;
+begin
+  Result := '';
+  ExtractTemporaryFile('preinstall_guard.ps1');
+  Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' +
+    ExpandConstant('{tmp}\preinstall_guard.ps1') + '" -InstallDir "' +
+    ExpandConstant('{app}') + '"';
+  if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      Parameters, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ExitCode) then
+    Result := 'Nao foi possivel preparar a instalacao. O GFARM anterior foi preservado.'
+  else if ExitCode <> 0 then
+    Result := 'Nao foi possivel parar os programas com seguranca. Confira a janela de preparacao. Nenhum dado do PostgreSQL foi modificado.';
 end;
 
 procedure InitializeWizard;
@@ -80,10 +112,31 @@ begin
   Txt.Height := 130;
   Txt.Caption := 'A instalação terá dois atalhos independentes: GFARM e GFARM Control.' + #13#10#13#10 +
     'O GFARM será baixado do GitHub privado durante a instalação; poderá pedir autenticação.' + #13#10 +
-    'Os arquivos operacionais ficarão separados, em ProgramData\GFARM.' + #13#10#13#10 +
-    'Não serão criados dados fictícios e o banco PostgreSQL existente não será apagado.';
+    'Os arquivos operacionais ficam em ProgramData\GFARM.' + #13#10#13#10 +
+    'O instalador pode reparar ou reinstalar os programas, mas NUNCA apaga PostgreSQL, fotos, XMLs, senhas ou backups.';
 
-  PasswordPage := CreateInputQueryPage(Stage1.ID, '2/3 — GFARM CONTROL',
+  ModePage := CreateCustomPage(Stage1.ID, 'MODO DE INSTALACAO',
+    'Escolha como tratar uma instalacao GFARM existente.');
+  RepairOption := TNewRadioButton.Create(ModePage);
+  RepairOption.Parent := ModePage.Surface;
+  RepairOption.Left := 0;
+  RepairOption.Top := 8;
+  RepairOption.Width := ModePage.SurfaceWidth;
+  RepairOption.Height := 42;
+  RepairOption.WordWrap := True;
+  RepairOption.Caption := 'REPARAR / INSTALAR POR CIMA - manter codigo local, banco, fotos e configuracoes.';
+  RepairOption.Checked := True;
+  ReinstallOption := TNewRadioButton.Create(ModePage);
+  ReinstallOption.Parent := ModePage.Surface;
+  ReinstallOption.Left := 0;
+  ReinstallOption.Top := 66;
+  ReinstallOption.Width := ModePage.SurfaceWidth;
+  ReinstallOption.Height := 68;
+  ReinstallOption.WordWrap := True;
+  ReinstallOption.Caption := 'REINSTALAR OS PROGRAMAS - baixar novamente o GFARM do GitHub e reconfigurar somente os programas. Preservar banco, fotos, backups, usuario e senha do Control.';
+  ReinstallOption.Enabled := PreviousInstallation();
+
+  PasswordPage := CreateInputQueryPage(ModePage.ID, '2/3 — GFARM CONTROL',
     'Senha do painel independente de administração.',
     'Defina a senha que será utilizada para atualizar, fazer backup e controlar o servidor.');
   PasswordPage.Add('Senha administrativa (mínimo de 12 caracteres):', True);
@@ -123,7 +176,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  P, Arguments: String;
+  P, Arguments, InstallMode: String;
   ResultCode: Integer;
 begin
   if CurStep <> ssPostInstall then
@@ -142,9 +195,12 @@ begin
   end;
 
   WizardForm.StatusLabel.Caption := '1/3 e 3/3 — Instalando GFARM, dependências e serviço do Windows...';
+  InstallMode := 'Repair';
+  if ReinstallOption.Checked and ReinstallOption.Enabled then
+    InstallMode := 'Reinstall';
   Arguments := '-NoProfile -ExecutionPolicy Bypass -File "' +
     ExpandConstant('{app}\install_windows.ps1') + '" -InstallDir "' +
-    ExpandConstant('{app}') + '"';
+    ExpandConstant('{app}') + '" -Mode ' + InstallMode;
   if (not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     Arguments, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode)) or
     (ResultCode <> 0) then
