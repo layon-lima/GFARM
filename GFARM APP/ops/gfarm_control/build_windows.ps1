@@ -13,6 +13,47 @@ $git = Get-Command git.exe -ErrorAction Stop
 $rev = (& $git.Source -C $repo rev-parse --short HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Compilar dentro do repositorio GFARM.' }
 Write-Host "GFARM, commit $rev"
+
+function Find-Python313 {
+  # Sem aspas internas: funciona tambem no binding nativo do PowerShell 5.1.
+  $probe = 'import sys; sys.exit(1) if sys.version_info[:2] != (3, 13) else print(sys.executable)'
+  if ($Python -eq 'py') {
+    $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
+    if ($launcher) {
+      try {
+        $found = & $launcher.Source -3.13 -c $probe 2>$null
+        if ($LASTEXITCODE -eq 0 -and $found -and (Test-Path -LiteralPath "$found")) { return "$found" }
+      } catch { }
+    }
+  }
+  $command = Get-Command $(if ($Python -eq 'py') { 'python.exe' } else { $Python }) -ErrorAction SilentlyContinue
+  $candidates = @(
+    $(if ($command) { $command.Source }),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python313\python.exe')
+  )
+  foreach ($candidate in $candidates) {
+    if (-not $candidate -or -not (Test-Path -LiteralPath $candidate -PathType Leaf) -or
+        $candidate -like '*\WindowsApps\*') { continue }
+    try {
+      $found = & $candidate -c $probe 2>$null
+      if ($LASTEXITCODE -eq 0 -and $found -and (Test-Path -LiteralPath "$found")) { return "$found" }
+    } catch { }
+  }
+  return $null
+}
+$interpreter = Find-Python313
+if (-not $interpreter) {
+  Write-Host 'Instalando Python 3.13 para compilar neste PC...'
+  $winget = Get-Command winget.exe -ErrorAction Stop
+  & $winget.Source install --id Python.Python.3.13 --exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw 'Falha instalando Python 3.13.' }
+  $env:PATH = [Environment]::GetEnvironmentVariable('PATH','Machine') + ';' +
+              [Environment]::GetEnvironmentVariable('PATH','User') + ';' + $env:PATH
+  $interpreter = Find-Python313
+}
+if (-not $interpreter) { throw 'Python 3.13 nao foi localizado apos a instalacao.' }
+$Python = $interpreter
 Push-Location $here
 try {
   Write-Host '[1/3] Validando PowerShell do instalador e codigo Python web...'
@@ -30,14 +71,14 @@ try {
     }
   }
   Write-Host 'Scripts de instalacao e reparo validados.'
-  & $Python -3.13 -m py_compile server.py engine.py update_transaction.py control_bootstrap.py control_reload.py create_icons.py
+  & $Python -m py_compile server.py engine.py update_transaction.py control_bootstrap.py control_reload.py create_icons.py
   if ($LASTEXITCODE -ne 0) { throw 'Erro de sintaxe Python.' }
-  & $Python -3.13 test_control.py
+  & $Python test_control.py
   if ($LASTEXITCODE -ne 0) { throw 'Testes do GFARM Control falharam. Compilacao bloqueada.' }
   Write-Host '[2/3] Gerando somente icones WEB; sem PyInstaller...'
-  & $Python -3.13 -m pip install --disable-pip-version-check pillow
+  & $Python -m pip install --disable-pip-version-check pillow
   if ($LASTEXITCODE -ne 0) { throw 'Pillow necessario para gerar os icones do instalador.' }
-  & $Python -3.13 create_icons.py
+  & $Python create_icons.py
   if ($LASTEXITCODE -ne 0) { throw 'Falha gerando icones WEB.' }
   if (!(Test-Path (Join-Path $build 'GFARM.ico')) -or
       !(Test-Path (Join-Path $build 'GFARM-Control.ico'))) {

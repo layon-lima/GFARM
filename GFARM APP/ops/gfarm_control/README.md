@@ -91,6 +91,15 @@ sobrescritos. PC e mobile usam o mesmo servidor e os caminhos /uploads.
 
 ## Validacao e compilacao sem publicacao
 
+**Compilar no proprio PC sem creditos do Actions:** baixar `GERAR_INSTALADOR.cmd`
+e executar com dois cliques. O arquivo funciona sozinho, inclusive fora do
+repositorio: baixa o codigo completo da main para `Area de Trabalho/GFARM-CODIGO`
+e compila dentro dessa copia. Se essa pasta ja existir, usa outro nome para
+preserva-la. Pode pedir login do GitHub para acessar o repositorio privado.
+Instala/localiza Git, Python 3.13 e Inno Setup conforme necessario. O resultado
+e `GFARM_Instalador_Definitivo.exe` na Area de Trabalho, junto do log de
+compilacao `GFARM-COMPILACAO.log`. A compilacao e local e nao publica Releases.
+
 O CI executa os testes Python do Control em Linux e Windows, incluindo os casos
 incrementais com Git local real, rollback, caminhos protegidos, o Job Object e
 junctions Windows. Valida scripts PowerShell e compila somente o instalador
