@@ -41,10 +41,6 @@ def resource(name):
     # revisao local dos arquivos Python, apos atualizar via GitHub.
     root = Path(__file__).resolve().parent
     path = root / name
-    if not path.is_file() and getattr(sys, "frozen", False):
-        # Primeira instalacao sem codigo em disco ainda usa as telas
-        # incorporadas ao bootstrap. Apos instalar, o codigo e servido do Git.
-        path = Path(getattr(sys, "_MEIPASS", root)) / name
     if not path.is_file():
         raise RuntimeError("Arquivo do Control nao encontrado: " + name)
     return path.read_bytes()
@@ -417,77 +413,16 @@ def main():
         ACTIVE_HTTP_SERVER = None
 
 
-def _installed_web_control():
-    """Exec iniciado pelo instalador: carrega codigo WEB do Control no disco.
-
-    O EXE e so o bootstrap estavel. Atualizacoes do GitHub nao requerem
-    reconstruir PyInstaller ou substituir binarios em Program Files.
-    """
-    if not getattr(sys, "frozen", False):
-        return None
-    config = engine.CONFIG
-    if not config.is_file():
-        return None
-    try:
-        app = Path(json.loads(config.read_text(encoding="utf-8"))["app_path"]).resolve()
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    web_dir = app / "ops" / "gfarm_control"
-    source = web_dir / "server.py"
-    logic = web_dir / "engine.py"
-    if not source.is_file() or not logic.is_file():
-        return None
-    # Compatibilidade com instalacoes antigas: iniciar o Control embutido
-    # (ja corrigido) ate o botao GitHub instalar o codigo web atual.
-    if "def schedule_web_control_reload(" not in logic.read_text(encoding="utf-8"):
-        return None
-    import importlib.util
-    # Fonte existente em ProgramData/GFARM: criada pelo instalador, com ACL
-    # restrita aos administradores e SYSTEM. Nunca buscar codigo remoto aqui.
-    previous_engine = sys.modules.get("engine")
-    previous_path = list(sys.path)
-    try:
-        sys.path.insert(0, str(web_dir))
-        spec_engine = importlib.util.spec_from_file_location("engine", logic)
-        live_engine = importlib.util.module_from_spec(spec_engine)
-        sys.modules["engine"] = live_engine
-        spec_engine.loader.exec_module(live_engine)
-        spec_server = importlib.util.spec_from_file_location("gfarm_control_web_live", source)
-        live_server = importlib.util.module_from_spec(spec_server)
-        spec_server.loader.exec_module(live_server)
-        return live_server
-    except Exception:
-        # Jamais iniciar Control parcialmente atualizado nem cair
-        # silenciosamente para logica velha com rotas incompatíveis.
-        if previous_engine is not None:
-            sys.modules["engine"] = previous_engine
-        else:
-            sys.modules.pop("engine", None)
-        raise
-    finally:
-        sys.path[:] = previous_path
-
-
 def start_control():
-    # O atalho e a tela final do instalador rodam com o usuario comum.
-    # O servico GFARM Control roda como SYSTEM, com acesso aos segredos.
-    # NUNCA ler control.json / ProgramData ao apenas abrir o navegador.
-    # A configuracao inicial de senha tambem e tratada pelo bootstrap local.
-    if "--open" in sys.argv[1:] or "--setup-password-file" in sys.argv[1:]:
-        return main()
-    live = _installed_web_control()
-    if live:
-        live.main()
-    else:
-        main()
+    # Serviço Python WEB instalado. Atalhos são links HTTP, não executáveis.
+    main()
 
 
 if __name__ == "__main__":
     try:
         start_control()
     except Exception as exc:
-        # PyInstaller --windowed nao possui console: diagnostico local obrigatorio.
-        # Senhas/tokens nao sao incluidos no log de inicializacao.
+        # O serviço Python registra falhas sem expor senhas ou tokens.
         try:
             engine.ROOT.mkdir(parents=True, exist_ok=True)
             with (engine.ROOT / "control-startup.log").open(
