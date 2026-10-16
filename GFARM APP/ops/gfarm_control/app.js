@@ -65,7 +65,7 @@ async function status() {
 async function operate(action, data = {}) {
   if (busy) return message("Uma operação ainda está em andamento.", true);
   if (action === "stop" && !confirm("Desligar somente a API do GFARM? O PostgreSQL continuará funcionando.")) return;
-  if (action === "update" && !confirm("Atualizar GFARM e GFARM Control pela branch main? O Control poderá reiniciar automaticamente e pedir um novo login. Os dados do PostgreSQL serão preservados.")) return;
+  if (action === "update" && !confirm("Atualizar os dois sistemas WEB pelo GitHub? O Control poderá reiniciar e pedir novo login. O instalador e o PostgreSQL não serão alterados.")) return;
   if (action === "restore" && !confirm("A restauração só será permitida se banco e diretórios estiverem vazios. Confirmar?")) return;
   try {
     await request("/api/action", "POST", { action, ...data });
