@@ -15,6 +15,7 @@ import socket
 import sys
 import threading
 import time
+import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -334,7 +335,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send(200, {"message": "Monitor automatico configurado."})
             else:
                 self.send(404, {"error": "Rota inexistente."})
-        except (RuntimeError, ValueError, OSError, json.JSONDecodeError) as ex:
+        except (RuntimeError, ValueError, OSError, zipfile.BadZipFile, json.JSONDecodeError) as ex:
             self.send(400, {"error": str(ex)})
 
 
