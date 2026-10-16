@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Package,
   ChevronDown,
@@ -69,6 +69,49 @@ export default function SetorProdutoRow({
   const longPressedRef = useRef(false);
   const pointerStartRef = useRef(null);
   const [fotoOpen, setFotoOpen] = useState(false);
+  const fotoUrl = resolveMediaUrl(produto.foto_url);
+  const [fotoStatus, setFotoStatus] = useState({
+    url: fotoUrl,
+    tentativa: 0,
+    falhou: false,
+  });
+  // Falha antiga nao deve manter a imagem oculta apos recuperar o backup.
+  const fotoAtual = fotoStatus.url === fotoUrl
+    ? fotoStatus
+    : { url: fotoUrl, tentativa: 0, falhou: false };
+  const mostrarFoto = Boolean(fotoUrl) && !fotoAtual.falhou;
+  const fotoSrc = fotoUrl && fotoAtual.tentativa > 0
+    && !fotoUrl.startsWith('data:') && !fotoUrl.startsWith('blob:')
+    ? `${fotoUrl}${fotoUrl.includes('?') ? '&' : '?'}gfarm_recuperar=${fotoAtual.tentativa}`
+    : fotoUrl;
+
+  useEffect(() => {
+    if (!mobile || !fotoUrl || !fotoAtual.falhou) return undefined;
+    const tentarNovamente = () => {
+      if (document.visibilityState === 'hidden') return;
+      setFotoStatus((anterior) => ({
+        url: fotoUrl,
+        tentativa: anterior.url === fotoUrl ? anterior.tentativa + 1 : 1,
+        falhou: false,
+      }));
+    };
+    const aoRetornar = () => {
+      if (document.visibilityState === 'visible') tentarNovamente();
+    };
+    window.addEventListener('online', tentarNovamente);
+    window.addEventListener('focus', tentarNovamente);
+    document.addEventListener('visibilitychange', aoRetornar);
+    // Apenas uma repeticao automatica para evitar downloads excessivos.
+    const timer = fotoAtual.tentativa < 1
+      ? window.setTimeout(tentarNovamente, 20000)
+      : null;
+    return () => {
+      window.removeEventListener('online', tentarNovamente);
+      window.removeEventListener('focus', tentarNovamente);
+      document.removeEventListener('visibilitychange', aoRetornar);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [mobile, fotoUrl, fotoAtual.falhou, fotoAtual.tentativa]);
 
   const parcelas = (saldos || [])
     .filter(
@@ -159,8 +202,6 @@ export default function SetorProdutoRow({
   };
 
   if (mobile) {
-    const fotoUrl = resolveMediaUrl(produto.foto_url);
-
     return (
       <>
         <article
@@ -187,33 +228,35 @@ export default function SetorProdutoRow({
           className="mobile-sector-product__main"
         >
           <div
-            className={`mobile-sector-product__icon ${fotoUrl ? 'cursor-zoom-in' : ''}`}
+            className={`mobile-sector-product__icon ${mostrarFoto ? 'cursor-zoom-in' : ''}`}
             onPointerDown={(event) => {
-              if (!fotoUrl) return;
+              if (!mostrarFoto) return;
               event.stopPropagation();
               cancelarLongPress();
             }}
             onPointerUp={(event) => {
-              if (fotoUrl) event.stopPropagation();
+              if (mostrarFoto) event.stopPropagation();
             }}
             onClick={(event) => {
-              if (!fotoUrl) return;
+              if (!mostrarFoto) return;
               event.stopPropagation();
               setFotoOpen(true);
             }}
           >
-            {fotoUrl ? (
+            {mostrarFoto ? (
               <img
-                src={fotoUrl}
+                key={fotoSrc}
+                src={fotoSrc}
                 alt=""
                 className="h-full w-full object-cover"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                  event.currentTarget.nextElementSibling?.classList.remove('hidden');
-                }}
+                onError={() => setFotoStatus({
+                  url: fotoUrl,
+                  tentativa: fotoAtual.tentativa,
+                  falhou: true,
+                })}
               />
             ) : null}
-            <Package className={`h-5 w-5 ${fotoUrl ? 'hidden' : ''}`} />
+            <Package className={`h-5 w-5 ${mostrarFoto ? 'hidden' : ''}`} />
           </div>
 
           <div className="mobile-sector-product__identity">
@@ -351,7 +394,7 @@ export default function SetorProdutoRow({
               </DialogTitle>
             </DialogHeader>
             <img
-              src={fotoUrl}
+              src={fotoSrc}
               alt={produto.nome || 'Produto'}
               className="max-h-[82vh] w-full rounded-lg object-contain"
             />
