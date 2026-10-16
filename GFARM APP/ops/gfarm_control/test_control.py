@@ -26,6 +26,31 @@ class TestGFARMControl(unittest.TestCase):
                 z.writestr(name, content)
         return dest
 
+    def test_locate_external_program_even_when_not_on_path(self):
+        directory = Path(self.folder.name) / "bin"
+        directory.mkdir()
+        program = directory / ("gfarm-test-helper.exe" if os.name == "nt"
+                               else "gfarm-test-helper")
+        program.write_bytes(b"binary-test")
+        program.chmod(0o755)
+        with (mock.patch.object(self.engine, "_program_paths", return_value=[str(directory)]),
+              mock.patch.dict(os.environ, {"PATH": ""})):
+            self.assertEqual(Path(self.engine.resolve_program(program.name)), program)
+
+    def test_missing_dependency_identifies_name(self):
+        with (mock.patch.object(self.engine, "_program_paths", return_value=[]),
+              mock.patch.dict(os.environ, {"PATH": ""})):
+            with self.assertRaisesRegex(RuntimeError, "gfarm-binario-inexistente"):
+                self.engine.resolve_program("gfarm-binario-inexistente")
+
+    def test_run_error_identifies_program(self):
+        import subprocess
+        with (mock.patch.object(self.engine, "resolve_program", return_value="git"),
+              mock.patch("engine.subprocess.run", side_effect=FileNotFoundError(
+                  2, "The system cannot find the file specified", "git"))):
+            with self.assertRaisesRegex(RuntimeError, "Nao foi possivel iniciar git"):
+                self.engine.run(["git", "ls-remote", "origin"])
+
     def test_control_fingerprint_only_changes_when_control_changes(self):
         source = Path(self.folder.name) / "sample" / "ops" / "gfarm_control"
         source.mkdir(parents=True)
