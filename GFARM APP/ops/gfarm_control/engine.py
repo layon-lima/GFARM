@@ -114,15 +114,93 @@ def executable(root):
     raise RuntimeError("Python do GFARM nao instalado. Execute o reparo no instalador.")
 
 
+def _program_paths():
+    """Caminhos instalados no Windows mesmo quando o Control roda como SYSTEM.
+
+    O Agendador nao herda o PATH atualizado da sessao interativa do Windows.
+    Preferir binarios existentes conhecidos, sem alterar o PATH do computador.
+    """
+    paths = []
+    if os.name != "nt":
+        return paths
+    for variable in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):
+        base = os.environ.get(variable)
+        if base:
+            parent = Path(base)
+            paths.extend((parent / "Git" / "cmd",
+                          parent / "Git" / "bin",
+                          parent / "Git" / "usr" / "bin",
+                          parent / "nodejs",
+                          parent / "Python313",
+                          parent / "Python314"))
+    root = os.environ.get("SystemRoot", "C:/Windows")
+    paths.extend((Path(root) / "System32",
+                  Path(root) / "System32" / "OpenSSH"))
+    # Git e Node instalados pelo winget para o administrador podem ficar em
+    # seu perfil em vez de Program Files; detectar somente caminhos conhecidos.
+    public = os.environ.get("PUBLIC")
+    if public:
+        users = Path(public).parent
+        if users.is_dir():
+            for profile in users.iterdir():
+                if profile.is_dir() and profile.name.lower() not in (
+                        "public", "default", "default user", "all users"):
+                    local = profile / "AppData" / "Local"
+                    paths.extend((
+                        local / "Programs" / "Git" / "cmd",
+                        local / "Programs" / "Git" / "bin",
+                        local / "Programs" / "nodejs",
+                        local / "Programs" / "Python" / "Python313",
+                        local / "Programs" / "Python" / "Python314",
+                    ))
+    return [str(path) for path in paths if path.is_dir()]
+
+
+def resolve_program(program):
+    """Localiza comando sem depender do PATH da tarefa agendada do Windows."""
+    command = str(program)
+    if Path(command).is_file():
+        return command
+    # Comandos qualificados devem falhar de forma explicita.
+    if Path(command).is_absolute() or "/" in command or "\\" in command:
+        raise RuntimeError("Programa nao encontrado: " + command)
+    if command.lower() == "python":
+        try:
+            return str(executable(project()))
+        except (RuntimeError, OSError, KeyError):
+            pass
+    locations = _program_paths()
+    found = shutil.which(command, path=os.pathsep.join(
+        [os.environ.get("PATH", ""), *locations]))
+    if found:
+        return found
+    raise RuntimeError(
+        "Dependencia do GFARM Control nao encontrada no Windows: " + command
+        + ". Confirme a instalacao do programa (Git, Node.js ou Python)."
+    )
+
+
 def run(args, *, cwd=None, timeout=1800, env=None):
+    cmd = [str(a) for a in args]
+    if not cmd:
+        raise RuntimeError("Comando vazio.")
+    cmd[0] = resolve_program(cmd[0])
     options = os.environ.copy()
     options["GIT_TERMINAL_PROMPT"] = "0"
+    options["PATH"] = os.pathsep.join([
+        options.get("PATH", ""), *_program_paths()
+    ])
     if env:
         options.update(env)
-    p = subprocess.run([str(a) for a in args], cwd=str(cwd) if cwd else None,
-                       env=options, text=True, encoding="utf-8", errors="replace",
-                       capture_output=True, timeout=timeout,
-                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    try:
+        p = subprocess.run(cmd, cwd=str(cwd) if cwd else None,
+                           env=options, text=True, encoding="utf-8", errors="replace",
+                           capture_output=True, timeout=timeout,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError as exc:
+        raise RuntimeError(
+            "Nao foi possivel iniciar " + str(args[0]) + ": " + str(exc)
+        ) from exc
     if p.returncode:
         raise RuntimeError("%s falhou: %s" %
                            (Path(str(args[0])).name, (p.stderr or p.stdout)[-1200:]))
@@ -511,7 +589,8 @@ def ssh_environment():
     if not key.is_file():
         raise RuntimeError("Chave de leitura GitHub nao configurada. Autorize a deploy key do Control.")
     # Chave somente leitura. Nao e enviada ao GitHub em logs nem na linha de comando.
-    env = {"GIT_SSH_COMMAND": 'ssh -i "%s" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new' % key}
+    ssh = resolve_program("ssh")
+    env = {"GIT_SSH_COMMAND": '"%s" -i "%s" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new' % (ssh, key)}
     return env
 
 
