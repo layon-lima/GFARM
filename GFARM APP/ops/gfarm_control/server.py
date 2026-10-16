@@ -31,6 +31,7 @@ RATE = {}
 CURRENT_JOB = {"state": "idle", "message": "Nenhuma operacao iniciada."}
 JOB_LOCK = threading.RLock()
 UPLOAD_LOCK = threading.Lock()
+ACTIVE_HTTP_SERVER = None
 
 
 def resource(name):
@@ -119,6 +120,16 @@ def job_start(action, options):
                 CURRENT_JOB.update(state="done", message=str(result),
                                    ended=time.time())
             engine.write_log(action + " concluido.")
+            if action == "update" and engine.consume_control_restart():
+                # A resposta do painel precisa sair antes da porta ser fechada.
+                # O helper de troca ja esta pronto e aguarda este PID encerrar.
+                def finish_control():
+                    time.sleep(3)
+                    if ACTIVE_HTTP_SERVER is not None:
+                        engine.write_log("Encerrando somente o Control para autoatualizacao...")
+                        ACTIVE_HTTP_SERVER.shutdown()
+                threading.Thread(target=finish_control, name="gfarm-selfupdate-shutdown",
+                                 daemon=True).start()
         except Exception as ex:
             with JOB_LOCK:
                 CURRENT_JOB.update(state="error", message=str(ex),
@@ -361,6 +372,7 @@ def remote_listener():
 
 
 def main():
+    global ACTIVE_HTTP_SERVER
     p = argparse.ArgumentParser()
     p.add_argument("--setup-password-file", type=Path)
     p.add_argument("--open", action="store_true")
@@ -384,8 +396,13 @@ def main():
     threading.Thread(target=engine.watchdog, daemon=True).start()
     threading.Thread(target=remote_listener, daemon=True).start()
     server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    ACTIVE_HTTP_SERVER = server
     engine.write_log("GFARM Control ativo em http://127.0.0.1:%d" % args.port)
-    server.serve_forever(poll_interval=0.5)
+    try:
+        server.serve_forever(poll_interval=0.5)
+    finally:
+        server.server_close()
+        ACTIVE_HTTP_SERVER = None
 
 
 if __name__ == "__main__":
