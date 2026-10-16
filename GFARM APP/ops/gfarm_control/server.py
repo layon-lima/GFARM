@@ -245,7 +245,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/log":
             log = engine.LOG
             lines = log.read_text(encoding="utf-8", errors="replace").splitlines()[-120:] if log.is_file() else []
-            self.send(200, {"lines": lines})
+            upgrade_log = engine.ROOT / "control-selfupdate.log"
+            if upgrade_log.is_file():
+                lines.append("--- Atualizacoes do GFARM Control ---")
+                lines.extend(upgrade_log.read_text(encoding="utf-8", errors="replace").splitlines()[-50:])
+            self.send(200, {"lines": lines[-200:]})
         elif path == "/api/deploy-key":
             self.send(200, {"public_key": engine.public_key()})
         else:
