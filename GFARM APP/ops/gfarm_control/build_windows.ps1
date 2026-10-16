@@ -6,7 +6,7 @@ $here = $PSScriptRoot
 $repo = (Resolve-Path (Join-Path $here '..\..\..')).Path
 $build = Join-Path $here 'build'
 New-Item -ItemType Directory -Path $build -Force | Out-Null
-foreach ($file in @('server.py','engine.py','launcher.py','control_reload.py','preinstall_guard.ps1','test_control.py','app.js','ui.html','GFARM_Definitivo.iss','install_windows.ps1')) {
+foreach ($file in @('server.py','engine.py','control_bootstrap.py','control_reload.py','preinstall_guard.ps1','test_control.py','app.js','ui.html','GFARM_Definitivo.iss','install_windows.ps1')) {
   if (-not (Test-Path (Join-Path $here $file))) { throw "Arquivo obrigatorio ausente: $file" }
 }
 $git = Get-Command git.exe -ErrorAction Stop
@@ -15,7 +15,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Compilar dentro do repositorio GFARM.' }
 Write-Host "GFARM, commit $rev"
 Push-Location $here
 try {
-  Write-Host '[1/5] Validando PowerShell do instalador e sintaxe Python...'
+  Write-Host '[1/3] Validando PowerShell do instalador e codigo Python web...'
   foreach ($script in @('install_windows.ps1', 'preinstall_guard.ps1')) {
     $tokens = $null
     $errors = $null
@@ -30,42 +30,21 @@ try {
     }
   }
   Write-Host 'Scripts de instalacao e reparo validados.'
-  & $Python -3.13 -m py_compile server.py engine.py launcher.py control_reload.py create_icons.py
+  & $Python -3.13 -m py_compile server.py engine.py control_bootstrap.py control_reload.py create_icons.py
   if ($LASTEXITCODE -ne 0) { throw 'Erro de sintaxe Python.' }
   & $Python -3.13 test_control.py
   if ($LASTEXITCODE -ne 0) { throw 'Testes do GFARM Control falharam. Compilacao bloqueada.' }
-  Write-Host '[2/5] Instalando utilitarios de build...'
-  & $Python -3.13 -m pip install pyinstaller pillow
-  if ($LASTEXITCODE -ne 0) { throw 'Instale PyInstaller e Pillow.' }
-  Write-Host '[3/5] Criando icones e executaveis...'
+  Write-Host '[2/3] Gerando somente icones WEB; sem PyInstaller...'
+  & $Python -3.13 -m pip install --disable-pip-version-check pillow
+  if ($LASTEXITCODE -ne 0) { throw 'Pillow necessario para gerar os icones do instalador.' }
   & $Python -3.13 create_icons.py
-  if ($LASTEXITCODE -ne 0) { throw 'Falha nos icones.' }
-  $controlArgs = @('-3.13','-m','PyInstaller','--noconfirm','--onefile','--windowed',
-    '--clean','--paths',$here,'--hidden-import','engine',
-    '--add-data',"$here\ui.html;.",'--add-data',"$here\app.js;.",
-    '--icon',"$build\GFARM-Control.ico",'--distpath',$build,
-    '--workpath',"$build\pyi-control",'--specpath',"$build\spec",
-    '--name','GFARM-Control','server.py')
-  & $Python @controlArgs
-  if ($LASTEXITCODE -ne 0) { throw 'Falha no GFARM-Control.exe.' }
-  $appArgs = @('-3.13','-m','PyInstaller','--noconfirm','--onefile',
-    '--windowed','--clean','--icon',"$build\GFARM.ico",
-    '--distpath',$build,'--workpath',"$build\pyi-gfarm",
-    '--specpath',"$build\spec",'--name','GFARM','launcher.py')
-  & $Python @appArgs
-  if ($LASTEXITCODE -ne 0) { throw 'Falha no GFARM.exe.' }
-  Write-Host '[4/5] Instalador online: sem empacotar o repositorio.'
-  # Remover pacote legado apenas na pasta temporaria de build.
-  # O instalador final passa a baixar GFARM APP do GitHub na instalacao.
-  $oldZip = Join-Path $build 'GFARM_APP.zip'
-  if (Test-Path -LiteralPath $oldZip -PathType Leaf) {
-    Remove-Item -LiteralPath $oldZip -Force
+  if ($LASTEXITCODE -ne 0) { throw 'Falha gerando icones WEB.' }
+  if (!(Test-Path (Join-Path $build 'GFARM.ico')) -or
+      !(Test-Path (Join-Path $build 'GFARM-Control.ico'))) {
+    throw 'Icones do GFARM/Control nao foram gerados.'
   }
-  if (!(Test-Path (Join-Path $build 'GFARM.exe')) -or
-      !(Test-Path (Join-Path $build 'GFARM-Control.exe'))) {
-    throw 'Executaveis GFARM e GFARM-Control ausentes.'
-  }
-  Write-Host '[5/5] Localizando Inno Setup 6 e compilando...'
+  Write-Host '[3/3] Compilando APENAS o instalador Windows...'
+
   function Find-InnoSetup6 {
     # Inno Setup pode ser instalado em pasta personalizada ou apenas no perfil.
     # Priorizar caminhos descobertos no Registro do Windows.
