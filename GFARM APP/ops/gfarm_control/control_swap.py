@@ -48,6 +48,9 @@ def wait_parent(pid: int, timeout_ms=120000):
     kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
     handle = kernel32.OpenProcess(0x00100000, 0, pid)  # SYNCHRONIZE
     if not handle:
+        # ERROR_INVALID_PARAMETER: o processo ja encerrou antes do helper abrir seu HANDLE.
+        if ctypes.get_last_error() == 87:
+            return
         raise RuntimeError("Nao foi possivel verificar a saida do Control antigo.")
     try:
         result = kernel32.WaitForSingleObject(handle, timeout_ms)
