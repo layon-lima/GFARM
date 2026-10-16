@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import tempfile
 import json
 import os
 import shutil
@@ -332,6 +333,51 @@ def verify_backup(name):
         run([pg_binary("pg_restore"), "--list", str(dump)], timeout=120)
     return {"valido": True, **info}
 
+
+
+
+# Recepcao em blocos do arquivo ZIP escolhido pelo navegador.
+# O backup nao e carregado inteiro em RAM nem toca no PostgreSQL.
+MAX_BROWSER_BACKUP = 2 * 1024 ** 3
+
+
+def receive_browser_backup(stream, length):
+    """Salva temporariamente e valida um backup enviado pelo navegador."""
+    if not isinstance(length, int) or not 0 < length <= MAX_BROWSER_BACKUP:
+        raise RuntimeError("Backup ZIP deve ter entre 1 byte e 2 GB.")
+    if owned() or port_busy(backend_port()):
+        raise RuntimeError("Desligue o GFARM na aba Servidor antes de recuperar fotos.")
+    incoming = ROOT / "incoming"
+    incoming.mkdir(parents=True, exist_ok=True)
+    staged = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="gfarm-assets-", suffix=".zip",
+                                         dir=str(incoming), delete=False) as output:
+            staged = Path(output.name)
+            remaining = length
+            while remaining:
+                block = stream.read(min(1024 * 1024, remaining))
+                if not block:
+                    raise RuntimeError("Envio do arquivo ZIP incompleto.")
+                output.write(block)
+                remaining -= len(block)
+
+        # Checar expansao potencial do ZIP antes da verificacao completa do CRC.
+        with zipfile.ZipFile(staged) as archive:
+            files = [i for i in archive.infolist()
+                     if not i.is_dir() and
+                     i.filename.startswith(("uploads/", "xml_inbox/"))]
+            if (len(files) > 100000 or
+                    sum(i.file_size for i in files) > 8 * 1024 ** 3 or
+                    any(i.file_size > 2 * 1024 ** 3 for i in files)):
+                raise RuntimeError("Backup excede limite seguro de arquivos.")
+        validate_archive(staged)
+        write_log("Backup recebido e validado pelo seletor de arquivos do navegador.")
+        return staged
+    except Exception:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+        raise
 
 
 def import_assets_only(zip_path):
