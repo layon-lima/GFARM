@@ -86,6 +86,8 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Parameters: String;
   ExitCode: Integer;
+  Details: AnsiString;
+  Report: String;
 begin
   Result := '';
   ExtractTemporaryFile('preinstall_guard.ps1');
@@ -94,9 +96,17 @@ begin
     ExpandConstant('{app}') + '"';
   if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
       Parameters, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ExitCode) then
-    Result := 'Nao foi possivel preparar a instalacao. O GFARM anterior foi preservado.'
+    Result := 'Nao foi possivel iniciar a preparacao do instalador.'
   else if ExitCode <> 0 then
-    Result := 'Nao foi possivel parar os programas com seguranca. Confira a janela de preparacao. Nenhum dado do PostgreSQL foi modificado.';
+  begin
+    Report := ExpandConstant('{commonappdata}\GFARM\preinstall-last-error.txt');
+    if LoadStringFromFile(Report, Details) and (Trim(Details) <> '') then
+      Result := 'INSTALACAO INTERROMPIDA PARA PROTEGER OS DADOS:' + #13#10 + #13#10 +
+        Copy(Trim(Details), 1, 700)
+    else
+      Result := 'Falha na preparacao do GFARM. Consulte o arquivo:' + #13#10 +
+        ExpandConstant('{commonappdata}\GFARM\preinstall.log');
+  end;
 end;
 
 procedure InitializeWizard;
