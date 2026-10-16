@@ -225,78 +225,7 @@ try {
   if ($newCheckout) {
     $repositoryRoot = Split-Path -Parent $app
     $revision = (& $git -C $repositoryRoot rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0 -or $revision -notmatch '^[a-f0-9]{40}
-
-  Log '[2/3] Instalando inicializacao independente do GFARM Control.'
-  $controlExe = Join-Path $InstallDir 'GFARM-Control.exe'
-  if (-not (Test-Path -LiteralPath $controlExe -PathType Leaf)) {
-    throw 'GFARM-Control.exe nao foi encontrado na pasta do instalador.'
-  }
-  # /TR do schtasks divide caminhos com espacos (C:\Program Files) na tarefa.
-  # ScheduledTasks aceita Execute e Arguments separadamente e salva o exe intacto.
-  $controlAction = New-ScheduledTaskAction -Execute $controlExe -WorkingDirectory $InstallDir
-  $controlTrigger = New-ScheduledTaskTrigger -AtStartup
-  $controlPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-  $controlSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
-  Register-ScheduledTask -TaskName 'GFARM Control' -Action $controlAction -Trigger $controlTrigger -Principal $controlPrincipal -Settings $controlSettings -Force | Out-Null
-  $registered = (Get-ScheduledTask -TaskName 'GFARM Control').Actions | Select-Object -First 1
-  if (-not $registered -or [string]$registered.Execute -ne $controlExe) {
-    throw 'A tarefa GFARM Control foi criada com executavel diferente do esperado.'
-  }
-  Start-ScheduledTask -TaskName 'GFARM Control'
-  Log ('Tarefa de inicializacao configurada para: ' + [string]$registered.Execute)
-
-  # schtasks /Run confirma SOMENTE o pedido de inicializacao;
-  # ele nao garante que GFARM-Control.exe conseguiu atender a porta 8787.
-  Log 'Verificando servidor HTTP do Control (ate 45 segundos).'
-  $controlOnline = $false
-  for ($attempt = 0; $attempt -lt 45; $attempt++) {
-    try {
-      $request = [System.Net.HttpWebRequest]::Create('http://127.0.0.1:8787/')
-      $request.Proxy = $null
-      $request.Timeout = 1500
-      $request.ReadWriteTimeout = 1500
-      $response = $request.GetResponse()
-      try {
-        $serverHeader = [string]$response.Headers['Server']
-        if ($serverHeader.StartsWith('GFARMControl/')) { $controlOnline = $true }
-      } finally { $response.Close() }
-      if ($controlOnline) { break }
-    } catch {
-      # Aguardando o processo iniciar; diagnosticos sao emitidos no fim.
-    }
-    Start-Sleep -Seconds 1
-  }
-  if (-not $controlOnline) {
-    Log 'GFARM Control nao respondeu na porta 8787.'
-    $taskState = & schtasks.exe /Query /TN 'GFARM Control' /V /FO LIST 2>&1
-    Log ('Estado da tarefa: ' + (($taskState | Out-String).Trim()))
-    $startupLog = Join-Path $root 'control-startup.log'
-    if (Test-Path -LiteralPath $startupLog) {
-      Log ('Falha interna Control: ' + ((Get-Content -LiteralPath $startupLog -Tail 12) -join ' | '))
-    }
-    throw 'GFARM Control nao iniciou. Confira o estado da tarefa e control-startup.log.'
-  }
-  Log 'GFARM Control ONLINE em http://127.0.0.1:8787/.'
-
-  Log '[3/3] Detectando PostgreSQL sem modificar banco.'
-  $pgDir = Join-Path $env:ProgramFiles 'PostgreSQL'
-  $pg = Get-ChildItem -Path $pgDir -Directory -ErrorAction SilentlyContinue |
-    Where-Object { Test-Path (Join-Path $_.FullName 'bin\pg_dump.exe') } |
-    Sort-Object { if ($_.Name -match '^\d+$') { [int]$_.Name } else { 0 } } -Descending |
-    Select-Object -First 1
-  if ($pg) { Log ('PostgreSQL detectado em ' + $pg.FullName) }
-  else { Log 'PostgreSQL nao detectado automaticamente; configure pelo Control.' }
-  Log 'INSTALACAO CONCLUIDA. Configure a conexao em GFARM Control > Servidor.'
-} catch {
-  $reason = $_.Exception.Message
-  Log ('FALHA: ' + $reason)
-  Write-Host ('Detalhes: ' + $_.ScriptStackTrace) -ForegroundColor Red
-  throw
-} finally {
-  if ($transcriptStarted) { Stop-Transcript | Out-Null }
-}
-) {
+    if ($LASTEXITCODE -ne 0 -or $revision -notmatch '^[a-f0-9]{40}$') {
       throw 'Commit da main nao pode ser validado. Configuracao anterior preservada.'
     }
     if (-not $config) {
