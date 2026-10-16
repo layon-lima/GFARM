@@ -107,6 +107,32 @@ try {
     Log ('Nova copia do codigo preparada em ' + $app)
   }
 
+  # Validacao obrigatoria ao REINSTALAR SOBRE banco existente:
+  # nao ativar migrations diferentes de forma automatica.
+  if ($previousApp -and $newCheckout -and
+      (Test-Path -LiteralPath (Join-Path $previousApp 'backend\alembic\versions'))) {
+    $oldMigrations = Join-Path $previousApp 'backend\alembic\versions'
+    $newMigrations = Join-Path $app 'backend\alembic\versions'
+    if (-not (Test-Path -LiteralPath $newMigrations)) {
+      throw 'Migrations ausentes na nova versao. Codigo anterior preservado.'
+    }
+    $a = @(Get-ChildItem -LiteralPath $oldMigrations -Filter '*.py' -File |
+      ForEach-Object { $_.Name + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } |
+      Sort-Object)
+    $b = @(Get-ChildItem -LiteralPath $newMigrations -Filter '*.py' -File |
+      ForEach-Object { $_.Name + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } |
+      Sort-Object)
+    if (@(Compare-Object -ReferenceObject $a -DifferenceObject $b).Count -gt 0) {
+      throw 'A nova versao exige migrations diferentes. Reinstalacao bloqueada para proteger o PostgreSQL existente. Procure atualizacao supervisionada.'
+    }
+  }
+  # Reutilizar a MESMA configuracao PostgreSQL/SECRET_KEY existente.
+  # Um checkout novo nao vem com o backend/.env; sem copia ele nao conecta.
+  if ($newCheckout -and (Test-Path -LiteralPath (Join-Path $data 'backend.env'))) {
+    Copy-Item -LiteralPath (Join-Path $data 'backend.env') -Destination (Join-Path $app 'backend\.env') -Force
+    Log 'Conexao PostgreSQL existente vinculada a nova copia, sem alterar o banco.'
+  }
+
   $uploadsLink = Join-Path $app 'backend\uploads'
   if (-not (Test-Path -LiteralPath $uploadsLink)) {
     New-Item -ItemType Junction -Path $uploadsLink -Target $uploads | Out-Null
