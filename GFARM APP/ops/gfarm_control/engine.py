@@ -1105,9 +1105,13 @@ def watchdog():
             if LOCK.acquire(blocking=False):
                 try:
                     c = load()
-                    if (c.get("automatic", True) and c.get("desired_running", True)
+                    # Restaurar uma vez o estado solicitado antes do restart do
+                    # Control; "automatic" controla as tentativas posteriores.
+                    if ((c.get("automatic", True) or LAST_START == 0)
+                            and c.get("desired_running", False)
                             and not owned() and not port_busy(backend_port())):
-                        if time.monotonic() - LAST_START > 90 and (DATA / "backend.env").is_file():
+                        if ((LAST_START == 0 or time.monotonic() - LAST_START > 90)
+                                and (DATA / "backend.env").is_file()):
                             LAST_START = time.monotonic()
                             try:
                                 start()

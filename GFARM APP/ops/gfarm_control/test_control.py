@@ -221,6 +221,19 @@ class TestGFARMControl(unittest.TestCase):
             self.engine.stop()
         self.assertFalse(self.engine.load()["desired_running"])
 
+    def test_control_restart_restores_requested_running_state_once_without_retry_loop(self):
+        self.engine.DATA.mkdir(parents=True)
+        (self.engine.DATA / "backend.env").write_text("# test fixture\n")
+        self.engine.save({"app_path": str(self.engine.APP), "automatic": False, "desired_running": True})
+        with (mock.patch.object(self.engine, "owned", return_value=False),
+              mock.patch.object(self.engine, "port_busy", return_value=False),
+              mock.patch.object(self.engine, "start") as start,
+              mock.patch.object(self.engine.time, "monotonic", return_value=10),
+              mock.patch.object(self.engine.time, "sleep", side_effect=[None, StopIteration])):
+            with self.assertRaises(StopIteration):
+                self.engine.watchdog()
+        start.assert_called_once_with()
+
     def test_unsafe_restore_requires_explicit_confirmation(self):
         with self.assertRaisesRegex(RuntimeError, "Confirme"):
             self.engine.restore_empty("GFARM_COMPLETO_dummy.zip", "nao")
