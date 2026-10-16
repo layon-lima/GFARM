@@ -382,16 +382,15 @@ Regra atual:
 - Não reverter mudanças não relacionadas.
 - Alterações devem ser mínimas e focadas.
 
-Fluxo preferido:
+Fluxo preferido, conforme instrução mais recente do proprietário (16/10/2026):
 
-1. buscar `main`;
-2. criar branch;
-3. alterar somente arquivos necessários;
-4. conferir diff;
-5. abrir PR;
-6. rodar validações;
-7. corrigir falhas;
-8. mergear na `main`.
+1. Conferir o HEAD de `main` e o conteúdo de `desenvolvimento`.
+2. Usar exclusivamente a branch `desenvolvimento` para alterações não aprovadas; **nunca criar uma segunda branch de trabalho**.
+3. Alterar somente arquivos necessários, conferir diff e rodar validações locais ou isoladas.
+4. Não depender de GitHub Actions (sem créditos). PR não é requisito quando a integração não permite.
+5. Integrar na `main` somente após aprovação explícita, sem force push e sem descartar alterações de `main`.
+6. Após integrar e verificar, excluir `desenvolvimento`; na tarefa seguinte, recriar somente essa mesma branch a partir da `main`.
+7. Se a branch existente estiver divergente ou houver conflito, preservar histórico e não fazer reset destrutivo.
 
 ---
 
