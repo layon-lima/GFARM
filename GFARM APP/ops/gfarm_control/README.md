@@ -2,6 +2,20 @@
 
 O `GFARM_Instalador_Definitivo.exe` instala o GFARM e o gerenciador independente GFARM Control. Os fontes atuais são obtidos da branch `main` do GitHub privado.
 
+## Atualização normal: um botão para os dois programas
+
+Depois da configuração inicial, **Atualizações > Buscar e instalar versão mais recente** no GFARM Control atualiza o código do GFARM **e o próprio GFARM Control** pela branch `main`. O fluxo:
+
+1. Consulta o GitHub privado com a deploy key autorizada.
+2. Prepara a nova versão do aplicativo e, se o código do Control mudou, compila o `GFARM-Control.exe` em pasta isolada. Se o código do Control não mudou, não recompila o executável.
+3. Mantém o backup obrigatório e a validação existentes do GFARM antes de trocar a versão ativa.
+4. Para temporariamente a API gerenciada, guarda o Control antigo, troca o executável fora do processo atual e reinicia a tarefa agendada.
+5. Verifica a porta 8787; se o novo Control não iniciar, restaura o EXE anterior. Com a configuração automática habilitada, o Control volta a ligar o GFARM.
+
+Não mexer no instalador nem nas Releases do GitHub para atualizações normais.
+
+**Transição necessária apenas para quem já tem o Control antigo instalado:** o executável antigo não contém o mecanismo de autoatualização de si próprio. Uma única vez, depois de atualizar o clone com `git pull --ff-only origin main`, abra PowerShell **como administrador** e rode `ATUALIZAR_CONTROL_SEM_REINSTALAR.ps1` conforme abaixo. O script exige que a API GFARM esteja desligada antes de trocar o Control, preserva o EXE anterior e faz rollback quando necessário. Após essa transição, use apenas o botão do painel.
+
 ## Compilar para testar (sem publicar)
 
 Na raiz do repositório Windows:
@@ -36,6 +50,7 @@ No **GFARM Control > Backups > Recuperar fotos e documentos**, clique em **Escol
 
 ```powershell
 Set-Location "C:\Users\User\Documents\GFARM"
+git pull --ff-only origin main
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_control\ATUALIZAR_CONTROL_SEM_REINSTALAR.ps1"
 ```
 
