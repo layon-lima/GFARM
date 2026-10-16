@@ -1,0 +1,9 @@
+{
+  "name": "Gest\u00e3o de Estoque Novo Horizonte",
+  "site": {
+    "installCommand": "npm install",
+    "buildCommand": "npm run build",
+    "serveCommand": "npm run dev",
+    "outputDirectory": "./dist"
+  }
+}
