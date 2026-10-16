@@ -702,6 +702,9 @@ def update(progress):
              "--branch", "main", REPO, str(target)], timeout=900, env=ssh)
         try:
             run(["git", "-C", str(target), "sparse-checkout", "set", "GFARM APP"], env=ssh)
+            actual_revision = run(["git", "-C", str(target), "rev-parse", "HEAD"], env=ssh)
+            if actual_revision.strip() != revision:
+                raise RuntimeError("A branch main mudou durante o download; tente atualizar novamente.")
             release = target / "GFARM APP"
             if not (release / "backend" / "run_production.py").is_file():
                 raise RuntimeError("Estrutura do GitHub inesperada.")
