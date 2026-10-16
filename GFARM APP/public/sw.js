@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'estoque-nh-pwa-v1';
+const CACHE_VERSION = 'estoque-nh-pwa-v2-fotos';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 const NEVER_CACHE_PREFIXES = [
