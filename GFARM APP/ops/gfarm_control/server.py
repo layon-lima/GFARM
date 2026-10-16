@@ -35,7 +35,11 @@ ACTIVE_HTTP_SERVER = None
 
 
 def resource(name):
-    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    if name not in ("ui.html", "app.js"):
+        raise RuntimeError("Recurso nao permitido no Control.")
+    # O EXE e um iniciador fixo. Interface e JS sao carregados da mesma
+    # revisao local dos arquivos Python, apos atualizar via GitHub.
+    root = Path(__file__).resolve().parent
     path = root / name
     if not path.is_file():
         raise RuntimeError("Arquivo do Control nao encontrado: " + name)
