@@ -1,21 +1,23 @@
 # GFARM — ESTOQUE NOVO HORIZONTE
 
-Repositório do sistema em uso: frontend React/Vite, backend FastAPI, PostgreSQL, **GFARM Control** e instalador Windows definitivo.
+Repositório do sistema atual: frontend React/Vite, backend FastAPI, PostgreSQL e **GFARM Control**.
 
 - [GFARM APP](GFARM%20APP/) — frontend, backend, migrations e testes.
 - [GFARM Control e instalador](GFARM%20APP/ops/gfarm_control/) — inicialização, atualizações e backups.
-- [Releases](https://github.com/layon-lima/GFARM/releases) — download do instalador compilado.
-- [BACKUPS](BACKUPS/) — backup histórico com dados reais, mantido para recuperação.
+- [**Única Release oficial**](https://github.com/layon-lima/GFARM/releases/tag/gfarm-instalador-01aab5398bed) — download do instalador Windows.
+- [BACKUPS](BACKUPS/) — backup histórico com dados reais, preservado para recuperação.
 
-### Publicar o instalador e limpar Releases antigas
+## Política de publicação — somente versões aprovadas
 
-No terminal PowerShell, na raiz do repositório:
+Atualizações de código são enviadas para `main` **sem criar Releases**. O workflow de instaladores antigos foi removido.
+
+Após a versão ser **testada e explicitamente aprovada**, no Windows o responsável pode executar:
 
 ```powershell
 git pull --ff-only origin main
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_control\PUBLICAR_INSTALADOR_GITHUB.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_control\PUBLICAR_INSTALADOR_GITHUB.ps1" -VersaoAprovada
 ```
 
-Esse script compila o instalador, publica `GFARM_Instalador_Definitivo.exe` na área Releases, verifica o upload e **só então** remove as Releases legadas `painel-estq-*`.
+O script **não cria nova Release**, nem novas tags; ele recompila e **substitui o `GFARM_Instalador_Definitivo.exe` e o `.sha256` da Release existente**. Se a Release oficial estiver ausente ou houver mais de uma, o envio é bloqueado para revisão. Não há publicação automática por push no GitHub.
 
-O código do painel ESTQ antigo, iniciadores Windows antigos e workflow que os recompilava foram removidos. As migrations PostgreSQL, código atual e backup de dados reais são preservados. A pasta BACKUPS não é incluída no instalador.
+O PostgreSQL, as migrations e os backups não são apagados pelo processo.

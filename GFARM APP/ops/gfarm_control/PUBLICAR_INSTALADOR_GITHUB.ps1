@@ -1,106 +1,106 @@
 #requires -Version 5.1
-# Publica GFARM_Instalador_Definitivo.exe e APOS CONFIRMAR remove as releases legadas.
-# Nao apaga backups, banco, migrations nem arquivos do GFARM atual.
+# Publicacao MANUAL de versao APROVADA, substituindo os arquivos da MESMA Release.
+# NUNCA cria outra Release ou tag, NUNCA apaga outras Releases automaticamente.
+param([switch]$VersaoAprovada)
 $ErrorActionPreference = 'Stop'
-$here = $PSScriptRoot
-$root = (Resolve-Path (Join-Path $here '..\..\..')).Path
-$repo = 'layon-lima/GFARM'
-$exe = Join-Path $here 'build\GFARM_Instalador_Definitivo.exe'
-$hashFile = "$exe.sha256"
-
-function Check-Result([string]$desc) {
-  if ($LASTEXITCODE -ne 0) { throw "$desc (codigo $LASTEXITCODE)." }
+if (-not $VersaoAprovada) {
+  throw 'Publicacao bloqueada. Use -VersaoAprovada SOMENTE apos aprovacao explicita da versao testada.'
 }
-function Locate-Gh {
+
+$repo = 'layon-lima/GFARM'
+$tagOficial = 'gfarm-instalador-01aab5398bed'
+$pasta = $PSScriptRoot
+$raiz = (Resolve-Path (Join-Path $pasta '..\..\..')).Path
+$exe = Join-Path $pasta 'build\GFARM_Instalador_Definitivo.exe'
+$checksum = "$exe.sha256"
+
+function Conferir([string]$passo) {
+  if ($LASTEXITCODE -ne 0) { throw "$passo falhou (codigo $LASTEXITCODE)." }
+}
+function Achar-GitHubCLI {
   $env:PATH = [Environment]::GetEnvironmentVariable('PATH','Machine') + ';' +
               [Environment]::GetEnvironmentVariable('PATH','User')
-  $g = Get-Command 'gh.exe' -ErrorAction SilentlyContinue
-  if ($g) { return $g.Source }
+  $comando = Get-Command gh.exe -ErrorAction SilentlyContinue
+  if ($comando) { return $comando.Source }
   foreach ($candidate in @(
     (Join-Path $env:ProgramFiles 'GitHub CLI\gh.exe'),
     (Join-Path $env:LOCALAPPDATA 'Programs\GitHub CLI\gh.exe')
   )) {
     if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
   }
-  return $null
+  throw 'GitHub CLI nao encontrado. Instale gh e autentique na sua conta GitHub.'
 }
 
-Push-Location $root
+Push-Location $raiz
 try {
-  $git = (Get-Command 'git.exe' -ErrorAction Stop).Source
+  $git = (Get-Command git.exe -ErrorAction Stop).Source
   $origin = (& $git remote get-url origin).Trim()
-  Check-Result 'Nao foi possivel verificar origin'
+  Conferir 'Consulta ao repositorio'
   if ($origin -notmatch 'github\.com[:/]layon-lima/GFARM(\.git)?$') {
-    throw "Repositorio inesperado: $origin"
+    throw 'Voce nao esta no repositorio oficial GFARM.'
   }
   $branch = (& $git branch --show-current).Trim()
-  if ($branch -ne 'main') { throw 'Selecione a branch main antes de publicar.' }
+  if ($branch -ne 'main') { throw 'Use a branch main.' }
   & $git fetch origin main
-  Check-Result 'Falha ao sincronizar main'
-  $current = (& $git rev-parse HEAD).Trim()
-  $remote = (& $git rev-parse origin/main).Trim()
-  if ($current -ne $remote) {
-    throw 'A pasta local esta desatualizada. Execute git pull --ff-only origin main.'
+  Conferir 'Sincronizacao com GitHub'
+  $local = (& $git rev-parse HEAD).Trim()
+  $remoto = (& $git rev-parse origin/main).Trim()
+  if ($local -ne $remoto) {
+    throw 'Versao local diferente da main. Execute git pull --ff-only origin main.'
   }
-  $dirty = (& $git status --porcelain --untracked-files=no | Out-String).Trim()
-  if ($dirty) { throw 'Existem alteracoes locais nao publicadas. Guarde-as antes de publicar.' }
-  $tag = 'gfarm-instalador-oficial'
+  $alteracoes = (& $git status --porcelain --untracked-files=no | Out-String).Trim()
+  if ($alteracoes) { throw 'Ha alteracoes locais nao publicadas. Resolva antes do envio.' }
 
-  Write-Host '[1/5] Compilando instalador atual...'
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'build_windows.ps1')
-  Check-Result 'Build do GFARM falhou'
-  if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Instalador nao foi gerado.' }
-  if ((Get-Item -LiteralPath $exe).Length -lt 1000000) {
-    throw 'O instalador esta inesperadamente pequeno. Publicacao bloqueada.'
+  Write-Host '[1/5] Conferindo que existe apenas UMA Release oficial...'
+  $gh = Achar-GitHubCLI
+  & $gh auth status --hostname github.com
+  Conferir 'Autenticacao GitHub CLI'
+  $tags = @(& $gh release list --repo $repo --limit 200 --json tagName --jq '.[].tagName')
+  Conferir 'Leitura das Releases'
+  if ($tags.Count -ne 1 -or $tags[0] -ne $tagOficial) {
+    throw "A lista de Releases mudou. Esperado apenas: $tagOficial. Nenhum upload realizado."
   }
-  $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
-  Set-Content -LiteralPath $hashFile -Encoding ASCII -Value ($hash + '  GFARM_Instalador_Definitivo.exe')
-
-  Write-Host '[2/5] Autenticando no GitHub...'
-  $gh = Locate-Gh
-  if (-not $gh) {
-    $winget = Get-Command 'winget.exe' -ErrorAction SilentlyContinue
-    if (-not $winget) { throw 'Instale GitHub CLI (gh) para publicar o EXE.' }
-    & $winget.Source install --id GitHub.cli --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-    Check-Result 'Falha ao instalar GitHub CLI'
-    $gh = Locate-Gh
-    if (-not $gh) { throw 'GitHub CLI instalado mas nao localizado; reinicie o VS Code.' }
-  }
-  try { & $gh auth status --hostname github.com 2>$null | Out-Null } catch { }
-  if ($LASTEXITCODE -ne 0) {
-    & $gh auth login --hostname github.com --git-protocol https --web
-    Check-Result 'Falha no login do GitHub'
+  $antes = & $gh release view $tagOficial --repo $repo --json assets,url
+  Conferir 'Conferencia da Release oficial'
+  $release = $antes | ConvertFrom-Json
+  if (@($release.assets | Where-Object { $_.name -eq 'GFARM_Instalador_Definitivo.exe' }).Count -ne 1) {
+    throw 'A Release oficial existente nao contem o EXE esperado. Nenhum upload realizado.'
   }
 
-  Write-Host '[3/5] Publicando EXE definitivo...'
-  $allTags = @(& $gh release list --repo $repo --limit 200 --json tagName --jq '.[].tagName')
-  Check-Result 'Nao foi possivel consultar Releases'
-  $exists = $allTags -contains $tag
-  if ($exists) {
-    & $gh release upload $tag $exe $hashFile --repo $repo --clobber
-    Check-Result 'Falha ao atualizar o instalador publicado'
-  } else {
-    $notes = 'GFARM e GFARM Control Windows: instalador oficial online. Compilado do commit ' + $current +
-             '. Baixa os arquivos atuais do GitHub privado e preserva o PostgreSQL existente.'
-    & $gh release create $tag $exe $hashFile --repo $repo --target $current --title 'GFARM - Instalador Definitivo' --notes $notes
-    Check-Result 'Falha ao criar a Release nova'
-  }
+  Write-Host '[2/5] Gerando instalador da versao aprovada...'
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pasta 'build_windows.ps1')
+  Conferir 'Compilacao'
+  if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Instalador nao encontrado.' }
+  if ((Get-Item -LiteralPath $exe).Length -lt 1000000) { throw 'Arquivo gerado invalido ou muito pequeno.' }
+  $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+  Set-Content -LiteralPath $checksum -Encoding ASCII -Value ($sha + '  GFARM_Instalador_Definitivo.exe')
 
-  Write-Host '[4/5] Conferindo instalador novo ANTES de apagar os antigos...'
-  $infoJson = & $gh release view $tag --repo $repo --json assets,url
-  Check-Result 'Falha ao verificar Release nova'
-  $info = $infoJson | ConvertFrom-Json
-  $matching = @($info.assets | Where-Object { $_.name -eq 'GFARM_Instalador_Definitivo.exe' })
-  if ($matching.Count -ne 1) {
-    throw 'Arquivo EXE novo nao confirmado: os instaladores antigos NAO foram apagados.'
-  }
+  Write-Host '[3/5] Substituindo arquivos SOMENTE na Release oficial...'
+  & $gh release upload $tagOficial $exe $checksum --repo $repo --clobber
+  Conferir 'Substituicao dos arquivos da Release'
 
-  Write-Host '[5/5] Removendo versões antigas com a rotina corrigida...'
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'LIMPAR_RELEASES_ANTIGAS.ps1')
-  Check-Result 'Falha na limpeza das Releases obsoletas'
-  Write-Host 'GFARM PUBLICADO. VERSOES ANTIGAS REMOVIDAS!' -ForegroundColor Green
-  Write-Host ('Release oficial: ' + $info.url)
-  Write-Host ('SHA-256: ' + $hash)
+  Write-Host '[4/5] Atualizando descricao da versao publicada...'
+  $notes = 'Unica Release oficial GFARM + GFARM Control. Instalador aprovado e compilado da main em ' +
+           (Get-Date -Format 'yyyy-MM-dd HH:mm') + '. Commit de codigo: ' + $local +
+           '. Baixa GFARM diretamente do repositorio privado e preserva o PostgreSQL existente.'
+  & $gh release edit $tagOficial --repo $repo --title 'GFARM - Instalador Oficial' --notes $notes
+  Conferir 'Atualizacao das notas da Release'
+
+  Write-Host '[5/5] Verificando que nao surgiu outra Release...'
+  $finalTags = @(& $gh release list --repo $repo --limit 200 --json tagName --jq '.[].tagName')
+  Conferir 'Verificacao final'
+  $depois = & $gh release view $tagOficial --repo $repo --json assets,url
+  Conferir 'Verificacao final do instalador'
+  $confirmada = $depois | ConvertFrom-Json
+  $nomes = @($confirmada.assets | ForEach-Object { $_.name })
+  if ($finalTags.Count -ne 1 -or $finalTags[0] -ne $tagOficial -or
+      $nomes -notcontains 'GFARM_Instalador_Definitivo.exe' -or
+      $nomes -notcontains 'GFARM_Instalador_Definitivo.exe.sha256') {
+    throw 'A publicacao exige revisao. Confira manualmente a Release no GitHub.'
+  }
+  Write-Host 'SUCESSO: instalador substituido na unica Release oficial.' -ForegroundColor Green
+  Write-Host ('Link: ' + $confirmada.url)
+  Write-Host ('SHA-256: ' + $sha)
 } finally {
   Pop-Location
 }
