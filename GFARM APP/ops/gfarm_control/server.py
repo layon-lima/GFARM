@@ -29,6 +29,7 @@ SESSIONS = {}
 RATE = {}
 CURRENT_JOB = {"state": "idle", "message": "Nenhuma operacao iniciada."}
 JOB_LOCK = threading.RLock()
+UPLOAD_LOCK = threading.Lock()
 
 
 def resource(name):
@@ -122,6 +123,14 @@ def job_start(action, options):
                 CURRENT_JOB.update(state="error", message=str(ex),
                                    ended=time.time())
             engine.write_log(action + " FALHOU: " + str(ex))
+        finally:
+            if action == "import_files" and options.get("temporary_upload"):
+                staged = Path(options.get("path", ""))
+                if staged.parent == engine.ROOT / "incoming":
+                    try:
+                        staged.unlink(missing_ok=True)
+                    except OSError:
+                        engine.write_log("Aviso: arquivo temporario do backup nao foi removido.")
     threading.Thread(target=worker, name="gfarm-job", daemon=True).start()
 
 
@@ -230,6 +239,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             self.send(404, {"error": "Rota inexistente."})
 
+    def import_assets_upload(self):
+        """Receber ZIP com seletor do navegador e importar somente anexos."""
+        if self.headers.get("Transfer-Encoding"):
+            raise RuntimeError("Envio em blocos HTTP nao suportado.")
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/octet-stream":
+            raise RuntimeError("Selecione um arquivo ZIP pelo botao do Control.")
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise RuntimeError("Tamanho do arquivo invalido.") from exc
+        if not 0 < length <= engine.MAX_BROWSER_BACKUP:
+            raise RuntimeError("O backup ZIP deve ter no maximo 2 GB.")
+        with JOB_LOCK:
+            if CURRENT_JOB["state"] == "running":
+                raise RuntimeError("Aguarde a operacao em andamento terminar.")
+        if not UPLOAD_LOCK.acquire(blocking=False):
+            raise RuntimeError("Outro backup esta sendo enviado.")
+        staged = None
+        try:
+            staged = engine.receive_browser_backup(self.rfile, length)
+            job_start("import_files", {"path": str(staged), "temporary_upload": True})
+            staged = None  # O processo em segundo plano remove o ZIP temporario.
+            self.send(202, {"message": "Arquivo recebido. Recuperando somente fotos, documentos e XMLs."})
+        finally:
+            if staged is not None:
+                staged.unlink(missing_ok=True)
+            UPLOAD_LOCK.release()
+
     def do_POST(self):
         if not valid_host(self.headers.get("Host", "")):
             self.send(403, {"error": "Host nao permitido."})
@@ -259,6 +296,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             session = self.authorized(csrf=True)
             if session is None:
+                return
+            if path == "/api/import-assets-upload":
+                self.import_assets_upload()
                 return
             data = self.json_body()
             if path == "/api/logout":
