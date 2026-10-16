@@ -409,9 +409,64 @@ def main():
         ACTIVE_HTTP_SERVER = None
 
 
+def _installed_web_control():
+    """Exec iniciado pelo instalador: carrega codigo WEB do Control no disco.
+
+    O EXE e so o bootstrap estavel. Atualizacoes do GitHub nao requerem
+    reconstruir PyInstaller ou substituir binarios em Program Files.
+    """
+    if not getattr(sys, "frozen", False):
+        return None
+    config = engine.CONFIG
+    if not config.is_file():
+        return None
+    try:
+        app = Path(json.loads(config.read_text(encoding="utf-8"))["app_path"]).resolve()
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    web_dir = app / "ops" / "gfarm_control"
+    source = web_dir / "server.py"
+    logic = web_dir / "engine.py"
+    if not source.is_file() or not logic.is_file():
+        return None
+    import importlib.util
+    # Fonte existente em ProgramData/GFARM: criada pelo instalador, com ACL
+    # restrita aos administradores e SYSTEM. Nunca buscar codigo remoto aqui.
+    previous_engine = sys.modules.get("engine")
+    previous_path = list(sys.path)
+    try:
+        sys.path.insert(0, str(web_dir))
+        spec_engine = importlib.util.spec_from_file_location("engine", logic)
+        live_engine = importlib.util.module_from_spec(spec_engine)
+        sys.modules["engine"] = live_engine
+        spec_engine.loader.exec_module(live_engine)
+        spec_server = importlib.util.spec_from_file_location("gfarm_control_web_live", source)
+        live_server = importlib.util.module_from_spec(spec_server)
+        spec_server.loader.exec_module(live_server)
+        return live_server
+    except Exception:
+        # Jamais iniciar Control parcialmente atualizado nem cair
+        # silenciosamente para logica velha com rotas incompatíveis.
+        if previous_engine is not None:
+            sys.modules["engine"] = previous_engine
+        else:
+            sys.modules.pop("engine", None)
+        raise
+    finally:
+        sys.path[:] = previous_path
+
+
+def start_control():
+    live = _installed_web_control()
+    if live:
+        live.main()
+    else:
+        main()
+
+
 if __name__ == "__main__":
     try:
-        main()
+        start_control()
     except Exception as exc:
         # PyInstaller --windowed nao possui console: diagnostico local obrigatorio.
         # Senhas/tokens nao sao incluidos no log de inicializacao.
