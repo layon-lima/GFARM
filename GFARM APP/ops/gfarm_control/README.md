@@ -42,7 +42,9 @@ Em **Backups → Recuperar fotos e documentos**, escolher o ZIP completo pelo se
 
 ## Validar instalador Windows sem publicar
 
-Na raiz do clone do GitHub, no PowerShell:
+Para compilar com dois cliques, atualize o clone pelo GitHub e execute `GFARM APP/ops/gfarm_control/GERAR_INSTALADOR.cmd`. O gerador valida o codigo e coloca o EXE na Area de Trabalho, **sem publicar Release**.
+
+Alternativa no PowerShell, na raiz do clone:
 
 ```powershell
 git pull --ff-only origin main
