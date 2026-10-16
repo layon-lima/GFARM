@@ -51,7 +51,9 @@ Name: "{autodesktop}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\G
 Name: "{autodesktop}\GFARM Control"; Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; IconFilename: "{app}\GFARM-Control.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; Description: "Abrir GFARM Control para configurar PostgreSQL"; Flags: postinstall skipifsilent nowait
+; Apos instalar, abrir URL local pelo Windows; nao executar o EXE como usuario
+; para consultar control.json protegido no ProgramData (servico roda SYSTEM).
+Filename: "http://127.0.0.1:8787/"; Description: "Abrir GFARM Control no navegador"; Flags: shellexec postinstall skipifsilent nowait
 
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/End /TN ""GFARM Control"""; Flags: runhidden; RunOnceId: "GFARMControlStopTask"
