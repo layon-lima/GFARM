@@ -59,10 +59,18 @@ class TestGFARMControl(unittest.TestCase):
         helper = Path(self.folder.name) / "control_swap.py"
         helper.write_text("print('test')")
         current = Path(self.folder.name) / "GFARM-Control.exe"
+        def ready_side_effect(*args, **kwargs):
+            (Path(self.folder.name) / "new.ready").write_text(
+                str(os.getpid()) + ":" + "a" * 64, encoding="ascii"
+            )
+            process = mock.MagicMock()
+            process.poll.return_value = None
+            return process
+
         with (mock.patch.object(self.engine, "installed_control_path", return_value=current),
               mock.patch.object(self.engine, "owned", return_value=False),
               mock.patch.object(self.engine, "port_busy", return_value=False),
-              mock.patch("engine.subprocess.Popen") as process):
+              mock.patch("engine.subprocess.Popen", side_effect=ready_side_effect) as process):
             self.assertTrue(self.engine.schedule_control_restart({
                 "source": helper,
                 "python": Path(self.folder.name) / "python.exe",
