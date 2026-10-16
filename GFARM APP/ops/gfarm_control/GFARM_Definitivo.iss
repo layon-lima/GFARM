@@ -5,12 +5,12 @@
 
 [Setup]
 AppId={{F07ED2B2-26D1-4B38-AE42-A6043556E6E8}
-AppName={#AppName} + GFARM Control
+AppName={#AppName} + GFARM Control Web
 AppVersion={#AppVersion}
 AppPublisher=GFARM
 DefaultDirName={autopf}\GFARM
 DefaultGroupName=GFARM
-UninstallDisplayName=GFARM e GFARM Control
+UninstallDisplayName=GFARM e GFARM Control (Web)
 OutputDir=build
 OutputBaseFilename=GFARM_Instalador_Definitivo
 Compression=lzma2
@@ -20,7 +20,7 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=build\GFARM.ico
-UninstallDisplayIcon={app}\GFARM.exe
+UninstallDisplayIcon={app}\GFARM.ico
 DisableProgramGroupPage=yes
 ChangesAssociations=no
 CloseApplications=no
@@ -38,17 +38,16 @@ Name: "{commonappdata}\GFARM"
 [Files]
 ; Extrair o preflight antes dos EXEs para minimizar tempo com solid compression.
 Source: "preinstall_guard.ps1"; Flags: dontcopy
-Source: "build\GFARM.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "build\GFARM-Control.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\GFARM-Control.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "control_bootstrap.py"; DestDir: "{commonappdata}\GFARM"; Flags: ignoreversion
 Source: "install_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\GFARM.ico"
-Name: "{autoprograms}\GFARM Control"; Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; IconFilename: "{app}\GFARM-Control.ico"
-Name: "{autodesktop}\GFARM"; Filename: "{app}\GFARM.exe"; IconFilename: "{app}\GFARM.ico"; Tasks: desktopicon
-Name: "{autodesktop}\GFARM Control"; Filename: "{app}\GFARM-Control.exe"; Parameters: "--open"; IconFilename: "{app}\GFARM-Control.ico"; Tasks: desktopicon
+Name: "{autoprograms}\GFARM"; Filename: "http://127.0.0.1:8000/"; IconFilename: "{app}\GFARM.ico"
+Name: "{autoprograms}\GFARM Control"; Filename: "http://127.0.0.1:8787/"; IconFilename: "{app}\GFARM-Control.ico"
+Name: "{autodesktop}\GFARM"; Filename: "http://127.0.0.1:8000/"; IconFilename: "{app}\GFARM.ico"; Tasks: desktopicon
+Name: "{autodesktop}\GFARM Control"; Filename: "http://127.0.0.1:8787/"; IconFilename: "{app}\GFARM-Control.ico"; Tasks: desktopicon
 
 [Run]
 ; Apos instalar, abrir URL local pelo Windows; nao executar o EXE como usuario
@@ -76,7 +75,7 @@ end;
 function PreviousInstallation(): Boolean;
 begin
   Result := FileExists(ExpandConstant('{commonappdata}\GFARM\control.json')) or
-    FileExists(ExpandConstant('{app}\GFARM-Control.exe'));
+    FileExists(ExpandConstant('{commonappdata}\GFARM\control_bootstrap.py'));
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
@@ -123,7 +122,7 @@ begin
   Txt.WordWrap := True;
   Txt.Width := Stage1.SurfaceWidth;
   Txt.Height := 130;
-  Txt.Caption := 'A instalação terá dois atalhos independentes: GFARM e GFARM Control.' + #13#10#13#10 +
+  Txt.Caption := 'GFARM e GFARM Control sao dois sites locais, abertos no navegador.' + #13#10#13#10 +
     'O GFARM será baixado do GitHub privado durante a instalação; poderá pedir autenticação.' + #13#10 +
     'Os arquivos operacionais ficam em ProgramData\GFARM.' + #13#10#13#10 +
     'O instalador pode reparar ou reinstalar os programas, mas NUNCA apaga PostgreSQL, fotos, XMLs, senhas ou backups.';
@@ -213,12 +212,7 @@ begin
   begin
     P := ExpandConstant('{commonappdata}\GFARM\control-password.tmp');
     if not SaveStringToFile(P, PasswordPage.Values[0], False) then
-      RaiseException('Não foi possível preparar a senha do GFARM Control.');
-    WizardForm.StatusLabel.Caption := '2/3 — Configurando GFARM Control...';
-    if (not Exec(ExpandConstant('{app}\GFARM-Control.exe'),
-      '--setup-password-file "' + P + '"', '', SW_HIDE,
-      ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
-      RaiseException('Falha ao configurar a senha do GFARM Control. Código: ' + IntToStr(ResultCode));
+      RaiseException('Nao foi possivel preparar a senha do GFARM Control.');
   end;
 
   WizardForm.StatusLabel.Caption := '1/3 e 3/3 — Instalando GFARM, dependências e serviço do Windows...';
