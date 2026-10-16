@@ -269,6 +269,18 @@ Não alterar a linguagem visual inteira sem pedido do usuário.
 - Os números de peso em tempo real, 1ª Pesagem, 2ª Pesagem e Peso Líquido devem ter fonte maior e legível, sem criar overflow na coluna da balança.
 
 
+### Pré-cadastro rápido na Pesagem (16/10/2026)
+
+- A primeira aba da página Pesagem é **Pré-cadastro**: localizar antes de incluir motoristas, transportadoras, fornecedores e veículos.
+- **Pessoa** é a fonte oficial para motorista, transportadora e fornecedor, com os perfis `is_motorista`, `is_transportadora` e `is_fornecedor`. **Veiculo** é a fonte oficial para placas e vínculos habituais.
+- Usar os endpoints oficiais de `Pessoa` e `Veiculo`. Nunca criar banco, migration, tabela, fila, entidade, pendência ou cadastrador paralelo para esta função.
+- Usuário com `page.pesagem` sem acesso à área de Cadastros pode **criar somente os campos mínimos** de Pessoa/Veículo e habilitar uma flag de perfil de Pessoa por vez. O backend nega edição geral, alteração de outros campos, exclusão e operações em lote. Quem possui acesso a Cadastros mantém suas permissões anteriores.
+- Havendo pessoa existente, habilitar somente o perfil necessário sem sobrescrever nome, documento, outros perfis ou vínculos. Verificar possíveis duplicados por documento e nome; homônimos com documentos distintos não devem ser tratados como a mesma pessoa.
+- Havendo veículo cadastrado com a mesma placa normalizada, reutilizar o cadastro e não recriar nem alterar seus vínculos automaticamente.
+- O pré-cadastro **não abre ticket, não captura peso e não movimenta estoque**. Tickets, Pedidos e Pagamentos mantêm os fluxos oficiais.
+- A operação deve ser compacta, com busca inicial, campos essenciais e acesso direto a Tickets. Cadastro completo continua em Cadastros > Pessoas e Veículos.
+- Dados novos só ficam disponíveis para tickets depois que a API oficial confirma o salvamento. As mutações devem invalidar o cache oficial das entidades.
+
 ### Movimentos no PC — layout compacto aprovado
 
 - Preservar a largura integral já alcançada na página **Movimentos**.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 import re
+import unicodedata
 from typing import Any
 
 from fastapi import (
@@ -25,6 +26,7 @@ from app.core.access_control import (
     exigir_mutacao_entidade,
     setores_mobile_ids,
     tem_permissao,
+    tem_pagina,
 )
 from app.db.database import get_db
 from app.services.auditoria_erp import registrar_auditoria
@@ -98,6 +100,116 @@ LEGACY_ESTOQUE_BLOQUEADAS = {
 MUTACAO_BLOQUEADA = {
     "Lote",
 }
+
+
+def _cadastro_rapido_pesagem_permitido(
+    usuario: User,
+    entidade: str,
+    dados: dict[str, Any],
+    *,
+    criacao: bool,
+) -> bool:
+    """Permite cadastro mínimo na balança sem conceder CRUD de Cadastros.
+
+    A gravação continua nas entidades oficiais Pessoa/Veiculo, com auditoria
+    e validação comuns dos endpoints /api/entities.
+    """
+    if tem_pagina(usuario, "cadastros"):
+        return False
+
+    if not tem_pagina(usuario, "pesagem") or entidade not in {"Pessoa", "Veiculo"}:
+        exigir_mutacao_entidade(usuario, entidade)
+        return False
+
+    campos = set(dados)
+    if criacao and entidade == "Pessoa":
+        permitidos = {
+            "nome", "documento", "telefone", "cnh", "is_cliente",
+            "is_motorista", "is_transportadora", "is_fornecedor",
+        }
+        perfis = ("is_motorista", "is_transportadora", "is_fornecedor")
+        valido = (
+            campos <= permitidos
+            and bool(str(dados.get("nome") or "").strip())
+            and dados.get("is_cliente") is not True
+            and sum(dados.get(perfil) is True for perfil in perfis) == 1
+            and (not dados.get("cnh") or dados.get("is_motorista") is True)
+        )
+    elif criacao and entidade == "Veiculo":
+        permitido = {"placa", "modelo", "motorista_id", "transportadora_id"}
+        placa = re.sub(r"[^A-Z0-9]", "", str(dados.get("placa") or "").upper())
+        valido = campos <= permitido and len(placa) == 7
+    elif not criacao and entidade == "Pessoa":
+        perfis = {"is_motorista", "is_transportadora", "is_fornecedor"}
+        valido = len(campos) == 1 and campos <= perfis and all(
+            valor is True for valor in dados.values()
+        )
+    else:
+        valido = False
+
+    if not valido:
+        raise HTTPException(
+            status_code=403,
+            detail="Na pesagem, somente o pré-cadastro mínimo e a habilitação de perfil são permitidos.",
+        )
+    return True
+
+
+def _identidade_normalizada(valor: str | None) -> str:
+    texto = unicodedata.normalize("NFD", str(valor or "").strip())
+    return " ".join(
+        "".join(letra for letra in texto if not unicodedata.combining(letra))
+        .upper().split()
+    )
+
+
+def _validar_duplicidade_cadastro_rapido(
+    db: Session,
+    entidade: str,
+    dados: dict[str, Any],
+):
+    """Evita duplicação acidental na entrada rápida; não modifica registros antigos."""
+    if entidade == "Pessoa":
+        documento = re.sub(r"\D", "", str(dados.get("documento") or ""))
+        nome = _identidade_normalizada(dados.get("nome"))
+        existentes = db.execute(
+            select(Pessoa.nome, Pessoa.documento)
+        ).all()
+        for nome_antigo, documento_antigo in existentes:
+            doc_antigo = re.sub(r"\D", "", str(documento_antigo or ""))
+            mesmo_documento = bool(documento and documento == doc_antigo)
+            mesmo_nome = (
+                nome == _identidade_normalizada(nome_antigo)
+                and (not documento or not doc_antigo or documento == doc_antigo)
+            )
+            if mesmo_documento or mesmo_nome:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Pessoa já cadastrada. Reutilize o registro e habilite o perfil existente.",
+                )
+    elif entidade == "Veiculo":
+        for campo, perfil in (
+            ("motorista_id", "is_motorista"),
+            ("transportadora_id", "is_transportadora"),
+        ):
+            pessoa_id = str(dados.get(campo) or "").strip()
+            if pessoa_id:
+                pessoa = db.get(Pessoa, pessoa_id)
+                if pessoa is None or not getattr(pessoa, perfil):
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Vínculo do veículo deve apontar para uma pessoa do perfil correto.",
+                    )
+        placa = re.sub(r"[^A-Z0-9]", "", str(dados.get("placa") or "").upper())
+        existentes = db.scalars(select(Veiculo.placa)).all()
+        if any(
+            re.sub(r"[^A-Z0-9]", "", str(antiga or "").upper()) == placa
+            for antiga in existentes
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Placa já cadastrada. Reutilize o veículo existente.",
+            )
 
 
 def validar_mutacao(
@@ -944,10 +1056,14 @@ def criar(
         entidade
     )
 
-    exigir_mutacao_entidade(
-        current_user,
-        entidade,
+    cadastro_rapido = _cadastro_rapido_pesagem_permitido(
+        current_user, entidade, dados, criacao=True,
     )
+    if not cadastro_rapido:
+        exigir_mutacao_entidade(
+            current_user,
+            entidade,
+        )
 
     dados_limpos = preparar_dados(
         model,
@@ -1012,6 +1128,9 @@ def criar(
             _proximo_numero_lavoura(db)
         )
 
+    if cadastro_rapido:
+        _validar_duplicidade_cadastro_rapido(db, entidade, dados_limpos)
+
     registro = model(
         **dados_limpos
     )
@@ -1056,10 +1175,14 @@ def atualizar(
         entidade
     )
 
-    exigir_mutacao_entidade(
-        current_user,
-        entidade,
+    cadastro_rapido = _cadastro_rapido_pesagem_permitido(
+        current_user, entidade, dados, criacao=False,
     )
+    if not cadastro_rapido:
+        exigir_mutacao_entidade(
+            current_user,
+            entidade,
+        )
 
     registro = db.get(
         model,
