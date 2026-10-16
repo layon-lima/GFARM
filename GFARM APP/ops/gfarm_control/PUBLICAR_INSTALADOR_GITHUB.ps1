@@ -44,7 +44,7 @@ try {
   }
   $dirty = (& $git status --porcelain --untracked-files=no | Out-String).Trim()
   if ($dirty) { throw 'Existem alteracoes locais nao publicadas. Guarde-as antes de publicar.' }
-  $tag = 'gfarm-instalador-' + $current.Substring(0,12)
+  $tag = 'gfarm-instalador-oficial'
 
   Write-Host '[1/5] Compilando instalador atual...'
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'build_windows.ps1')
@@ -73,10 +73,9 @@ try {
   }
 
   Write-Host '[3/5] Publicando EXE definitivo...'
-  $json = & $gh release list --repo $repo --limit 200 --json tagName
+  $allTags = @(& $gh release list --repo $repo --limit 200 --json tagName --jq '.[].tagName')
   Check-Result 'Nao foi possivel consultar Releases'
-  $list = @($json | ConvertFrom-Json)
-  $exists = @($list | Where-Object { $_.tagName -eq $tag }).Count -gt 0
+  $exists = $allTags -contains $tag
   if ($exists) {
     & $gh release upload $tag $exe $hashFile --repo $repo --clobber
     Check-Result 'Falha ao atualizar o instalador publicado'
@@ -96,23 +95,11 @@ try {
     throw 'Arquivo EXE novo nao confirmado: os instaladores antigos NAO foram apagados.'
   }
 
-  Write-Host '[5/5] Excluindo TODAS as Releases do painel legado...'
-  $old = @($list | Where-Object { $_.tagName -match '^painel-estq-[0-9]+$' })
-  $removed = 0
-  foreach ($oldEntry in $old) {
-    $oldTag = [string]$oldEntry.tagName
-    Write-Host ('Excluindo Release obsoleta: ' + $oldTag)
-    & $gh release delete $oldTag --repo $repo --cleanup-tag --yes
-    Check-Result ('Falha ao remover Release obsoleta ' + $oldTag)
-    $removed++
-  }
-  $checkJson = & $gh release list --repo $repo --limit 200 --json tagName
-  Check-Result 'Falha ao conferir releases'
-  $remaining = @($checkJson | ConvertFrom-Json | Where-Object { $_.tagName -match '^painel-estq-[0-9]+$' })
-  if ($remaining.Count -gt 0) { throw 'Releases antigas ainda existem; verifique permissao do GitHub.' }
-  Write-Host 'GFARM PUBLICADO. RELEASES LEGADAS REMOVIDAS!' -ForegroundColor Green
-  Write-Host ('Removidas: ' + $removed)
-  Write-Host ('Release atual: ' + $info.url)
+  Write-Host '[5/5] Removendo versões antigas com a rotina corrigida...'
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'LIMPAR_RELEASES_ANTIGAS.ps1')
+  Check-Result 'Falha na limpeza das Releases obsoletas'
+  Write-Host 'GFARM PUBLICADO. VERSOES ANTIGAS REMOVIDAS!' -ForegroundColor Green
+  Write-Host ('Release oficial: ' + $info.url)
   Write-Host ('SHA-256: ' + $hash)
 } finally {
   Pop-Location
