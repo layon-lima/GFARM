@@ -16,14 +16,40 @@ $backup = Join-Path $backupDir ('GFARM-Control-' + (Get-Date -Format 'yyyyMMdd-H
 function Check-Exit([string]$step) {
     if ($LASTEXITCODE -ne 0) { throw "$step falhou (codigo $LASTEXITCODE)." }
 }
-function Wait-ControlStopped {
-    for ($i = 0; $i -lt 45; $i++) {
-        $active = @(Get-CimInstance Win32_Process -Filter "Name='GFARM-Control.exe'" |
-            Where-Object { $_.ExecutablePath -ieq $target })
-        if ($active.Count -eq 0) { return }
+function Get-ControlInstances {
+    # Identificar por CAMINHO COMPLETO; nunca encerrar Python, PostgreSQL,
+    # navegador, GFARM.exe ou outro processo com nome parecido.
+    $wanted = [IO.Path]::GetFullPath($target)
+    return @(Get-CimInstance Win32_Process -Filter "Name='GFARM-Control.exe'" -ErrorAction Stop |
+        Where-Object {
+            $_.ExecutablePath -and
+            ([IO.Path]::GetFullPath([string]$_.ExecutablePath) -ieq $wanted)
+        })
+}
+function Wait-ControlStopped([int]$seconds = 10) {
+    for ($i = 0; $i -lt $seconds; $i++) {
+        if (@(Get-ControlInstances).Count -eq 0) { return $true }
         Start-Sleep -Seconds 1
     }
-    throw 'O GFARM Control nao encerrou com seguranca. Nada sera sobrescrito.'
+    return (@(Get-ControlInstances).Count -eq 0)
+}
+function Stop-ControlForUpgrade {
+    # Primeiro, pedir ao Agendador que encerre a tarefa normalmente.
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if (Wait-ControlStopped -seconds 10) { return }
+
+    # Alguns Windows mantem GFARM-Control.exe ativo depois de Stop-ScheduledTask.
+    # O GFARM ja foi conferido como desligado ANTES desta etapa.
+    # Forcar SOMENTE os PIDs cujo ExecutablePath e exatamente o EXE instalado.
+    $remaining = @(Get-ControlInstances)
+    foreach ($process in $remaining) {
+        $pidToStop = [int]$process.ProcessId
+        Write-Host ("Encerrando instancia antiga confirmada do GFARM Control: PID " + $pidToStop)
+        Stop-Process -Id $pidToStop -Force -ErrorAction Stop
+    }
+    if (-not (Wait-ControlStopped -seconds 15)) {
+        throw 'O GFARM Control ainda esta em execucao. Nenhum arquivo sera substituido.'
+    }
 }
 function Check-Health {
     for ($i = 0; $i -lt 40; $i++) {
@@ -117,8 +143,7 @@ New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 $backedUp = $false
 try {
     Write-Host '[3/4] Parando APENAS o Control e preservando seu EXE anterior...'
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    Wait-ControlStopped
+    Stop-ControlForUpgrade
     Copy-Item -LiteralPath $target -Destination $backup -ErrorAction Stop
     $backedUp = $true
     Copy-Item -LiteralPath $exe -Destination $target -Force -ErrorAction Stop
@@ -133,8 +158,7 @@ try {
     $errorMessage = $_.Exception.Message
     if ($backedUp) {
         Write-Host "Falha: $errorMessage. Restaurando EXE anterior..." -ForegroundColor Yellow
-        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-        Wait-ControlStopped
+        Stop-ControlForUpgrade
         Copy-Item -LiteralPath $backup -Destination $target -Force
         Start-ScheduledTask -TaskName $taskName
         Write-Host 'EXE anterior restaurado e tarefa reiniciada.'
