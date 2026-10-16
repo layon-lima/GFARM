@@ -8,6 +8,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -28,6 +29,8 @@ REPO = "git@github.com:layon-lima/GFARM.git"
 LOCK = threading.RLock()
 PROCESS = None
 LAST_START = 0.0
+CONTROL_UPGRADE_PENDING = False
+CONTROL_VERSION_FILE = ROOT / "control-version.json"
 
 
 def write_log(message):
@@ -535,6 +538,141 @@ def link_uploads(folder):
         dest.symlink_to(data_uploads, target_is_directory=True)
 
 
+
+
+CONTROL_SOURCES = ("server.py", "engine.py", "app.js", "ui.html", "control_swap.py")
+
+
+def control_fingerprint(folder):
+    """Identificador deterministico do codigo do Control, sem depender dos commits do GFARM."""
+    source = Path(folder) / "ops" / "gfarm_control"
+    h = hashlib.sha256()
+    for name in CONTROL_SOURCES:
+        p = source / name
+        if not p.is_file():
+            raise RuntimeError("Arquivo obrigatorio do Control ausente: " + name)
+        h.update(name.encode("utf-8") + b"\x00")
+        h.update(p.read_bytes())
+    return h.hexdigest()
+
+
+def installed_control_path():
+    """Em modo desenvolvimento nao se tenta substituir nenhum executavel."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return None
+    executable_file = Path(sys.executable).resolve()
+    if executable_file.name.lower() != "gfarm-control.exe":
+        return None
+    expected = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "GFARM" / "GFARM-Control.exe"
+    if os.path.normcase(str(executable_file)) != os.path.normcase(str(expected.resolve())):
+        raise RuntimeError("GFARM Control instalado em local inesperado; autoatualizacao bloqueada.")
+    return executable_file
+
+
+def control_upgrade_needed(folder):
+    if not installed_control_path():
+        return False
+    fingerprint = control_fingerprint(folder)
+    try:
+        installed = json.loads(CONTROL_VERSION_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return True
+    return installed.get("fingerprint") != fingerprint
+
+
+def stage_control_upgrade(folder, revision, progress):
+    """Compila uma nova copia isolada do Control, SEM modificar o EXE em execucao."""
+    if not control_upgrade_needed(folder):
+        return None
+    progress("Preparando tambem a atualizacao do GFARM Control...")
+    source = Path(folder) / "ops" / "gfarm_control"
+    destination = ROOT / "control-upgrades" / revision[:12]
+    destination.mkdir(parents=True, exist_ok=True)
+    compiled = destination / "GFARM-Control.exe"
+    if compiled.exists():
+        # Resultado de tentativa antiga incompleta nao deve ser reutilizado.
+        compiled.unlink()
+
+    # Ambiente de compilacao do Control separado do backend da aplicacao.
+    build_environment = ROOT / "control-build-env"
+    builder_py = build_environment / "Scripts" / "python.exe"
+    if not builder_py.is_file():
+        run([str(executable(folder)), "-m", "venv", str(build_environment)], timeout=240)
+    if not builder_py.is_file():
+        raise RuntimeError("Python isolado de compilacao do Control nao foi criado.")
+    run([str(builder_py), "-m", "pip", "install", "--disable-pip-version-check",
+         "pyinstaller==6.16.0"], timeout=900)
+
+    cmd = [
+        str(builder_py), "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
+        "--windowed", "--noupx", "--paths", str(source), "--hidden-import", "engine",
+        "--add-data", str(source / "ui.html") + ";.",
+        "--add-data", str(source / "app.js") + ";.",
+        "--name", "GFARM-Control",
+        "--distpath", str(destination),
+        "--workpath", str(destination / "work"),
+        "--specpath", str(destination / "spec")
+    ]
+    icon = installed_control_path().parent / "GFARM-Control.ico"
+    if icon.is_file():
+        cmd.extend(["--icon", str(icon)])
+    cmd.append(str(source / "server.py"))
+    run(cmd, timeout=1800)
+    if not compiled.is_file() or compiled.stat().st_size < 1_000_000:
+        raise RuntimeError("Novo GFARM-Control.exe nao foi compilado corretamente.")
+    digest = hashlib.sha256()
+    with compiled.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {"file": compiled, "sha256": digest.hexdigest(),
+            "fingerprint": control_fingerprint(folder),
+            "source": source / "control_swap.py",
+            "python": executable(folder)}
+
+
+def schedule_control_restart(upgrade):
+    """Agenda troca fora do processo atual; jamais sobrescreve um EXE em uso."""
+    global CONTROL_UPGRADE_PENDING
+    if not upgrade:
+        return False
+    current = installed_control_path()
+    if not current:
+        return False
+    helper = Path(upgrade["source"])
+    if not helper.is_file():
+        raise RuntimeError("Atualizador de seguranca do Control nao encontrado.")
+    # Evitar deixar API orfa durante a reinicializacao do gerenciador.
+    if owned():
+        stop(temporary=True)
+    elif port_busy(backend_port()):
+        raise RuntimeError("API nao gerenciada detectada; encerre o GFARM antes de atualizar o Control.")
+
+    args = [
+        str(upgrade["python"]), str(helper),
+        "--home", str(ROOT), "--staged", str(upgrade["file"]),
+        "--target", str(current), "--parent-pid", str(os.getpid()),
+        "--sha256", str(upgrade["sha256"]),
+        "--fingerprint", str(upgrade["fingerprint"]),
+    ]
+    flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
+        subprocess, "DETACHED_PROCESS", 0)
+    subprocess.Popen(args, cwd=str(helper.parent), stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     close_fds=True, creationflags=flags)
+    CONTROL_UPGRADE_PENDING = True
+    write_log("GFARM Control: reinicio programado para aplicar a versao nova; "
+              "executavel anterior sera preservado.")
+    return True
+
+
+def consume_control_restart():
+    global CONTROL_UPGRADE_PENDING
+    if CONTROL_UPGRADE_PENDING:
+        CONTROL_UPGRADE_PENDING = False
+        return True
+    return False
+
+
 def update(progress):
     with LOCK:
         cfg = load()
@@ -548,7 +686,13 @@ def update(progress):
         if len(revision) != 40:
             raise RuntimeError("Nao foi possivel confirmar a versao main.")
         if cfg.get("version") == revision:
-            return "GFARM ja esta na ultima versao."
+            # Codigo do GFARM pode estar atualizado enquanto o Control.exe ainda e antigo.
+            upgraded_control = stage_control_upgrade(before, revision, progress)
+            if upgraded_control:
+                progress("GFARM atualizado. Reiniciando GFARM Control automaticamente...")
+                schedule_control_restart(upgraded_control)
+                return "GFARM atualizado. GFARM Control sera reiniciado e atualizado."
+            return "GFARM e GFARM Control ja estao na ultima versao."
         RELEASES.mkdir(parents=True, exist_ok=True)
         target = RELEASES / revision[:12]
         if target.exists():
@@ -583,6 +727,9 @@ def update(progress):
                 cwd=release, timeout=1200)
             if not (release / "dist" / "index.html").is_file():
                 raise RuntimeError("Compilacao do GFARM nao gerou dist/index.html.")
+            # Compilar o Control ANTES da publicacao do aplicativo: falhas no build
+            # nao substituem o sistema que esta funcionando.
+            upgraded_control = stage_control_upgrade(release, revision, progress)
             progress("Criando backup obrigatorio antes da atualizacao...")
             create_backup()
             progress("Publicando a nova versao e validando API...")
@@ -610,9 +757,12 @@ def update(progress):
                     except Exception as x:
                         write_log("CRITICO: rollback nao reiniciou backend: " + str(x))
                 raise
-            progress("Nova versao publicada; versao anterior preservada.")
+            if upgraded_control:
+                progress("GFARM atualizado; aplicando tambem o novo GFARM Control...")
+                schedule_control_restart(upgraded_control)
+            progress("Nova versao do GFARM publicada; versao anterior preservada.")
             write_log("Atualizado: " + revision)
-            return result + " Commit: " + revision[:12]
+            return result + (" Control reiniciando." if upgraded_control else "") + " Commit: " + revision[:12]
         except Exception:
             # Pastas preparadas nao alteram a instalacao ativa.
             if project() != target / "GFARM APP":
