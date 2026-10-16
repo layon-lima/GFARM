@@ -42,6 +42,43 @@ class TestGFARMControl(unittest.TestCase):
         details = self.engine.validate_archive(archive)
         self.assertEqual(details, {"uploads": 1, "xmls": 1})
 
+    def test_browser_backup_upload_recovers_assets_without_database(self):
+        import io
+        archive = self.make_zip([
+            ("database.dump", b"PGDMPtest"),
+            ("manifest.json", json.dumps({"formato_banco": "pg_dump custom"})),
+            ("uploads/produtos/oleo.png", b"imagem-testada"),
+            ("xml_inbox/nota.xml", b"<xml/>"),
+        ])
+        payload = archive.read_bytes()
+        with mock.patch.object(self.engine, "port_busy", return_value=False):
+            staged = self.engine.receive_browser_backup(io.BytesIO(payload), len(payload))
+            self.assertTrue(staged.exists())
+            self.assertNotEqual(staged, archive)
+            result = self.engine.import_assets_only(str(staged))
+        self.assertEqual(result["importados"], 2)
+        self.assertFalse(result["banco_alterado"])
+        self.assertEqual((Path(self.folder.name) / "data" / "uploads" /
+                          "produtos" / "oleo.png").read_bytes(), b"imagem-testada")
+        self.assertFalse((Path(self.folder.name) / "data" / "backend.env").exists())
+        staged.unlink()
+
+    def test_browser_upload_rejects_truncated_and_invalid_backup(self):
+        import io
+        incoming = Path(self.folder.name) / "incoming"
+        with mock.patch.object(self.engine, "port_busy", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "incompleto"):
+                self.engine.receive_browser_backup(io.BytesIO(b"ABC"), 7)
+            with self.assertRaises(zipfile.BadZipFile):
+                self.engine.receive_browser_backup(io.BytesIO(b"not-a-zip"), 9)
+        self.assertFalse(list(incoming.glob("gfarm-assets-*.zip")))
+
+    def test_browser_upload_requires_stopped_gfarm(self):
+        import io
+        with mock.patch.object(self.engine, "port_busy", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "Desligue"):
+                self.engine.receive_browser_backup(io.BytesIO(b"ABC"), 3)
+
     def test_import_assets_only_preserves_database(self):
         archive = self.make_zip([
             ("database.dump", b"PGDMPtest-only"),
