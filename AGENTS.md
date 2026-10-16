@@ -416,8 +416,8 @@ Testar o endpoint/fluxo que a UI realmente usa.
 
 ## 12.2 PAINEL ÚNICO E TRANSFERÊNCIA PARA OUTRO WINDOWS
 
-- Entrega para novo PC: **um único PAINEL_ESTQ.exe**, produzido do GitHub Actions a partir de ops/painel_estq.py; nunca enviar instalador não versionado pelo chat.
-- No novo PC, o painel instala dependências via Winget, usa Git Credential Manager para baixar repositório privado, compila app, configura banco PostgreSQL exclusivo e restaura backup verificado do PC antigo.
+- Entrega para novo PC: **um unico GFARM_Instalador_Definitivo.exe**, compilado pelo build_windows.ps1 versionado. GFARM e GFARM Control sao aplicativos web executados por Python; nao gerar PAINEL_ESTQ.exe, GFARM.exe ou GFARM-Control.exe.
+- No novo PC, o instalador prepara dependencias e codigo privado. O Control web configura a conexao com o PostgreSQL existente e oferece restauracao verificada somente em destino vazio, com confirmacao explicita; nao criar/reinicializar banco automaticamente.
 - Toda a operação de instalação, atualização, início, diagnóstico, exportação e restauração deve estar acessível pelo painel.
 - Banco, uploads, XMLs e chaves privadas NÃO estão no GitHub ou no EXE; transferir dados reais em pacote ZIP + SHA256 via meio privado criptografado e exigir confirmação da fonte antes do corte.
 - Preservar identidade, contas, históricos, custos, saldos oficiais do motor, tickets e arquivos; não reinicializar banco antigo, não criar um banco paralelo, não reescrever registros.
