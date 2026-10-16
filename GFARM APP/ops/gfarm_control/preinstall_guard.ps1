@@ -91,7 +91,7 @@ try {
 
     $owners = @(Get-ListeningPids $port)
     if ($owners.Count -gt 0) {
-        Note ("API porta $port: PID(s) " + ($owners -join ', ') + ".")
+        Note ("API porta ${port}: PID(s) " + ($owners -join ', ') + ".")
         # Unicamente o dono da porta pode ser parado. O processo PRECISA ser
         # o run_production.py da instalacao configurada em control.json.
         foreach ($ownerPid in $owners) {
