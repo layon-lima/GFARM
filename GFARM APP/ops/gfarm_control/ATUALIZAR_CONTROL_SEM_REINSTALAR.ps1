@@ -40,6 +40,28 @@ function Check-Health {
 if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
     throw "Control instalado nao encontrado em $target"
 }
+# Nao deixar a API antiga orfa ao trocar o Control: o gerenciador novo
+# precisa possuir o processo da API para conseguir ligar/desligar com seguranca.
+$dbEnv = Join-Path $env:ProgramData 'GFARM\data\backend.env'
+$apiPort = 8000
+if (Test-Path -LiteralPath $dbEnv) {
+    $portLine = Get-Content -LiteralPath $dbEnv | Where-Object { $_ -match '^APP_PORT\s*=' } | Select-Object -Last 1
+    if ($portLine -match '^APP_PORT\s*=\s*["'']?([0-9]+)') {
+        $apiPort = [int]$Matches[1]
+    }
+}
+$tcp = New-Object System.Net.Sockets.TcpClient
+try {
+    $wait = $tcp.BeginConnect('127.0.0.1', $apiPort, $null, $null)
+    if ($wait.AsyncWaitHandle.WaitOne(1000)) {
+        try { $tcp.EndConnect($wait) } catch {}
+    }
+    if ($tcp.Connected) {
+        throw "Primeiro abra GFARM Control > Servidor > Desligar GFARM, aguarde e execute novamente. API ativa na porta $apiPort. Nada foi modificado."
+    }
+} finally {
+    $tcp.Close()
+}
 $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
 $action = @($task.Actions)[0]
 if (-not $action -or $action.Execute.Trim('"') -ine $target) {
