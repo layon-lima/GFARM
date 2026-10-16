@@ -26,6 +26,55 @@ class TestGFARMControl(unittest.TestCase):
                 z.writestr(name, content)
         return dest
 
+    def test_control_fingerprint_only_changes_when_control_changes(self):
+        source = Path(self.folder.name) / "sample" / "ops" / "gfarm_control"
+        source.mkdir(parents=True)
+        for name in self.engine.CONTROL_SOURCES:
+            (source / name).write_text("v1")
+        first = self.engine.control_fingerprint(source.parents[1])
+        (source / "app.js").write_text("v2")
+        second = self.engine.control_fingerprint(source.parents[1])
+        self.assertNotEqual(first, second)
+
+    def test_control_updater_skips_when_installed_fingerprint_matches(self):
+        source = Path(self.folder.name) / "sample" / "ops" / "gfarm_control"
+        source.mkdir(parents=True)
+        for name in self.engine.CONTROL_SOURCES:
+            (source / name).write_text("same")
+        fingerprint = self.engine.control_fingerprint(source.parents[1])
+        self.engine.CONTROL_VERSION_FILE.write_text(
+            json.dumps({"fingerprint": fingerprint}), encoding="utf-8"
+        )
+        with mock.patch.object(self.engine, "installed_control_path",
+                               return_value=Path("C:/Program Files/GFARM/GFARM-Control.exe")):
+            self.assertFalse(self.engine.control_upgrade_needed(source.parents[1]))
+            (source / "server.py").write_text("changed")
+            self.assertTrue(self.engine.control_upgrade_needed(source.parents[1]))
+
+    def test_developer_mode_cannot_replace_executable(self):
+        with mock.patch.object(self.engine, "installed_control_path", return_value=None):
+            self.assertFalse(self.engine.control_upgrade_needed(Path(self.folder.name)))
+
+    def test_control_swap_scheduler_does_not_touch_postgres(self):
+        helper = Path(self.folder.name) / "control_swap.py"
+        helper.write_text("print('test')")
+        current = Path(self.folder.name) / "GFARM-Control.exe"
+        with (mock.patch.object(self.engine, "installed_control_path", return_value=current),
+              mock.patch.object(self.engine, "owned", return_value=False),
+              mock.patch.object(self.engine, "port_busy", return_value=False),
+              mock.patch("engine.subprocess.Popen") as process):
+            self.assertTrue(self.engine.schedule_control_restart({
+                "source": helper,
+                "python": Path(self.folder.name) / "python.exe",
+                "file": Path(self.folder.name) / "new.exe",
+                "sha256": "a" * 64,
+                "fingerprint": "b" * 64,
+            }))
+        self.assertEqual(process.call_count, 1)
+        self.assertTrue(self.engine.consume_control_restart())
+        self.assertFalse(self.engine.consume_control_restart())
+        self.assertFalse((Path(self.folder.name) / "data" / "backend.env").exists())
+
     def test_no_database_is_created_when_reading_status(self):
         current = self.engine.status()
         self.assertFalse(current["database_configured"])
