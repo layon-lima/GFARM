@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useSize } from "@/hooks/use-size"
 import { cn } from "@/lib/utils"
+import { resolveMediaUrl } from "@/lib/mediaUrl"
 import {
   buildSrcSet,
   buildTransformUrl,
@@ -130,19 +131,22 @@ const Image = React.forwardRef(
     },
     ref
   ) => {
-    const parsedSource = src && src !== FALLBACK_IMAGE_URL ? parseWixMediaUrl(src) : null
+    // Fotos de produtos antigas podem conter o localhost/IP do computador
+    // que realizou o upload. No celular, usar o host atual do GFARM.
+    const mediaSrc = resolveMediaUrl(src)
+    const parsedSource = mediaSrc && mediaSrc !== FALLBACK_IMAGE_URL ? parseWixMediaUrl(mediaSrc) : null
     const initialMode = parsedSource ? IMAGE_LOAD_MODE.OPTIMIZED : IMAGE_LOAD_MODE.ORIGINAL
-    const [loadState, setLoadState] = React.useState({ src, mode: initialMode })
-    const mode = loadState.src === src ? loadState.mode : initialMode
+    const [loadState, setLoadState] = React.useState({ src: mediaSrc, mode: initialMode })
+    const mode = loadState.src === mediaSrc ? loadState.mode : initialMode
 
     React.useEffect(() => {
-      setLoadState({ src, mode: initialMode })
-    }, [src, initialMode])
+      setLoadState({ src: mediaSrc, mode: initialMode })
+    }, [mediaSrc, initialMode])
 
     const handleError = (event) => {
       if (mode === IMAGE_LOAD_MODE.FALLBACK) return
       const nextMode = nextImageLoadMode(mode)
-      setLoadState({ src, mode: nextMode })
+      setLoadState({ src: mediaSrc, mode: nextMode })
       if (nextMode === IMAGE_LOAD_MODE.FALLBACK) onError?.(event)
     }
 
@@ -151,7 +155,7 @@ const Image = React.forwardRef(
       onError: handleError,
     }
 
-    if (!src) {
+    if (!mediaSrc) {
       // Renders as a real <img> (not a <div>) — the visual editor's
       // click-to-edit toolbar keys its "Replace Image" action off the DOM
       // tag being `img`, so a placeholder div would be unrecoverable in the
@@ -165,7 +169,7 @@ const Image = React.forwardRef(
 
     if (!parsed) {
       const isErrorMode = mode === IMAGE_LOAD_MODE.FALLBACK
-      const imageSrc = isErrorMode ? FALLBACK_IMAGE_URL : getOriginalImageUrl(src, parsedSource)
+      const imageSrc = isErrorMode ? FALLBACK_IMAGE_URL : getOriginalImageUrl(mediaSrc, parsedSource)
       return (
         <img ref={ref} src={imageSrc} {...imageProps} data-error-image={isErrorMode || undefined} />
       )
