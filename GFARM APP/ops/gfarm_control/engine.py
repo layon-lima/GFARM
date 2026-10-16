@@ -714,9 +714,11 @@ def update(progress):
         if cfg.get("version") == revision:
             return "GFARM e GFARM Control ja estao na ultima versao."
         RELEASES.mkdir(parents=True, exist_ok=True)
-        target = RELEASES / revision[:12]
-        if target.exists():
-            raise RuntimeError("Versao ja preparada. Reparo manual necessario.")
+        # Tentativas anteriores podem ter sido interrompidas antes da troca
+        # definitiva. Um caminho novo permite tentar de novo sem tocar na
+        # versao ativa nem exigir exclusao manual de arquivos.
+        from uuid import uuid4
+        target = RELEASES / (revision[:12] + "-" + uuid4().hex[:8])
         progress("Baixando versao em pasta separada...")
         run(["git", "clone", "--depth", "1", "--filter=blob:none", "--sparse",
              "--branch", "main", REPO, str(target)], timeout=900, env=ssh)
