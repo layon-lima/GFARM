@@ -259,24 +259,50 @@ try {
     Log 'Reparo: versao atual do GFARM preservada.'
   }
 
-  Log '[2/3] Instalando inicializacao independente do GFARM Control.'
-  $controlExe = Join-Path $InstallDir 'GFARM-Control.exe'
-  if (-not (Test-Path -LiteralPath $controlExe -PathType Leaf)) {
-    throw 'GFARM-Control.exe nao foi encontrado na pasta do instalador.'
+  Log '[2/3] Configurando GFARM Control como servidor WEB Python.'
+  $bootstrap = Join-Path $root 'control_bootstrap.py'
+  if (-not (Test-Path -LiteralPath $bootstrap -PathType Leaf)) {
+    throw 'Iniciador Python do Control ausente na instalacao.'
   }
-  # /TR do schtasks divide caminhos com espacos (C:\Program Files) na tarefa.
-  # ScheduledTasks aceita Execute e Arguments separadamente e salva o exe intacto.
-  $controlAction = New-ScheduledTaskAction -Execute $controlExe -WorkingDirectory $InstallDir
+  # Python dedicado e permanente ao Control, sem EXE proprio do aplicativo.
+  $controlRuntime = Join-Path $root 'control-runtime'
+  $controlPython = Join-Path $controlRuntime 'Scripts\python.exe'
+  $controlPythonW = Join-Path $controlRuntime 'Scripts\pythonw.exe'
+  if (-not (Test-Path -LiteralPath $controlPython -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $controlPythonW -PathType Leaf)) {
+    Log 'Criando runtime Python isolado do GFARM Control...'
+    & $venv -m venv $controlRuntime
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Falha criando ambiente Python do Control. Versao anterior preservada.'
+    }
+  }
+  if (-not (Test-Path -LiteralPath $controlPythonW -PathType Leaf)) {
+    throw 'pythonw.exe do runtime web do Control nao encontrado.'
+  }
+  # Senha inicial nao aparece em argumentos nem em logs.
+  $passwordTemp = Join-Path $root 'control-password.tmp'
+  $authPath = Join-Path $root 'control-auth.json'
+  if (-not (Test-Path -LiteralPath $authPath -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $passwordTemp -PathType Leaf)) {
+      throw 'Senha inicial nao foi fornecida pelo instalador.'
+    }
+    $serverPy = Join-Path $app 'ops\gfarm_control\server.py'
+    & $controlPython $serverPy --setup-password-file $passwordTemp
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $authPath)) {
+      throw 'Falha na configuracao de senha do Control web.'
+    }
+  }
+  $controlAction = New-ScheduledTaskAction -Execute $controlPythonW -Argument ('"' + $bootstrap + '"') -WorkingDirectory $root
   $controlTrigger = New-ScheduledTaskTrigger -AtStartup
   $controlPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
   $controlSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
   Register-ScheduledTask -TaskName 'GFARM Control' -Action $controlAction -Trigger $controlTrigger -Principal $controlPrincipal -Settings $controlSettings -Force | Out-Null
   $registered = (Get-ScheduledTask -TaskName 'GFARM Control').Actions | Select-Object -First 1
-  if (-not $registered -or [string]$registered.Execute -ne $controlExe) {
-    throw 'A tarefa GFARM Control foi criada com executavel diferente do esperado.'
+  if (-not $registered -or [string]$registered.Execute -ne $controlPythonW) {
+    throw 'Tarefa WEB do GFARM Control registrada com Python incorreto.'
   }
   Start-ScheduledTask -TaskName 'GFARM Control'
-  Log ('Tarefa de inicializacao configurada para: ' + [string]$registered.Execute)
+  Log ('Tarefa do GFARM Control WEB configurada com Python: ' + [string]$registered.Execute)
 
   # schtasks /Run confirma SOMENTE o pedido de inicializacao;
   # ele nao garante que GFARM-Control.exe conseguiu atender a porta 8787.
@@ -310,6 +336,15 @@ try {
     throw 'GFARM Control nao iniciou. Confira o estado da tarefa e control-startup.log.'
   }
   Log 'GFARM Control ONLINE em http://127.0.0.1:8787/.'
+  # Remover iniciadores EXE legados SOMENTE apos confirmar o Control WEB.
+  foreach ($old in @('GFARM.exe', 'GFARM-Control.exe')) {
+    $legacy = Join-Path $InstallDir $old
+    if (Test-Path -LiteralPath $legacy -PathType Leaf) {
+      Remove-Item -LiteralPath $legacy -Force -ErrorAction Stop
+      Log ('Iniciador legado removido apos migracao WEB: ' + $old)
+    }
+  }
+
 
   Log '[3/3] Detectando PostgreSQL sem modificar banco.'
   $pgDir = Join-Path $env:ProgramFiles 'PostgreSQL'
