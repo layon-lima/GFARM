@@ -86,6 +86,27 @@ class TestGFARMControl(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "incompleto"):
             self.engine.control_fingerprint(root)
 
+    def test_open_shortcut_never_reads_protected_programdata(self):
+        # No desktop, o processo --open nao e SYSTEM. O diretorio
+        # ProgramData\\GFARM pode negar qualquer leitura ao usuario.
+        import server
+        with (mock.patch("sys.argv", ["GFARM-Control.exe", "--open"]),
+              mock.patch.object(server, "_installed_web_control",
+                                side_effect=PermissionError("Access denied")),
+              mock.patch("webbrowser.open") as browser):
+            server.start_control()
+        browser.assert_called_once_with("http://127.0.0.1:8787/")
+
+    def test_provision_shortcut_ignores_installed_control_loader(self):
+        import server
+        with (mock.patch("sys.argv", ["GFARM-Control.exe",
+                                      "--setup-password-file", "senha.tmp"]),
+              mock.patch.object(server, "_installed_web_control",
+                                side_effect=PermissionError("Access denied")),
+              mock.patch.object(server, "main") as first_run):
+            server.start_control()
+        first_run.assert_called_once_with()
+
     def test_no_database_is_created_when_reading_status(self):
         current = self.engine.status()
         self.assertFalse(current["database_configured"])
