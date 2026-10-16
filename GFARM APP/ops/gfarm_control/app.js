@@ -73,6 +73,51 @@ async function operate(action, data = {}) {
     message("Operação iniciada. Acompanhe o progresso no painel.");
   } catch (ex) { message(ex.message, true); }
 }
+async function importSelectedAssets() {
+  if (busy) return message("Aguarde a operação em andamento.", true);
+  const input = $("assets-backup-file");
+  const file = input.files && input.files[0];
+  if (!file) return message("Clique em Escolher arquivo e selecione o ZIP do backup.", true);
+  if (!/\.zip$/i.test(file.name)) return message("Selecione um arquivo .zip completo.", true);
+  if (file.size < 1 || file.size > 2 * 1024 ** 3) return message("O ZIP deve ter até 2 GB.", true);
+  if (!confirm("Importar apenas fotos, documentos e XMLs deste ZIP? O PostgreSQL não será alterado nem os anexos atuais sobrescritos.")) return;
+
+  const button = $("import-assets-button");
+  button.disabled = true;
+  txt("assets-upload-progress", "Enviando o backup ao GFARM Control...");
+  try {
+    const response = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/import-assets-upload");
+      xhr.withCredentials = true;
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.setRequestHeader("X-GFARM-CSRF", CSRF);
+      xhr.upload.onprogress = ev => {
+        if (ev.lengthComputable) {
+          txt("assets-upload-progress", "Enviando backup: " + Math.round(100 * ev.loaded / ev.total) + "%");
+        }
+      };
+      xhr.onload = () => {
+        let data;
+        try { data = JSON.parse(xhr.responseText); }
+        catch { return reject(new Error("Resposta inválida do Control.")); }
+        if (xhr.status !== 202) return reject(new Error(data.error || "Falha ao importar ZIP."));
+        resolve(data);
+      };
+      xhr.onerror = () => reject(new Error("Falha de conexão ao enviar o ZIP."));
+      xhr.send(file);
+    });
+    txt("assets-upload-progress", "ZIP recebido. Importação em andamento; acompanhe o status do Control.");
+    message(response.message);
+    await status();
+  } catch (ex) {
+    txt("assets-upload-progress", "Falha: " + ex.message);
+    message(ex.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function refreshBackups() {
   try {
     const result = await request("/api/backups");
@@ -136,12 +181,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       message("A API do GFARM nao esta exposta na porta 8000 para acesso remoto. Abra o sistema pelo endereco HTTPS habitual.", true);
     }
   });
-  $("import-assets-button").addEventListener("click", () => {
-    const selected = $("assets-backup-path").value.trim();
-    if (!selected) return message("Informe o caminho completo do ZIP local.", true);
-    if (!confirm("Importar somente fotos, documentos e XMLs? O banco de dados permanecerá intocado.")) return;
-    operate("import_files", {path:selected});
+  $("assets-backup-file").addEventListener("change", ev => {
+    const file = ev.target.files && ev.target.files[0];
+    txt("assets-backup-selection", file
+      ? file.name + " · " + (file.size / 1048576).toFixed(1) + " MB"
+      : "Nenhum arquivo selecionado.");
   });
+  $("import-assets-button").addEventListener("click", importSelectedAssets);
   $("restore-button").addEventListener("click", () => operate("restore", {
     name:$("restore-file").value.trim(), confirmation:$("restore-confirmation").value.trim()
   }));
