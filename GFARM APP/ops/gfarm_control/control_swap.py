@@ -117,8 +117,16 @@ def perform(root: Path, staged: Path, target: Path, pid: int, expected: str, fin
     if not target.is_file():
         raise RuntimeError("GFARM Control antigo nao encontrado.")
 
-    log(root, "Aguardando Control antigo encerrar para trocar executavel...")
-    wait_parent(pid)
+    # Avisar ao Control antigo que o helper passou nas verificacoes ANTES
+    # de ele desligar a interface/servidor. Sem isto, uma falha no helper
+    # poderia deixar o painel offline sem sequer tentar o rollback.
+    ready = staged.with_suffix(".ready")
+    ready.write_text(str(pid) + ":" + expected.lower(), encoding="ascii")
+    log(root, "Atualizador externo validado; aguardando Control antigo encerrar...")
+    try:
+        wait_parent(pid)
+    finally:
+        ready.unlink(missing_ok=True)
     backup_dir = root / "control-previous"
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / ("GFARM-Control-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".exe")
