@@ -269,6 +269,18 @@ Não alterar a linguagem visual inteira sem pedido do usuário.
 - Os números de peso em tempo real, 1ª Pesagem, 2ª Pesagem e Peso Líquido devem ter fonte maior e legível, sem criar overflow na coluna da balança.
 
 
+### Pré-cadastro rápido na Pesagem (16/10/2026)
+
+- A primeira aba da página Pesagem é **Pré-cadastro**: localizar antes de incluir motoristas, transportadoras, fornecedores e veículos.
+- **Pessoa** é a fonte oficial para motorista, transportadora e fornecedor, com os perfis `is_motorista`, `is_transportadora` e `is_fornecedor`. **Veiculo** é a fonte oficial para placas e vínculos habituais.
+- Usar os endpoints oficiais de `Pessoa` e `Veiculo`. Nunca criar banco, migration, tabela, fila, entidade, pendência ou cadastrador paralelo para esta função.
+- Usuário com `page.pesagem` sem acesso à área de Cadastros pode **criar somente os campos mínimos** de Pessoa/Veículo e habilitar uma flag de perfil de Pessoa por vez. O backend nega edição geral, alteração de outros campos, exclusão e operações em lote. Quem possui acesso a Cadastros mantém suas permissões anteriores.
+- Havendo pessoa existente, habilitar somente o perfil necessário sem sobrescrever nome, documento, outros perfis ou vínculos. Verificar possíveis duplicados por documento e nome; homônimos com documentos distintos não devem ser tratados como a mesma pessoa.
+- Havendo veículo cadastrado com a mesma placa normalizada, reutilizar o cadastro e não recriar nem alterar seus vínculos automaticamente.
+- O pré-cadastro **não abre ticket, não captura peso e não movimenta estoque**. Tickets, Pedidos e Pagamentos mantêm os fluxos oficiais.
+- A operação deve ser compacta, com busca inicial, campos essenciais e acesso direto a Tickets. Cadastro completo continua em Cadastros > Pessoas e Veículos.
+- Dados novos só ficam disponíveis para tickets depois que a API oficial confirma o salvamento. As mutações devem invalidar o cache oficial das entidades.
+
 ### Movimentos no PC — layout compacto aprovado
 
 - Preservar a largura integral já alcançada na página **Movimentos**.
@@ -370,20 +382,19 @@ Regra atual:
 - Não reverter mudanças não relacionadas.
 - Alterações devem ser mínimas e focadas.
 
-Fluxo preferido:
+Fluxo obrigatório (decisão mais recente do proprietário, 16/10/2026):
 
-1. buscar `main`;
-2. criar branch;
-3. alterar somente arquivos necessários;
-4. conferir diff;
-5. abrir PR;
-6. rodar validações;
-7. corrigir falhas;
-8. mergear na `main`.
+1. Desenvolver **sempre diretamente na branch `main`** do GitHub. Não criar branches de desenvolvimento nem Pull Requests como parte do fluxo normal.
+2. Antes de alterar qualquer arquivo, consultar o HEAD atual da `main` e conferir o fluxo real.
+3. Alterar somente arquivos necessários, validar testes e diff e publicar commits pequenos e focados na `main`, sem force push.
+4. Não depender de GitHub Actions. Fazer verificações locais ou isoladas sem criar workflows.
+5. O GFARM Control atualiza a instalação **somente a partir da `main`** pelo botão Atualizar GitHub; não solicitar `git pull` manual ao usuário.
+6. Preservar PostgreSQL, dados, segredos, anexos e versões existentes. Publicar no GitHub não significa que o PC já foi atualizado.
+7. Não misturar mudanças não relacionadas nem substituir instalador/Release sem aprovação explícita.
 
 ---
 
-# 12. VALIDAÇÃO OBRIGATÓRIA ANTES DO MERGE
+# 12. VALIDAÇÃO OBRIGATÓRIA ANTES DE PUBLICAR NA MAIN
 
 Antes de concluir uma alteração relevante:
 
@@ -438,7 +449,7 @@ Testar o endpoint/fluxo que a UI realmente usa.
 - Staging temporario dos arquivos alterados, compilacao temporaria de `dist` e backup dos arquivos substituidos sao permitidos para validacao/rollback; nao sao instalacoes paralelas.
 - Preservar integralmente PostgreSQL, `.env`, anexos, XMLs, backups, chaves e senha do Control. Migrations diferentes exigem procedimento supervisionado; iniciar o servico nao aplica migrations.
 - Os dois aplicativos rodam como servicos/web por Python. O unico EXE proprio distribuido e `GFARM_Instalador_Definitivo.exe`; preservar suporte de migracao das instalacoes antigas.
-- Preparar branch e PR; nao integrar a `main` nem substituir o instalador da Release sem aprovacao explicita do usuario.
+- Desenvolver diretamente na `main`, sem criar branch ou PR. Nao substituir o instalador da Release sem aprovacao explicita do usuario.
 
 O usuário possui painel local com a ação:
 
@@ -467,7 +478,7 @@ Antes de alterar código:
 7. corrigir na origem;
 8. só depois ajustar UI;
 9. adicionar teste de regressão;
-10. validar no CI.
+10. validar com testes locais ou isolados (sem depender de GitHub Actions).
 
 Nunca repetir o erro de corrigir apenas um helper/tela quando o fluxo real passa por outro endpoint.
 

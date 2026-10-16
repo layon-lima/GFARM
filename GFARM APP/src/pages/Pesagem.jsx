@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   ClipboardList,
+  Contact,
   Scale,
   Wallet,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import {
 } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/AuthContext';
 import { useEntidades } from '@/lib/useEntidades';
+import CadastroRapidoPesagem from '@/components/pesagem/CadastroRapidoPesagem';
 import PedidosManager from '@/components/pesagem/PedidosManager';
 import TicketsManager from '@/components/pesagem/TicketsManager';
 import PagamentosManager from '@/components/pesagem/PagamentosManager';
@@ -40,7 +42,7 @@ export default function Pesagem() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [tab, setTab] = useState('tickets');
+  const [tab, setTab] = useState('preparacao');
   const [pedidoParaTicket, setPedidoParaTicket] = useState('');
 
   /*
@@ -111,6 +113,11 @@ export default function Pesagem() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="preparacao" className="gap-1.5">
+            <Contact className="h-4 w-4" />
+            Pré-cadastro
+          </TabsTrigger>
+
           <TabsTrigger value="tickets" className="gap-1.5">
             <Scale className="h-4 w-4" />
             Tickets
@@ -132,6 +139,13 @@ export default function Pesagem() {
             Pagamentos
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="preparacao" className="mt-3">
+          <CadastroRapidoPesagem
+            onIrTickets={() => setTab('tickets')}
+            onReload={reloadCore}
+          />
+        </TabsContent>
 
         <TabsContent value="tickets" className="mt-4">
           {coreLoading ? (
