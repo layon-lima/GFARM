@@ -641,10 +641,9 @@ def schedule_control_restart(upgrade):
     helper = Path(upgrade["source"])
     if not helper.is_file():
         raise RuntimeError("Atualizador de seguranca do Control nao encontrado.")
-    # Evitar deixar API orfa durante a reinicializacao do gerenciador.
-    if owned():
-        stop(temporary=True)
-    elif port_busy(backend_port()):
+    # Se a API nao foi iniciada por este Control, parar aqui: nao matar
+    # processos desconhecidos durante a troca do gerenciador.
+    if not owned() and port_busy(backend_port()):
         raise RuntimeError("API nao gerenciada detectada; encerre o GFARM antes de atualizar o Control.")
 
     args = [
@@ -654,11 +653,28 @@ def schedule_control_restart(upgrade):
         "--sha256", str(upgrade["sha256"]),
         "--fingerprint", str(upgrade["fingerprint"]),
     ]
+    ready = Path(upgrade["file"]).with_suffix(".ready")
+    ready.unlink(missing_ok=True)
     flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
         subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen(args, cwd=str(helper.parent), stdin=subprocess.DEVNULL,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     close_fds=True, creationflags=flags)
+    updater = subprocess.Popen(args, cwd=str(helper.parent), stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               close_fds=True, creationflags=flags)
+    # Nao derrubar um Control que funciona antes do updater externo confirmar
+    # a sua integridade. O sinal contem o PID atual e o SHA esperado.
+    expected_ready = str(os.getpid()) + ":" + str(upgrade["sha256"]).lower()
+    for _ in range(100):
+        if ready.is_file() and ready.read_text(encoding="ascii") == expected_ready:
+            break
+        if updater.poll() is not None:
+            raise RuntimeError("Atualizador auxiliar do Control falhou antes do reinicio. EXE atual preservado.")
+        time.sleep(0.2)
+    else:
+        raise RuntimeError("Atualizador auxiliar nao confirmou inicializacao. Control atual preservado.")
+    # So agora parar a API controlada. O watchdog do novo Control reabre o
+    # GFARM automaticamente se ele estava ligado.
+    if owned():
+        stop(temporary=True)
     CONTROL_UPGRADE_PENDING = True
     write_log("GFARM Control: reinicio programado para aplicar a versao nova; "
               "executavel anterior sera preservado.")
