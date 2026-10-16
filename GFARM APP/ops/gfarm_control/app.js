@@ -120,6 +120,10 @@ async function operate(action, data = {}) {
     await status();
   } catch (ex) {
     if (ex.network && action === "update") {
+      connectionLost = true;
+      busy = true;
+      document.querySelectorAll("[data-action]").forEach(btn => btn.disabled = true);
+      txt("update-state", "Sem conexão com o Control");
       // A conexao pode cair depois de o servidor receber a ordem.
       // Nao repetir a atualizacao sem verificar status/log.
       message(
