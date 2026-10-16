@@ -437,6 +437,10 @@ def _installed_web_control():
     logic = web_dir / "engine.py"
     if not source.is_file() or not logic.is_file():
         return None
+    # Compatibilidade com instalacoes antigas: iniciar o Control embutido
+    # (ja corrigido) ate o botao GitHub instalar o codigo web atual.
+    if "def schedule_web_control_reload(" not in logic.read_text(encoding="utf-8"):
+        return None
     import importlib.util
     # Fonte existente em ProgramData/GFARM: criada pelo instalador, com ACL
     # restrita aos administradores e SYSTEM. Nunca buscar codigo remoto aqui.
