@@ -1,6 +1,9 @@
 #requires -Version 5.1
 # Instalador GFARM online. NUNCA apaga ou modifica banco PostgreSQL.
-param([Parameter(Mandatory=$true)][string]$InstallDir)
+param(
+  [Parameter(Mandatory=$true)][string]$InstallDir,
+  [ValidateSet('Repair','Reinstall')][string]$Mode = 'Repair'
+)
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:ProgramData 'GFARM'
 $logFile = Join-Path $root 'instalacao.log'
@@ -41,7 +44,7 @@ try {
   New-Item -ItemType Directory -Path $publicDir -Force | Out-Null
   Start-Transcript -LiteralPath $diagnostic -Append -ErrorAction Stop | Out-Null
   $transcriptStarted = $true
-  Log 'INICIO: instalador online GFARM e GFARM Control.'
+  Log ('INICIO: instalador online GFARM e GFARM Control. Modo: ' + $Mode)
   New-Item -ItemType Directory -Path $root -Force | Out-Null
   & icacls.exe $root '/inheritance:r' '/grant:r' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel proteger ProgramData\GFARM.' }
@@ -62,32 +65,46 @@ try {
   $env:GCM_INTERACTIVE = 'always'
   $env:GIT_TERMINAL_PROMPT = '1'
   $config = $null
+  $previousApp = $null
+  $source = Join-Path $installed 'source'
   if (Test-Path -LiteralPath $cfgPath -PathType Leaf) {
     $config = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($config.app_path) {
+      $previousApp = [string]$config.app_path
+    }
   }
-  if ($config -and $config.app_path) {
-    $app = [string]$config.app_path
+  $newCheckout = ($Mode -eq 'Reinstall' -or -not $previousApp)
+  if ($previousApp -and -not $newCheckout) {
+    $app = $previousApp
     if (-not (Test-Path -LiteralPath (Join-Path $app 'backend\run_production.py'))) {
-      throw 'Caminho registrado no GFARM Control nao existe. Pare e revise a instalacao anterior.'
+      throw 'Instalacao anterior incompleta. Escolha REINSTALAR OS PROGRAMAS para baixar codigo novo sem apagar seus dados.'
     }
-    Log 'Instalacao ja registrada. Codigo e dados existentes serao preservados.'
-  } elseif (-not (Test-Path -LiteralPath (Join-Path $app 'backend\run_production.py'))) {
-    if (Test-Path -LiteralPath $source) {
-      throw 'Foi localizada uma pasta source incompleta. Nenhum arquivo sera apagado automaticamente.'
-    }
-    $stage = Join-Path $installed ('download-' + [Guid]::NewGuid().ToString('N'))
-    Log 'Autentique-se no GitHub quando solicitado. Baixando apenas GFARM APP, sem BACKUPS.'
-    & $git clone --depth 1 --filter=blob:none --sparse --single-branch --branch main 'https://github.com/layon-lima/GFARM.git' $stage
-    if ($LASTEXITCODE -ne 0) { throw 'Git clone falhou. Confirme autenticacao no GitHub e conexao de internet.' }
-    & $git -C $stage sparse-checkout set --cone 'GFARM APP'
-    if ($LASTEXITCODE -ne 0) { throw 'Git sparse-checkout falhou para GFARM APP.' }
-    if (-not (Test-Path -LiteralPath (Join-Path $stage 'GFARM APP\backend\run_production.py'))) {
-      throw 'Download da main nao contem a pasta GFARM APP completa.'
-    }
-    Move-Item -LiteralPath $stage -Destination $source
-    Log 'Codigo recebido diretamente do GitHub.'
+    Log 'REPARAR: usando codigo local existente; PostgreSQL, anexos e configuracao intocados.'
   } else {
-    Log 'Codigo GFARM ja presente. Nenhum codigo existente sera sobrescrito.'
+    # Reinstalar NAO e desinstalar o banco! Gerar copia nova em pasta separada,
+    # validar e compilar antes de trocar o app_path em control.json.
+    $staged = Join-Path $installed ('nova-versao-' + [Guid]::NewGuid().ToString('N'))
+    Log 'Baixando codigo novo da branch main do GitHub em pasta separada...'
+    & $git clone --depth 1 --filter=blob:none --sparse --single-branch --branch main 'https://github.com/layon-lima/GFARM.git' $staged
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Falha no download do GitHub. O GFARM existente continua preservado.'
+    }
+    & $git -C $staged sparse-checkout set --cone 'GFARM APP'
+    if ($LASTEXITCODE -ne 0) { throw 'Git sparse-checkout falhou. Instalacao anterior preservada.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $staged 'GFARM APP\backend\run_production.py'))) {
+      throw 'Novo codigo GFARM incompleto. Instalacao anterior preservada.'
+    }
+    if (-not $previousApp) {
+      # Primeira instalacao preserva estrutura historica.
+      if (Test-Path -LiteralPath $source) {
+        throw 'Pasta source incompleta encontrada. Revisao necessaria para evitar sobrescrever dados.'
+      }
+      Move-Item -LiteralPath $staged -Destination $source -ErrorAction Stop
+      $app = Join-Path $source 'GFARM APP'
+    } else {
+      $app = Join-Path $staged 'GFARM APP'
+    }
+    Log ('Nova copia do codigo preparada em ' + $app)
   }
 
   $uploadsLink = Join-Path $app 'backend\uploads'
@@ -136,27 +153,106 @@ try {
     throw 'Frontend dist\index.html nao foi gerado.'
   }
 
-  # Registrar a versao real. A conexao do PostgreSQL sera configurada depois.
-  if (-not $config) {
-    if (-not (Test-Path -LiteralPath (Join-Path $source '.git'))) {
-      throw 'Repositorio Git ausente; nao e possivel verificar versao.'
+  # Registrar SOMENTE depois que frontend, venv e arquivos foram validados.
+  # Reinstalar nao substitui backend.env, PostgreSQL, uploads ou os backups.
+  if ($newCheckout) {
+    $repositoryRoot = Split-Path -Parent $app
+    $revision = (& $git -C $repositoryRoot rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $revision -notmatch '^[a-f0-9]{40}
+
+  Log '[2/3] Instalando inicializacao independente do GFARM Control.'
+  $controlExe = Join-Path $InstallDir 'GFARM-Control.exe'
+  if (-not (Test-Path -LiteralPath $controlExe -PathType Leaf)) {
+    throw 'GFARM-Control.exe nao foi encontrado na pasta do instalador.'
+  }
+  # /TR do schtasks divide caminhos com espacos (C:\Program Files) na tarefa.
+  # ScheduledTasks aceita Execute e Arguments separadamente e salva o exe intacto.
+  $controlAction = New-ScheduledTaskAction -Execute $controlExe -WorkingDirectory $InstallDir
+  $controlTrigger = New-ScheduledTaskTrigger -AtStartup
+  $controlPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  $controlSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
+  Register-ScheduledTask -TaskName 'GFARM Control' -Action $controlAction -Trigger $controlTrigger -Principal $controlPrincipal -Settings $controlSettings -Force | Out-Null
+  $registered = (Get-ScheduledTask -TaskName 'GFARM Control').Actions | Select-Object -First 1
+  if (-not $registered -or [string]$registered.Execute -ne $controlExe) {
+    throw 'A tarefa GFARM Control foi criada com executavel diferente do esperado.'
+  }
+  Start-ScheduledTask -TaskName 'GFARM Control'
+  Log ('Tarefa de inicializacao configurada para: ' + [string]$registered.Execute)
+
+  # schtasks /Run confirma SOMENTE o pedido de inicializacao;
+  # ele nao garante que GFARM-Control.exe conseguiu atender a porta 8787.
+  Log 'Verificando servidor HTTP do Control (ate 45 segundos).'
+  $controlOnline = $false
+  for ($attempt = 0; $attempt -lt 45; $attempt++) {
+    try {
+      $request = [System.Net.HttpWebRequest]::Create('http://127.0.0.1:8787/')
+      $request.Proxy = $null
+      $request.Timeout = 1500
+      $request.ReadWriteTimeout = 1500
+      $response = $request.GetResponse()
+      try {
+        $serverHeader = [string]$response.Headers['Server']
+        if ($serverHeader.StartsWith('GFARMControl/')) { $controlOnline = $true }
+      } finally { $response.Close() }
+      if ($controlOnline) { break }
+    } catch {
+      # Aguardando o processo iniciar; diagnosticos sao emitidos no fim.
     }
-    $revision = (& $git -C $source rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0 -or $revision -notmatch '^[a-f0-9]{40}$') {
-      throw 'Commit da main nao pode ser validado.'
+    Start-Sleep -Seconds 1
+  }
+  if (-not $controlOnline) {
+    Log 'GFARM Control nao respondeu na porta 8787.'
+    $taskState = & schtasks.exe /Query /TN 'GFARM Control' /V /FO LIST 2>&1
+    Log ('Estado da tarefa: ' + (($taskState | Out-String).Trim()))
+    $startupLog = Join-Path $root 'control-startup.log'
+    if (Test-Path -LiteralPath $startupLog) {
+      Log ('Falha interna Control: ' + ((Get-Content -LiteralPath $startupLog -Tail 12) -join ' | '))
     }
-    $config = @{
-      app_path = $app
-      version = $revision
-      automatic = $true
-      desired_running = $false
-      remote_host = '127.0.0.1'
+    throw 'GFARM Control nao iniciou. Confira o estado da tarefa e control-startup.log.'
+  }
+  Log 'GFARM Control ONLINE em http://127.0.0.1:8787/.'
+
+  Log '[3/3] Detectando PostgreSQL sem modificar banco.'
+  $pgDir = Join-Path $env:ProgramFiles 'PostgreSQL'
+  $pg = Get-ChildItem -Path $pgDir -Directory -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path (Join-Path $_.FullName 'bin\pg_dump.exe') } |
+    Sort-Object { if ($_.Name -match '^\d+$') { [int]$_.Name } else { 0 } } -Descending |
+    Select-Object -First 1
+  if ($pg) { Log ('PostgreSQL detectado em ' + $pg.FullName) }
+  else { Log 'PostgreSQL nao detectado automaticamente; configure pelo Control.' }
+  Log 'INSTALACAO CONCLUIDA. Configure a conexao em GFARM Control > Servidor.'
+} catch {
+  $reason = $_.Exception.Message
+  Log ('FALHA: ' + $reason)
+  Write-Host ('Detalhes: ' + $_.ScriptStackTrace) -ForegroundColor Red
+  throw
+} finally {
+  if ($transcriptStarted) { Stop-Transcript | Out-Null }
+}
+) {
+      throw 'Commit da main nao pode ser validado. Configuracao anterior preservada.'
+    }
+    if (-not $config) {
+      $config = @{
+        app_path = $app
+        version = $revision
+        automatic = $true
+        desired_running = $false
+        remote_host = '127.0.0.1'
+      }
+    } else {
+      # Atualizar apenas as duas chaves abaixo, sem sobrescrever permissoes,
+      # senha de acesso, preferencias, tunel ou estado do servidor.
+      $config.app_path = $app
+      $config.version = $revision
     }
     $utf8 = New-Object System.Text.UTF8Encoding($false)
     $tmp = $cfgPath + '.tmp'
     [System.IO.File]::WriteAllText($tmp, ($config | ConvertTo-Json -Depth 6), $utf8)
     Move-Item -LiteralPath $tmp -Destination $cfgPath -Force
-    Log ('Commit instalado: ' + $revision.Substring(0, 12))
+    Log ('Versao instalada/atualizada: ' + $revision.Substring(0, 12))
+  } else {
+    Log 'Reparo: versao atual do GFARM preservada.'
   }
 
   Log '[2/3] Instalando inicializacao independente do GFARM Control.'
