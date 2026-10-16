@@ -166,10 +166,12 @@ footer{color:#7c9b8b;margin:32px 0;font-size:11px}
    <div class="panel">
     <h2>Recuperar fotos e documentos sem restaurar o banco</h2>
     <p class="muted">Ideal para a reinstalação no mesmo PC: recupera apenas uploads e XMLs do backup completo local. O PostgreSQL existente não será modificado e nenhum anexo atual será sobrescrito.</p>
-    <label>Caminho completo do ZIP original</label>
-    <input id="assets-backup-path" placeholder="C:\Users\User\Documents\GFARM_BACKUP_TRANSFERENCIA\GFARM_COMPLETO_....zip">
-    <button id="import-assets-button" class="primary spaced">Importar apenas fotos, documentos e XMLs</button>
-    <p class="hint">Use o ZIP original criado pelo painel de backup, não os arquivos .part enviados ao GitHub. Desligue o GFARM antes da importação.</p>
+    <label for="assets-backup-file">Arquivo ZIP do backup</label>
+    <input id="assets-backup-file" type="file" accept=".zip,application/zip" aria-label="Selecionar backup ZIP do computador">
+    <p id="assets-backup-selection" class="hint">Clique em Escolher arquivo para abrir a janela de pastas do computador.</p>
+    <button id="import-assets-button" class="primary spaced">Importar fotos e documentos do ZIP selecionado</button>
+    <p id="assets-upload-progress" class="hint" role="status" aria-live="polite"></p>
+    <p class="hint">Selecione o ZIP completo (não arquivos .part). Desligue o GFARM antes de importar. O banco PostgreSQL permanecerá intocado.</p>
    </div>
    <div class="panel">
     <h2>Restaurar em banco vazio</h2>
