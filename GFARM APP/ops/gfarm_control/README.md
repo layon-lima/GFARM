@@ -23,6 +23,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_contr
 
 O script usa o GitHub CLI já autenticado e atualiza **somente a Release existente** [GFARM - Instalador Oficial](https://github.com/layon-lima/GFARM/releases/tag/gfarm-instalador-01aab5398bed), substituindo os dois arquivos `.exe` e `.sha256`. **Não cria novas Releases nem novas tags; se houver discrepância, bloqueia a publicação.** Código enviado a `main` não publica EXE automaticamente.
 
+## Selecionar backup pela janela de arquivos
+
+No **GFARM Control > Backups > Recuperar fotos e documentos**, clique em **Escolher arquivo**, selecione o ZIP completo do backup na janela do Windows e depois **Importar fotos e documentos do ZIP selecionado**.
+
+- O navegador transfere o ZIP para o Control em blocos, sem exigir o caminho completo digitado. Limite: 2 GB.
+- O GFARM deve estar parado, mas o PostgreSQL permanece instalado e intacto.
+- A importacao recupera apenas `uploads/` e `xml_inbox/`, validando o ZIP; recusa arquivos existentes com conteudos diferentes.
+- Depois da importacao, reinicie o GFARM. O Control elimina a copia temporaria do arquivo ZIP.
+
+**Atencao para o Control ja instalado:** o executavel do Control e independente da versao web do GFARM. Esta alteracao requer **uma unica atualizacao do proprio Control**, sem reinstalar o aplicativo e sem tocar no instalador oficial. Em PowerShell como administrador, na raiz do clone:
+
+```powershell
+Set-Location "C:\Users\User\Documents\GFARM"
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\GFARM APP\ops\gfarm_control\ATUALIZAR_CONTROL_SEM_REINSTALAR.ps1"
+```
+
+O atualizador baixa a `main`, executa testes, compila exclusivamente `GFARM-Control.exe`, preserva uma copia de seguranca, substitui o EXE em `C:\Program Files\GFARM`, reinicia sua tarefa e valida a porta 8787. Se falhar, restaura o EXE anterior. Nao mexe em PostgreSQL nem nas Releases do GitHub.
+
 ## Dados e servidor
 
 - Iniciadores: `C:\Program Files\GFARM`.
