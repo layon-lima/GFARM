@@ -11,6 +11,9 @@ $publicDir = [Environment]::GetFolderPath('CommonDocuments')
 if (-not $publicDir) { $publicDir = Join-Path $env:PUBLIC 'Documents' }
 $diagnostic = Join-Path $publicDir 'GFARM-Instalacao.log'
 $transcriptStarted = $false
+$configWasChanged = $false
+$previousConfigBytes = $null
+$hasPreviousControl = $false
 
 function Log([string]$msg) {
   $line = ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg)
@@ -76,6 +79,10 @@ try {
   $data = Join-Path $root 'data'
   $uploads = Join-Path $data 'uploads'
   $cfgPath = Join-Path $root 'control.json'
+  if (Test-Path -LiteralPath $cfgPath -PathType Leaf) {
+    $previousConfigBytes = [IO.File]::ReadAllBytes($cfgPath)
+  }
+  $hasPreviousControl = [bool](Get-ScheduledTask -TaskName 'GFARM Control' -ErrorAction SilentlyContinue)
   foreach ($dir in @($installed, $data, $uploads, (Join-Path $data 'xml-inbox'),
                      (Join-Path $root 'backups'), (Join-Path $root 'releases'),
                      (Join-Path $root 'secrets'))) {
@@ -246,6 +253,7 @@ try {
     $tmp = $cfgPath + '.tmp'
     [System.IO.File]::WriteAllText($tmp, ($config | ConvertTo-Json -Depth 6), $utf8)
     Move-Item -LiteralPath $tmp -Destination $cfgPath -Force
+    $configWasChanged = $true
     Log ('Versao instalada/atualizada: ' + $revision.Substring(0, 12))
   } else {
     Log 'Reparo: versao atual do GFARM preservada.'
@@ -315,6 +323,26 @@ try {
 } catch {
   $reason = $_.Exception.Message
   Log ('FALHA: ' + $reason)
+  if ($configWasChanged -and $previousConfigBytes) {
+    try {
+      $cfgRollback = $cfgPath + '.rollback.tmp'
+      [IO.File]::WriteAllBytes($cfgRollback, $previousConfigBytes)
+      Move-Item -LiteralPath $cfgRollback -Destination $cfgPath -Force
+      Log 'Configuracao antiga do GFARM restaurada. PostgreSQL e uploads preservados.'
+    } catch {
+      Log ('ALERTA: falha ao restaurar control.json: ' + $_.Exception.Message)
+    }
+  }
+  # Se a reinstalacao parou o Control existente e falhou antes do fim,
+  # religar a tarefa antiga (o bootstrap tem codigo web embutido de reparo).
+  if ($hasPreviousControl) {
+    try {
+      Start-ScheduledTask -TaskName 'GFARM Control' -ErrorAction Stop
+      Log 'GFARM Control reiniciado apos falha do instalador.'
+    } catch {
+      Log ('ALERTA: GFARM Control precisa ser iniciado manualmente: ' + $_.Exception.Message)
+    }
+  }
   Write-Host ('Detalhes: ' + $_.ScriptStackTrace) -ForegroundColor Red
   throw
 } finally {
