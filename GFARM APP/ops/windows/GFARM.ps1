@@ -393,19 +393,15 @@ function Criar-Backup {
     if (-not $cfg) { throw 'Instalacao independente nao configurada.' }
     $py = Join-Path $runtimeDir 'Scripts\python.exe'
     $backend = Join-Path ([string]$cfg.app_path) 'backend'
-    $env:GFARM_BACKUP_DIR = Join-Path $homeDir 'backups'
-    $env:GFARM_UPLOAD_DIR = $uploadsDir
+    $operations = Join-Path ([string]$cfg.app_path) 'ops\windows\GFARM-Operacoes.py'
+    if (-not (Test-Path -LiteralPath $operations -PathType Leaf)) {
+        throw 'Rotina Python oficial de backup ausente; servidor preservado.'
+    }
     Push-Location $backend
     try {
-        # Mesma rotina oficial do ERP, com caminhos persistentes do servidor.
-        $script = 'import os; from pathlib import Path; import app.services.backup_erp as b; b.BACKUP_DIR=Path(os.environ["GFARM_BACKUP_DIR"]); b.UPLOAD_DIR=Path(os.environ["GFARM_UPLOAD_DIR"]); print(b.criar_backup(origem="powershell"))'
-        & $py -c $script
+        & $py $operations backup --data-root $homeDir
         if ($LASTEXITCODE -ne 0) { throw 'Falha no backup oficial do GFARM. Nada foi restaurado.' }
-    } finally {
-        Pop-Location
-        Remove-Item Env:\GFARM_BACKUP_DIR -ErrorAction SilentlyContinue
-        Remove-Item Env:\GFARM_UPLOAD_DIR -ErrorAction SilentlyContinue
-    }
+    } finally { Pop-Location }
 }
 
 function Publicar-Main {
@@ -475,7 +471,7 @@ function Publicar-Main {
         if ($revision -ne $remoteRevision) {
             throw 'A main mudou durante o download. Execute novamente para manter consistencia.'
         }
-        foreach ($file in @('GFARM.ps1', 'GFARM-Servico.py')) {
+        foreach ($file in @('GFARM.ps1', 'GFARM-Servico.py', 'GFARM-Operacoes.py')) {
             $source = Join-Path $stageApp ('ops\windows\' + $file)
             if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
                 throw "Gerenciador independente incompleto na main: $file"
@@ -497,19 +493,23 @@ function Publicar-Main {
         if ($LASTEXITCODE -ne 0) { throw 'Dependencias Python inconsistentes.' }
         & $py -m compileall -q (Join-Path $stageApp 'backend\app')
         if ($LASTEXITCODE -ne 0) { throw 'Backend Python invalido.' }
-        & $py -m py_compile (Join-Path $stageApp 'ops\windows\GFARM-Servico.py')
-        if ($LASTEXITCODE -ne 0) { throw 'Servico independente Python invalido.' }
+        & $py -m py_compile (Join-Path $stageApp 'ops\windows\GFARM-Servico.py') (Join-Path $stageApp 'ops\windows\GFARM-Operacoes.py')
+        if ($LASTEXITCODE -ne 0) { throw 'Rotinas independentes Python invalidas.' }
         $psTokens = $null
         $psErrors = $null
         [void][System.Management.Automation.Language.Parser]::ParseFile(
             (Join-Path $stageApp 'ops\windows\GFARM.ps1'), [ref]$psTokens, [ref]$psErrors
         )
         if ($psErrors.Count -gt 0) { throw 'Gerenciador PowerShell novo com erro de sintaxe.' }
+        Informar 'Executando testes isolados da verificacao Python e backup...'
+        & $py -m unittest discover -s (Join-Path $stageApp 'ops\windows') -p 'test_*.py' -v
+        if ($LASTEXITCODE -ne 0) { throw 'Testes isolados do gerenciador falharam; servidor atual preservado.' }
         Push-Location (Join-Path $stageApp 'backend')
         try {
-            $query = 'from sqlalchemy import text; from app.db.database import engine; connection=engine.connect(); assert connection.execute(text("SELECT 1")).scalar()==1; connection.close(); print("PostgreSQL validado")'
-            & $py -c $query
-            if ($LASTEXITCODE -ne 0) { throw 'PostgreSQL nao respondeu a consulta de leitura. Servidor antigo preservado.' }
+            # Arquivo Python versionado: evita quebra de aspas do -c no Windows PowerShell.
+            $operacoes = Join-Path $stageApp 'ops\windows\GFARM-Operacoes.py'
+            & $py $operacoes banco
+            if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel validar a conexao com o PostgreSQL. Servidor antigo preservado; confira o erro Python acima.' }
         } finally { Pop-Location }
 
         Informar 'Compilando frontend React antes de desligar o servidor antigo...'
