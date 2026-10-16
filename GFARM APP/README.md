@@ -1,82 +1,23 @@
-# Estoque Novo Horizonte
+# GFARM APP
 
-Aplicação particular composta por frontend React/Vite, backend FastAPI e banco PostgreSQL.
+Código atual do estoque Novo Horizonte.
 
-## Produção
+- `src/`, `public/`, `package*.json`: frontend React/Vite.
+- `backend/app/`, `backend/alembic/`: FastAPI, motor de estoque, autenticação e migrations do banco.
+- `ops/gfarm_control/`: gerenciador e instalador oficial Windows.
+- `ops/migrar_servidor.py`, `deploy/cloud/`: utilitários atuais para migração controlada e hospedagem alternativa.
+- `tests/`: testes atuais.
 
-O frontend é compilado para `dist/` e servido diretamente pelo FastAPI. O domínio público existente encaminha para o backend em `127.0.0.1:8000` por meio do Cloudflare Tunnel já instalado no computador.
+## Instalação Windows
 
-```powershell
-npm install
-npm run build
-$env:APP_HOST='127.0.0.1'
-.\.venv\Scripts\python.exe backend\run_production.py
-```
+Utilize `GFARM_Instalador_Definitivo.exe` na [área Releases](https://github.com/layon-lima/GFARM/releases). Ele instala GFARM + Control no Windows e baixa o sistema do GitHub privado.
 
-O FastAPI também serve `/api` e `/uploads` no mesmo domínio.
+O banco PostgreSQL existente **não é excluído**. Configure-o no Control; não execute restaurações sobre bancos com dados.
 
-## Banco
-
-As configurações locais ficam em `backend/.env`. Nunca publique esse arquivo ou suas credenciais. Para aplicar migrations aditivas:
+## Desenvolvimento
 
 ```powershell
-Set-Location backend
-..\.venv\Scripts\python.exe -m alembic upgrade head
-```
-
-Não execute scripts de limpeza ou reset contra o banco real.
-
-## Verificações
-
-```powershell
+npm ci
 npm run build
 npm run lint
-npm run typecheck
 ```
-
-## Transferencia do servidor e hospedagem 24/7
-
-Consulte [MIGRACAO E CLOUD](ops/GUIA_MIGRACAO_E_CLOUD.md) para:
-
-- mudar o servidor para outro Windows com banco, uploads e XMLs pendentes;
-- instalar um monitor de backend ao entrar no Windows, a partir do repositorio;
-- preparar um VPS Docker/PostgreSQL persistente, sem depender do computador local.
-
-**Nao copie backups ou credenciais para o GitHub e nao restaure por cima do banco atual.** O VPS e o Cloudflare requerem configuracao na conta do operador.
-
-## Instalação oficial do SISTEMA GFARM (Windows)
-
-Baixe o **[GFARM_Instalador.exe](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest)**.
-É o instalador online do **sistema de estoque**, não apenas do painel: oferece
-a pasta padrão `C:\\Programas\\GFARM` (editável pelo usuário), cria atalhos e
-abre o assistente **INSTALAR GFARM COMPLETO** após a instalação.
-
-O assistente instala os programas necessários, baixa o código oficial do
-GitHub para `C:\\Programas\\GFARM\\Servidor` (ou na pasta escolhida),
-instala o backend e compila o site. Em seguida, cria um banco PostgreSQL
-**novo** com autorização, solicita o backup ZIP acompanhado de SHA256 para
-restaurar os dados e permite iniciar o servidor após a validação. Exige
-internet, Windows 11 e eventualmente permissões de administrador/reinicialização.
-
-**Não reinstala o estoque sobre um servidor em funcionamento, não apaga banco
-existente e não copia os dados privados do GitHub.** Em PC que já executa o
-ESTQ, a instalação preserva o servidor e o painel procura seu caminho real.
-Veja [manual completo](ops/PAINEL_UNICO_WINDOWS.md).
-
-## Painel único Windows (instalação e troca de PC)
-
-No computador novo, use [PAINEL_ESTQ.exe — versão oficial](https://github.com/layon-lima/gest-o-de-estoque-novo-horizonte/releases/latest) gerado no GitHub Actions. O aplicativo portátil instala Git/Python/Node/PostgreSQL/Cloudflare, baixa a main, prepara o backend, restaura banco e arquivos e instala monitor de inicialização. Veja [guia de migração por painel](ops/PAINEL_UNICO_WINDOWS.md).
-
-Dados reais e credenciais **não estão** no GitHub nem no executável. O PC antigo precisa exportar primeiro o backup ZIP acompanhado do SHA256; o novo restaura somente em banco vazio. O Cloudflare Tunnel precisa de autorização separada para evitar dois servidores gravando no estoque.
-
-## Atualização remota pelo painel do seu PC
-
-O PAINEL_ESTQ.exe agora contém um modo **Controle remoto (Tailscale + SSH)** para
-atualizar o servidor Windows sem acessar fisicamente o computador servidor.
-O primeiro pareamento requer uma chave pública, autorização de administrador
-no servidor e confirmação manual do fingerprint SHA256. Depois, use
-**Testar conexão** e **ATUALIZAR SERVIDOR REMOTO**.
-
-Esta função não mexe nas rotas HTTP do ERP nem abre SSH na Internet pública.
-Mudanças de migrations/dependências e backend de outro inicializador são
-bloqueadas por segurança. Consulte [GUIA DE ATUALIZAÇÃO REMOTA](ops/GUIA_ATUALIZACAO_REMOTA.md).
