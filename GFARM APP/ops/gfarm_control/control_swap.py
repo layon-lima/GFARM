@@ -137,6 +137,8 @@ def perform(root: Path, staged: Path, target: Path, pid: int, expected: str, fin
         copy_retry(staged, target)
         if sha256(target).lower() != expected.lower():
             raise RuntimeError("Arquivo instalado nao corresponde ao SHA-256 esperado.")
+        # O Agendador leva um instante para marcar a instancia anterior como encerrada.
+        time.sleep(2)
         task("/Run")
         check_control_online()
         save_fingerprint(root, fingerprint)
