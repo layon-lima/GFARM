@@ -71,7 +71,17 @@ try {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $pasta 'build_windows.ps1')
   Conferir 'Compilacao'
   if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Instalador nao encontrado.' }
-  if ((Get-Item -LiteralPath $exe).Length -lt 1000000) { throw 'Arquivo gerado invalido ou muito pequeno.' }
+  # O instalador web e leve. Validar o formato PE em vez de exigir 1 MB.
+  $bytes = [IO.File]::ReadAllBytes($exe)
+  if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+    throw 'O compilador nao produziu um executavel Windows valido.'
+  }
+  $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+  if ($pe -lt 0 -or $pe -gt ($bytes.Length - 4) -or
+      $bytes[$pe] -ne 0x50 -or $bytes[$pe + 1] -ne 0x45 -or
+      $bytes[$pe + 2] -ne 0 -or $bytes[$pe + 3] -ne 0) {
+    throw 'Cabecalho PE do instalador invalido.'
+  }
   $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
   Set-Content -LiteralPath $checksum -Encoding ASCII -Value ($sha + '  GFARM_Instalador_Definitivo.exe')
 

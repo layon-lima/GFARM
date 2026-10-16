@@ -427,6 +427,9 @@ Testar o endpoint/fluxo que a UI realmente usa.
 
 # 13. DEPLOY
 
+- O usuario quer validar a instalacao no proprio PC e corrigir erros concretos conforme aparecerem; nao exigir outro computador ou maquina virtual como pre-requisito.
+- Para esta entrega solicitada, a publicacao pode substituir o instalador da Release oficial apos os testes e a compilacao Windows. O marcador de commit `[instalar-no-pc]` solicita essa entrega; commits comuns nao publicam instaladores.
+
 ## Atualizacao incremental (regra de 16/10/2026)
 
 - O botao **Atualizar GitHub** atualiza GFARM e GFARM Control na MESMA pasta instalada, mantendo `app_path`.
