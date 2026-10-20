@@ -4249,3 +4249,15 @@ html .bg-\[\#12362f\] {
     max-width: none;
   }
 }
+
+/* GFARM: ícone ocupa integralmente o card, sem ampliar o cabeçalho. */
+.top-nav__brand-mark,
+.mobile-app-header__mark {
+  overflow: hidden;
+}
+.top-nav__brand-mark img,
+.mobile-app-header__mark img {
+  display: block;
+  max-width: none;
+  flex-shrink: 0;
+}
