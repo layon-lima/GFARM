@@ -219,7 +219,8 @@ export default function Layout() {
           <Menu className="h-5 w-5" />
         </button>
 
-        <span className="font-bold">Controle de Estoque</span>
+        <img src="/icons/gfarm-icon.svg" alt="" className="h-8 w-8 object-contain" />
+        <span className="font-bold">GFARM</span>
       </header>
 
       <main className="erp-compact-workspace min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-none scrollbar-thin">
