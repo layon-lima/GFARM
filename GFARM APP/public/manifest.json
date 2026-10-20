@@ -11,6 +11,12 @@
   "theme_color": "#0f8b68",
   "icons": [
     {
+      "src": "/icons/gfarm-icon-1254.png?v=3",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/icons/gfarm-icon.svg?v=3",
       "sizes": "any",
       "type": "image/svg+xml",
