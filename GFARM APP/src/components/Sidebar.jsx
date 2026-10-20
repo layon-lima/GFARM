@@ -503,7 +503,7 @@ export default function Sidebar({
               className="top-nav__brand"
             >
               <span className="top-nav__brand-mark">
-                <img src="/icons/gfarm-icon.svg" alt="" className="h-9 w-9 object-contain" />
+                <img src="/icons/gfarm-icon.svg" alt="" className="h-full w-full object-cover scale-[1.48]" />
               </span>
 
               <span className="top-nav__brand-copy">
@@ -637,7 +637,7 @@ export default function Sidebar({
         <div className="flex items-center justify-between px-5 py-5">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/15 p-2 text-primary">
-              <img src="/icons/gfarm-icon.svg" alt="" className="h-9 w-9 object-contain" />
+              <img src="/icons/gfarm-icon.svg" alt="" className="h-full w-full object-cover scale-[1.48]" />
             </div>
 
             <div>
