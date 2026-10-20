@@ -1,5 +1,6 @@
-# Uso: docker compose --env-file backend/.env -f deploy/cloud/compose.yml up -d --build
-# Requer VPS Linux 24/7; acesso público deve usar túnel HTTPS separado.
+# VPS: executar a partir de GFARM APP com docker compose --env-file backend/.env -f deploy/cloud/compose.yml up -d --build
+# A API fica restrita ao loopback; proxy HTTPS do host publica estoque.fazendanovohorizonte.com.
+# Banco e uploads persistem em volumes exclusivos deste projeto.
 services:
   db:
     image: postgres:17
@@ -31,7 +32,7 @@ services:
       APP_HOST: "0.0.0.0"
       APP_PORT: "8000"
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${GFARM_BIND_PORT:-18080}:8000"
     depends_on:
       db:
         condition: service_healthy
