@@ -189,10 +189,6 @@ export default function TicketsWorkspace({
       ? Number(ticketAtivo?.peso_bruto) || 0
       : Number(ticketAtivo?.peso_tara) || 0)
     : segundaPesagem;
-  const liquidoExibido = ticketFechado
-    ? Number(ticketAtivo?.peso_liquido) || 0
-    : liquido;
-
   const isInverted =
     !!ticketAtivo &&
     (Number(ticketAtivo.peso_bruto) || 0) > 0 &&
@@ -204,6 +200,10 @@ export default function TicketsWorkspace({
       ? calcLiquido(ticketAtivo.peso_bruto || 0, segundaPesagem)
       : calcLiquido(segundaPesagem, ticketAtivo.peso_tara || 0);
   }, [ticketAtivo, segundaPesagem, isInverted]);
+
+  const liquidoExibido = ticketFechado
+    ? Number(ticketAtivo?.peso_liquido) || 0
+    : liquido;
 
   // Automaticamente 1ª → 2ª; após a segunda, clique no campo
   // correspondente para refazer uma leitura incorreta.
@@ -1533,7 +1533,7 @@ export default function TicketsWorkspace({
             {!ticketFechado && <Button
               type="button"
               className="h-10 w-full gap-2"
-              disabled={saving || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
+              disabled={saving || ticketFechado || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
               onClick={fecharTicketAtual}
             >
               <CheckCircle2 className="h-4 w-4" />
