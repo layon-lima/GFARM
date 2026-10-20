@@ -73,15 +73,25 @@ def upgrade() -> None:
         sa.column("deposito_id", sa.String(100)),
     )
 
-    depositos_encontrados = [
-        row
-        for row in bind.execute(
+    todos_depositos = list(
+        bind.execute(
             sa.select(
                 depositos.c.id,
                 depositos.c.numero,
                 depositos.c.nome,
             )
         ).mappings()
+    )
+
+    # Uma instalação nova não possui cadastros de depósitos.
+    # Não inventar um depósito nem impedir a inicialização da API.
+    # Na migração do banco real, os vínculos existentes são preservados.
+    if not todos_depositos:
+        return
+
+    depositos_encontrados = [
+        row
+        for row in todos_depositos
         if _eh_almoxerifado_01(row["numero"], row["nome"])
     ]
 
