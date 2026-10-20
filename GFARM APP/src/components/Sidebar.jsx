@@ -21,7 +21,6 @@ import {
   FileBarChart,
   Fuel,
   LayoutDashboard,
-  Leaf,
   LogOut,
   MapPinned,
   Package,
@@ -504,16 +503,16 @@ export default function Sidebar({
               className="top-nav__brand"
             >
               <span className="top-nav__brand-mark">
-                <Leaf className="h-6 w-6" />
+                <img src="/icons/gfarm-icon.svg" alt="" className="h-9 w-9 object-contain" />
               </span>
 
               <span className="top-nav__brand-copy">
                 <strong>
-                  Controle de Estoque
+                  GFARM
                 </strong>
 
                 <small>
-                  Novo Horizonte
+                  Gestão de Estoque
                 </small>
               </span>
             </NavLink>
@@ -638,16 +637,16 @@ export default function Sidebar({
         <div className="flex items-center justify-between px-5 py-5">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/15 p-2 text-primary">
-              <Leaf className="h-7 w-7" />
+              <img src="/icons/gfarm-icon.svg" alt="" className="h-9 w-9 object-contain" />
             </div>
 
             <div>
               <h1 className="text-base font-bold leading-tight">
-                Controle de Estoque
+                GFARM
               </h1>
 
               <p className="text-xs font-medium text-muted-foreground">
-                Novo Horizonte
+                Gestão de Estoque
               </p>
             </div>
           </div>
