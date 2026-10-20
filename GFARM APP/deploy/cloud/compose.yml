@@ -45,7 +45,7 @@ services:
       timeout: 10s
       start_period: 180s
       retries: 6
-    networks: [private]
+    networks: [private, proxy]
 
   # Restauração só sob comando explícito, sem iniciar a API.
   restore:
@@ -74,6 +74,9 @@ services:
 networks:
   private:
     driver: bridge
+  proxy:
+    external: true
+    name: gfarm_proxy
 
 volumes:
   postgres_data:
