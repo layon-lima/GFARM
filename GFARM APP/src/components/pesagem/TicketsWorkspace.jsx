@@ -339,51 +339,106 @@ export default function TicketsWorkspace({
     if (!ticket) return;
     const primeira = (Number(ticket.peso_tara) || 0) || (Number(ticket.peso_bruto) || 0);
     if (!(primeira > 0)) return;
-    const segundo = ticket.status === 'fechado'
+
+    const segunda = ticket.status === 'fechado'
       ? ((Number(ticket.peso_tara) || 0) === primeira
         ? Number(ticket.peso_bruto) || 0 : Number(ticket.peso_tara) || 0)
       : (ticket.id === ticketAtivo?.id ? segundaPesagem : 0);
-    const pesoLiquido = ticket.status === 'fechado'
+    const liquidoImpresso = ticket.status === 'fechado'
       ? Number(ticket.peso_liquido) || 0
-      : (segundo > 0 ? Math.abs(segundo - primeira) : 0);
+      : (segunda > 0 ? Math.abs(segunda - primeira) : 0);
     const pedido = pedidos.find((item) => item.id === ticket.pedido_id);
     const pessoa = pessoas.find((item) => item.id === (ticket.cliente_id || pedido?.cliente_id));
     const produto = produtos.find((item) => item.id === (ticket.produto_id || pedido?.produto_id));
     const transp = transportadoras.find((item) => item.id === ticket.transportadora_id);
-    const escape = (value) => String(value ?? '—').replace(/[&<>"']/g, (char) =>
+    const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-    const campos = [
-      ['Número', ticket.numero], ['Situação', ticket.status === 'fechado' ? 'Fechado' : 'Em andamento'],
-      ['Tipo', tipoLabel(ticket.tipo)], ['Motorista', ticket.motorista],
-      ['Placa', formatPlaca(ticket.placa)], ['Transportadora', transp?.nome || ticket.transportadora_nome],
-      ['Cliente / Fornecedor', pessoa?.nome || ticket.cliente_nome],
-      ['Produto', produto?.nome || ticket.produto_nome],
-      ['Origem', ticket.origem], ['Destino', ticket.destino],
-      ['Abertura', formatDateTime(ticket.data_abertura)],
-      ['1ª Pesagem', formatKg(primeira)],
-      ['2ª Pesagem', segundo > 0 ? formatKg(segundo) : 'Pendente'],
-      ['Peso Líquido', pesoLiquido > 0 ? formatKg(pesoLiquido) : 'Pendente'],
-      ['Observações', ticket.observacao],
+    const exibicao = (value) => escape(value || '—');
+    const dataAbertura = formatDateTime(ticket.data_abertura);
+    const dataFechamento = ticket.data_fechamento ? formatDateTime(ticket.data_fechamento) : '';
+    const dataPrimeira = ticket.data_primeira_pesagem || ticket.data_pesagem_1 || '';
+    const dataSegunda = ticket.data_segunda_pesagem || ticket.data_pesagem_2 || '';
+    const hora = (value) => {
+      if (!value) return '';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    };
+    const status = ticket.status === 'fechado' ? 'FECHADO' : 'EM ANDAMENTO';
+    const dados = [
+      ['MOTORISTA', ticket.motorista],
+      ['PLACA', formatPlaca(ticket.placa)],
+      ['PRODUTO', produto?.nome || ticket.produto_nome],
+      ['CLIENTE / FORNECEDOR', pessoa?.nome || ticket.cliente_nome],
+      ['TRANSPORTADORA', transp?.nome || ticket.transportadora_nome],
+      ['ORIGEM / DESTINO', [ticket.origem, ticket.destino].filter(Boolean).join(' / ')],
+      ['DATA / HORA', dataFechamento || dataAbertura],
     ];
-    const janela = window.open('', '_blank', 'width=820,height=850');
+    const linhas = dados
+      .filter(([, valor]) => Boolean(valor))
+      .map(([nome, valor]) =>
+        '<div class="data-row"><span class="data-label">' + escape(nome) +
+        '</span><strong>' + exibicao(valor) + '</strong></div>'
+      ).join('');
+    const blocoPeso = (nome, valor, horario) =>
+      '<div class="weight"><span>' + escape(nome) +
+      '</span><strong>' + (valor > 0 ? escape(formatKg(valor)) : 'PENDENTE') +
+      '</strong><small>' + (horario ? escape(horario) : '&nbsp;') + '</small></div>';
+    const pesos = blocoPeso('1ª PESAGEM (kg)', primeira, hora(dataPrimeira)) +
+      blocoPeso('2ª PESAGEM (kg)', segunda, hora(dataSegunda)) +
+      blocoPeso('PESO LÍQUIDO (kg)', liquidoImpresso, '');
+    const observacao = ticket.observacao
+      ? '<div class="notes"><b>OBSERVAÇÃO:</b> ' + escape(ticket.observacao) + '</div>' : '';
+    const via = (numero, destinatario) =>
+      '<section class="ticket">' +
+        '<div class="topline"><div class="brand">' +
+          '<img src="/icons/gfarm-icon.svg" alt="GFARM" />' +
+          '<div><h1>FAZENDA NOVO HORIZONTE</h1><p>TICKET DE PESAGEM RODOVIÁRIA</p></div>' +
+        '</div><span class="copy">' + numero + 'ª VIA · ' + destinatario + '</span></div>' +
+        '<div class="ticket-head"><div><span>TICKET Nº</span><strong>' + exibicao(ticket.numero) +
+        '</strong></div><div><span>TIPO</span><strong>' + escape(tipoLabel(ticket.tipo)) +
+        '</strong></div><span class="status">' + status + '</span></div>' +
+        '<div class="data-grid">' + linhas + '</div>' +
+        '<div class="weights">' + pesos + '</div>' + observacao +
+        '<div class="signatures"><div><span></span>Assinatura do Motorista</div>' +
+        '<div><span></span>Assinatura do Balanceiro</div></div>' +
+      '</section>';
+
+    const janela = window.open('', '_blank', 'width=900,height=950');
     if (!janela) {
       toast({ variant: 'destructive', title: 'Permita janelas pop-up para imprimir o ticket.' });
       return;
     }
-    janela.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ticket ${escape(ticket.numero)}</title><style>
-      body{font:14px Arial,sans-serif;color:#172c25;max-width:720px;margin:28px auto;padding:0 20px}
-      header{border-bottom:2px solid #12533c;padding-bottom:16px;margin-bottom:20px}
-      h1{margin:0;font-size:23px}header p{margin:5px 0 0;color:#60766b}
-      h2{font-size:16px;margin:22px 0 10px}
-      table{border-collapse:collapse;width:100%}td{padding:9px 10px;border-bottom:1px solid #dce5e0;vertical-align:top}
-      td:first-child{width:36%;color:#536c60}td:last-child{font-weight:600;overflow-wrap:anywhere}
-      footer{margin-top:30px;color:#667a70;font-size:11px}
-      @media print{body{margin:0;max-width:none} }
-    </style></head><body><header><h1>GFARM · Ticket de Pesagem</h1><p>Gestão de Estoque — Fazenda Novo Horizonte</p></header>
-    <h2>Dados do ticket</h2><table>${campos.map(([nome, valor]) =>
-      `<tr><td>${escape(nome)}</td><td>${escape(valor || '—')}</td></tr>`).join('')}</table>
-    <footer>Documento emitido em ${escape(new Date().toLocaleString('pt-BR'))}.</footer>
-    <script>window.onload=()=>{window.focus();window.print();};<\/script></body></html>`);
+    janela.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ticket ' +
+      exibicao(ticket.numero) + ' - 2 vias</title><style>' +
+      '@page{size:A4 portrait;margin:9mm 11mm}' +
+      '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172c25;margin:0;background:white}' +
+      '.sheet{width:100%;display:flex;flex-direction:column}' +
+      '.ticket{height:132mm;display:flex;flex-direction:column;padding:4mm 2mm 2mm;break-inside:avoid;overflow:hidden}' +
+      '.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:2px solid #126647;padding-bottom:9px}' +
+      '.brand{display:flex;align-items:center;gap:9px;min-width:0}.brand img{width:37px;height:37px;object-fit:cover;border-radius:8px}' +
+      'h1{font-size:14px;margin:0;letter-spacing:.3px}p{margin:3px 0 0;color:#61746c;font-size:9px;letter-spacing:.5px}' +
+      '.copy{font-size:9px;font-weight:700;color:#1b684f;white-space:nowrap}' +
+      '.ticket-head{display:flex;align-items:center;gap:18px;padding:10px 0 8px;border-bottom:1px solid #cddbd3}' +
+      '.ticket-head div{display:flex;gap:7px;align-items:baseline;min-width:0}.ticket-head div:nth-child(2){flex:1}' +
+      '.ticket-head span:not(.status){font-size:9px;color:#66786f;font-weight:700}' +
+      '.ticket-head strong{font-size:12px;overflow-wrap:anywhere}.status{font-size:9px;font-weight:700;color:#126647;border:1px solid #b9d8c9;background:#f0f8f3;padding:5px 7px;border-radius:5px}' +
+      '.data-grid{margin-top:3px}.data-row{display:grid;grid-template-columns:132px minmax(0,1fr);gap:8px;align-items:baseline;padding:5px 2px;border-bottom:1px solid #e1e8e4;font-size:10px}' +
+      '.data-label{font-size:9px;font-weight:700;color:#53685d}.data-row strong{font-size:10.5px;overflow-wrap:anywhere}' +
+      '.weights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:11px}' +
+      '.weight{border:1px solid #cbded3;border-radius:7px;text-align:center;padding:8px 3px 5px;display:flex;flex-direction:column;gap:4px}' +
+      '.weight span{font-size:9px;font-weight:700;color:#416050}.weight strong{font-size:18px;letter-spacing:-.3px}.weight small{font-size:9px;color:#76877c}' +
+      '.notes{font-size:9px;margin-top:7px;overflow-wrap:anywhere;max-height:26px;overflow:hidden}' +
+      '.signatures{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:auto;padding:12px 15px 0;text-align:center;font-size:9px;color:#465c50}' +
+      '.signatures span{display:block;border-top:1px solid #4d5f55;margin-bottom:5px}' +
+      '.cut{height:10mm;display:flex;align-items:center;gap:8px;color:#84978c;font-size:9px;white-space:nowrap}' +
+      '.cut:before,.cut:after{content:"";border-top:1px dashed #a6b9ae;flex:1}' +
+      '@media screen{body{background:#edf1ee;padding:20px}.sheet{background:white;max-width:210mm;margin:auto;padding:9mm 11mm;box-shadow:0 5px 25px #0002}}' +
+      '@media print{html,body{width:100%;height:auto}.sheet{padding:0;box-shadow:none}}' +
+      '</style></head><body><main class="sheet">' +
+      via(1, 'FAZENDA') + '<div class="cut">✂ &nbsp; RECORTAR AQUI</div>' +
+      via(2, 'MOTORISTA') + '</main>' +
+      '<script>window.addEventListener("load",()=>{window.focus();setTimeout(()=>window.print(),350)});<\/script>' +
+      '</body></html>');
     janela.document.close();
   }
 
