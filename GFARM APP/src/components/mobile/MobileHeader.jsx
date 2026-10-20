@@ -1,5 +1,4 @@
 import {
-  Leaf,
   LogOut,
   MoreHorizontal,
 } from 'lucide-react';
@@ -63,12 +62,12 @@ export default function MobileHeader() {
     <header className="mobile-app-header">
       <div className="mobile-app-header__brand">
         <div className="mobile-app-header__mark">
-          <Leaf className="h-5 w-5" />
+          <img src="/icons/gfarm-icon.svg" alt="" className="h-8 w-8 object-contain" />
         </div>
 
         <div className="min-w-0">
           <div className="mobile-app-header__farm">
-            Fazenda Novo Horizonte
+            GFARM · Gestão de Estoque
           </div>
         </div>
       </div>
