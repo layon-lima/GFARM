@@ -415,7 +415,7 @@ export default function TicketsWorkspace({
       '.sheet{width:100%;display:flex;flex-direction:column}' +
       '.ticket{height:127mm;display:flex;flex-direction:column;padding:3mm 2mm 2mm;break-inside:avoid;page-break-inside:avoid;min-width:0}' +
       '.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #000;padding-bottom:7px;min-width:0}' +
-      '.brand{display:flex;align-items:center;gap:9px;min-width:0}.brand img{width:37px;height:37px;object-fit:contain;flex-shrink:0}' +
+      '.brand{display:flex;align-items:center;gap:9px;min-width:0}.brand img{width:46px;height:46px;object-fit:contain;flex-shrink:0;border:0;outline:0;box-shadow:none;background:transparent}' +
       'h1{font-size:13px;margin:0;letter-spacing:.2px}p{margin:3px 0 0;font-size:9px;letter-spacing:.3px}' +
       '.copy{font-size:9px;font-weight:700;white-space:nowrap}' +
       '.ticket-head{display:grid;grid-template-columns:120px minmax(0,1fr) 85px;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #bbb;min-width:0}' +
