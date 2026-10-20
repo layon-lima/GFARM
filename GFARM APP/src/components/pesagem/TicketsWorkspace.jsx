@@ -372,9 +372,10 @@ export default function TicketsWorkspace({
       ['TRANSPORTADORA', transp?.nome || ticket.transportadora_nome],
       ['ORIGEM / DESTINO', [ticket.origem, ticket.destino].filter(Boolean).join(' / ')],
       ['DATA / HORA', dataFechamento || dataAbertura],
+      ['OBSERVAÇÕES', ticket.observacao || ''],
     ];
     const linhas = dados
-      .filter(([, valor]) => Boolean(valor))
+      .filter(([nome, valor]) => nome === 'OBSERVAÇÕES' || Boolean(valor))
       .map(([nome, valor]) =>
         '<div class="data-row"><span class="data-label">' + escape(nome) +
         '</span><strong>' + exibicao(valor) + '</strong></div>'
@@ -386,7 +387,6 @@ export default function TicketsWorkspace({
     const pesos = blocoPeso('1ª PESAGEM (kg)', primeira, hora(dataPrimeira)) +
       blocoPeso('2ª PESAGEM (kg)', segunda, hora(dataSegunda)) +
       blocoPeso('PESO LÍQUIDO (kg)', liquidoImpresso, '');
-    const observacao = '<div class="notes"><b>OBSERVAÇÕES</b><div class="notes-content">' + (ticket.observacao ? escape(ticket.observacao) : '&nbsp;') + '</div></div>';
     const via = (numero, destinatario) =>
       '<section class="ticket">' +
         '<div class="topline"><div class="brand">' +
@@ -397,7 +397,7 @@ export default function TicketsWorkspace({
         '</strong></div><div><span>TIPO</span><strong>' + escape(tipoLabel(ticket.tipo)) +
         '</strong></div><span class="status">' + status + '</span></div>' +
         '<div class="data-grid">' + linhas + '</div>' +
-        '<div class="weights">' + pesos + '</div>' + observacao +
+        '<div class="weights">' + pesos + '</div>' +
         '<div class="signatures"><div><span></span>Assinatura do Motorista</div>' +
         '<div><span></span>Assinatura do Balanceiro</div></div>' +
       '</section>';
@@ -426,7 +426,6 @@ export default function TicketsWorkspace({
       '.weights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px;min-width:0}' +
       '.weight{border:1px solid #aaa;border-radius:5px;text-align:center;padding:7px 3px 5px;display:flex;flex-direction:column;gap:3px;min-width:0}' +
       '.weight span{font-size:9px;font-weight:700}.weight strong{font-size:17px;letter-spacing:-.3px;overflow-wrap:anywhere}.weight small{font-size:9px}' +
-      '.notes{font-size:9px;margin-top:7px;border:1px solid #aaa;border-radius:4px;padding:5px 8px;height:17mm;overflow:hidden;overflow-wrap:anywhere;line-height:1.25}.notes b{display:block;margin-bottom:4px}.notes-content{white-space:pre-wrap;overflow-wrap:anywhere}' +
       '.signatures{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:auto;padding:10px 15px 2px;text-align:center;font-size:9px}' +
       '.signatures span{display:block;border-top:1px solid #000;margin-bottom:5px}' +
       '.cut{height:8mm;display:flex;align-items:center;gap:8px;font-size:9px;white-space:nowrap}' +
