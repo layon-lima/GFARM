@@ -7,6 +7,7 @@ import {
   LockKeyhole,
   Package,
   Play,
+  Printer,
   Search,
   ShoppingCart,
   Sprout,
@@ -182,6 +183,16 @@ export default function TicketsWorkspace({
     return 0;
   }, [ticketAtivo]);
 
+  const ticketFechado = ticketAtivo?.status === 'fechado';
+  const segundaExibida = ticketFechado
+    ? ((Number(ticketAtivo?.peso_tara) || 0) === primeiraPesagem
+      ? Number(ticketAtivo?.peso_bruto) || 0
+      : Number(ticketAtivo?.peso_tara) || 0)
+    : segundaPesagem;
+  const liquidoExibido = ticketFechado
+    ? Number(ticketAtivo?.peso_liquido) || 0
+    : liquido;
+
   const isInverted =
     !!ticketAtivo &&
     (Number(ticketAtivo.peso_bruto) || 0) > 0 &&
@@ -322,6 +333,58 @@ export default function TicketsWorkspace({
     setEtapaSelecionada(0);
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
+  }
+
+  function imprimirTicket(ticket = ticketAtivo) {
+    if (!ticket) return;
+    const primeira = (Number(ticket.peso_tara) || 0) || (Number(ticket.peso_bruto) || 0);
+    if (!(primeira > 0)) return;
+    const segundo = ticket.status === 'fechado'
+      ? ((Number(ticket.peso_tara) || 0) === primeira
+        ? Number(ticket.peso_bruto) || 0 : Number(ticket.peso_tara) || 0)
+      : (ticket.id === ticketAtivo?.id ? segundaPesagem : 0);
+    const pesoLiquido = ticket.status === 'fechado'
+      ? Number(ticket.peso_liquido) || 0
+      : (segundo > 0 ? Math.abs(segundo - primeira) : 0);
+    const pedido = pedidos.find((item) => item.id === ticket.pedido_id);
+    const pessoa = pessoas.find((item) => item.id === (ticket.cliente_id || pedido?.cliente_id));
+    const produto = produtos.find((item) => item.id === (ticket.produto_id || pedido?.produto_id));
+    const transp = transportadoras.find((item) => item.id === ticket.transportadora_id);
+    const escape = (value) => String(value ?? '—').replace(/[&<>"']/g, (char) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+    const campos = [
+      ['Número', ticket.numero], ['Situação', ticket.status === 'fechado' ? 'Fechado' : 'Em andamento'],
+      ['Tipo', tipoLabel(ticket.tipo)], ['Motorista', ticket.motorista],
+      ['Placa', formatPlaca(ticket.placa)], ['Transportadora', transp?.nome || ticket.transportadora_nome],
+      ['Cliente / Fornecedor', pessoa?.nome || ticket.cliente_nome],
+      ['Produto', produto?.nome || ticket.produto_nome],
+      ['Origem', ticket.origem], ['Destino', ticket.destino],
+      ['Abertura', formatDateTime(ticket.data_abertura)],
+      ['1ª Pesagem', formatKg(primeira)],
+      ['2ª Pesagem', segundo > 0 ? formatKg(segundo) : 'Pendente'],
+      ['Peso Líquido', pesoLiquido > 0 ? formatKg(pesoLiquido) : 'Pendente'],
+      ['Observações', ticket.observacao],
+    ];
+    const janela = window.open('', '_blank', 'width=820,height=850');
+    if (!janela) {
+      toast({ variant: 'destructive', title: 'Permita janelas pop-up para imprimir o ticket.' });
+      return;
+    }
+    janela.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ticket ${escape(ticket.numero)}</title><style>
+      body{font:14px Arial,sans-serif;color:#172c25;max-width:720px;margin:28px auto;padding:0 20px}
+      header{border-bottom:2px solid #12533c;padding-bottom:16px;margin-bottom:20px}
+      h1{margin:0;font-size:23px}header p{margin:5px 0 0;color:#60766b}
+      h2{font-size:16px;margin:22px 0 10px}
+      table{border-collapse:collapse;width:100%}td{padding:9px 10px;border-bottom:1px solid #dce5e0;vertical-align:top}
+      td:first-child{width:36%;color:#536c60}td:last-child{font-weight:600;overflow-wrap:anywhere}
+      footer{margin-top:30px;color:#667a70;font-size:11px}
+      @media print{body{margin:0;max-width:none} }
+    </style></head><body><header><h1>GFARM · Ticket de Pesagem</h1><p>Gestão de Estoque — Fazenda Novo Horizonte</p></header>
+    <h2>Dados do ticket</h2><table>${campos.map(([nome, valor]) =>
+      `<tr><td>${escape(nome)}</td><td>${escape(valor || '—')}</td></tr>`).join('')}</table>
+    <footer>Documento emitido em ${escape(new Date().toLocaleString('pt-BR'))}.</footer>
+    <script>window.onload=()=>{window.focus();window.print();};<\/script></body></html>`);
+    janela.document.close();
   }
 
   function trocarTipo(value) {
@@ -655,7 +718,7 @@ export default function TicketsWorkspace({
   }
 
   function selecionarEtapa(etapa) {
-    if (saving || lendo) return;
+    if (saving || lendo || ticketFechado) return;
     if (etapa === 2 && !ticketAtivo) return;
     setEtapaSelecionada(etapa);
     // Nunca reutilizar manualmente a leitura anterior numa nova captura.
@@ -663,7 +726,7 @@ export default function TicketsWorkspace({
   }
 
   async function capturarPeso() {
-    if (saving || lendo || etapaCaptura === 0) return;
+    if (saving || lendo || ticketFechado || etapaCaptura === 0) return;
 
     setSaving(true);
     try {
@@ -1408,7 +1471,7 @@ export default function TicketsWorkspace({
               Resumo do Ticket
             </h2>
             <p className="text-xs text-muted-foreground">
-              Confira os dados e feche após registrar as duas pesagens.
+              {ticketFechado ? 'Consulta de ticket fechado.' : 'Confira os dados e feche após registrar as duas pesagens.'}
             </p>
           </div>
           <div className="flex flex-1 flex-col gap-3 p-3">
@@ -1443,15 +1506,15 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2">
                 <span>2ª Pesagem</span>
                 <span className="font-semibold">
-                  {segundaPesagem > 0 ? formatKg(segundaPesagem) : '—'}
+                  {segundaExibida > 0 ? formatKg(segundaExibida) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {segundaPesagem > 0 ? 'Registrada' : 'Aguardando captura'}
+                {segundaExibida > 0 ? 'Registrada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
                 <span>Peso Líquido</span>
-                <span className="text-base text-primary">{segundaPesagem > 0 ? formatKg(liquido) : '—'}</span>
+                <span className="text-base text-primary">{segundaExibida > 0 ? formatKg(liquidoExibido) : '—'}</span>
               </div>
             </div>
 
@@ -1462,15 +1525,20 @@ export default function TicketsWorkspace({
                 </p>
               )}
 
-            <Button
+            {ticketAtivo && primeiraPesagem > 0 && (
+              <Button type="button" variant="outline" className="mt-auto h-9 w-full gap-2" onClick={() => imprimirTicket()}>
+                <Printer className="h-4 w-4" /> Imprimir Ticket
+              </Button>
+            )}
+            {!ticketFechado && <Button
               type="button"
-              className="mt-auto h-10 w-full gap-2"
+              className="h-10 w-full gap-2"
               disabled={saving || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
               onClick={fecharTicketAtual}
             >
               <CheckCircle2 className="h-4 w-4" />
               {saving ? 'Processando...' : 'Fechar e Salvar Ticket'}
-            </Button>
+            </Button>}
           </div>
         </Card>
 
@@ -1503,7 +1571,7 @@ export default function TicketsWorkspace({
                     value={pesoAtual}
                     onChange={(event) => setPesoAtual(event.target.value)}
                     placeholder={displayPeso}
-                    disabled={saving || lendo || !tipoAtual}
+                    disabled={saving || lendo || ticketFechado || !tipoAtual}
                     className="h-14 min-w-0 border-0 bg-transparent text-right !text-3xl font-bold shadow-none placeholder:text-foreground 2xl:!text-4xl"
                   />
                 ) : (
@@ -1546,7 +1614,7 @@ export default function TicketsWorkspace({
             <button
               type="button"
               onClick={() => selecionarEtapa(2)}
-              disabled={saving || lendo || !ticketAtivo}
+              disabled={saving || lendo || ticketFechado || !ticketAtivo}
               aria-pressed={etapaCaptura === 2}
               title="Selecionar segunda pesagem para capturar novamente"
               className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 ${
@@ -1585,7 +1653,7 @@ export default function TicketsWorkspace({
             <Button
               type="button"
               className="mt-auto h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={saving || lendo || !tipoAtual || etapaCaptura === 0}
+              disabled={saving || lendo || ticketFechado || !tipoAtual || etapaCaptura === 0}
               onClick={capturarPeso}
             >
               <Play className="mr-2 h-4 w-4" />
@@ -1684,11 +1752,11 @@ export default function TicketsWorkspace({
                       return (
                         <tr
                           key={ticket.id}
-                          onClick={() => { if (ticket.status === 'aberto') selecionarTicket(ticket); }}
+                          onClick={() => selecionarTicket(ticket)}
                           className={`border-t transition-colors ${
                             selected
                               ? 'bg-primary/5'
-                              : 'hover:bg-muted/30'
+                              : 'hover:bg-muted/30 cursor-pointer'
                           }`}
                         >
                           <td className="px-3 py-2.5 font-mono font-semibold">
@@ -1731,6 +1799,12 @@ export default function TicketsWorkspace({
                             className="px-3 py-2.5 text-center"
                             onClick={(e) => e.stopPropagation()}
                           >
+                            {primeira > 0 && (
+                              <Button size="icon" variant="ghost" className="h-7 w-7" title="Imprimir ticket"
+                                onClick={() => imprimirTicket(ticket)}>
+                                <Printer className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"
