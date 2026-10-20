@@ -62,7 +62,7 @@ export default function MobileHeader() {
     <header className="mobile-app-header">
       <div className="mobile-app-header__brand">
         <div className="mobile-app-header__mark">
-          <img src="/icons/gfarm-icon.svg" alt="" className="h-8 w-8 object-contain" />
+          <img src="/icons/gfarm-icon.svg" alt="" className="h-full w-full object-cover scale-[1.48]" />
         </div>
 
         <div className="min-w-0">
