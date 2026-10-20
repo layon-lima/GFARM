@@ -352,7 +352,7 @@ export default function TicketsWorkspace({
     setSegundaRegistradaEm('');
   }
 
-  function imprimirTicket(ticket = ticketAtivo, visualizar = false) {
+  function imprimirTicket(ticket = ticketAtivo, visualizar = false, formato = 'a4') {
     if (!ticket) return;
     const primeira = (Number(ticket.peso_tara) || 0) || (Number(ticket.peso_bruto) || 0);
     if (!(primeira > 0) && !visualizar) return;
@@ -419,6 +419,35 @@ export default function TicketsWorkspace({
         '<div><span></span>Assinatura do Balanceiro</div></div>' +
       '</section>';
 
+    const viaTermica = (numero, destinatario) =>
+      '<section class="thermal-ticket">' +
+        '<header class="thermal-brand"><img src="/icons/ticket-logo.svg" alt="" />' +
+        '<div><h1>FAZENDA NOVO HORIZONTE</h1><p>TICKET DE PESAGEM</p></div></header>' +
+        '<div class="thermal-copy">' + numero + 'ª VIA - ' + destinatario + '</div>' +
+        '<div class="thermal-head">TICKET Nº <b>' + exibicao(ticket.numero) +
+        '</b><span>' + escape(tipoLabel(ticket.tipo)) + ' · ' + status + '</span></div>' +
+        '<div class="thermal-data">' + linhas + '</div>' +
+        '<div class="thermal-weights">' + pesos + '</div>' +
+        '<div class="thermal-signatures"><div>________________________________<br/>Assinatura do Motorista</div>' +
+        '<div>________________________________<br/>Assinatura do Balanceiro</div></div>' +
+      '</section>';
+    const termica = formato === 'termica';
+    const estilosTermicos = '@page{size:80mm auto;margin:3mm}' +
+      '@media screen{body{background:#eee;padding:12px}.sheet{width:80mm;max-width:80mm;margin:auto;padding:3mm;background:#fff;box-shadow:0 3px 18px #0002}}' +
+      '@media print{body{margin:0;padding:0;background:#fff}.sheet{width:74mm;max-width:74mm;padding:0;box-shadow:none}.preview-actions{display:none!important}}' +
+      '.thermal-ticket{font-family:Arial,sans-serif;color:#000;font-size:10px;break-inside:avoid;padding:3mm 0 5mm}' +
+      '.thermal-brand{display:flex;align-items:center;gap:6px;text-align:left;border-bottom:1px solid #000;padding-bottom:6px}' +
+      '.thermal-brand img{width:34px;height:34px;object-fit:contain}.thermal-brand h1{font-size:11px;margin:0}.thermal-brand p{font-size:9px;margin:2px 0}' +
+      '.thermal-copy{text-align:center;font-size:10px;font-weight:700;padding:7px 0;border-bottom:1px dashed #000}' +
+      '.thermal-head{display:flex;flex-wrap:wrap;gap:4px;justify-content:space-between;padding:7px 0;font-size:10px;border-bottom:1px solid #000}' +
+      '.thermal-head span{width:100%;font-size:9px}' +
+      '.thermal-data .data-row{display:grid;grid-template-columns:26mm minmax(0,1fr);gap:3px;padding:4px 0;border-bottom:1px dotted #888}' +
+      '.thermal-data .data-label{font-size:9px;font-weight:700}.thermal-data strong{font-size:10px;overflow-wrap:anywhere}' +
+      '.thermal-weights{margin-top:9px}.thermal-weights .weight{display:flex;flex-direction:row;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px;border:0;border-bottom:1px solid #000;border-radius:0;padding:6px 0;text-align:left}' +
+      '.thermal-weights .weight span{font-size:10px;font-weight:700}.thermal-weights .weight strong{font-size:15px}.thermal-weights .weight small{width:100%;text-align:right;font-size:9px}' +
+      '.thermal-signatures{display:flex;flex-direction:column;gap:15px;text-align:center;margin-top:22px;font-size:9px;line-height:1.5}' +
+      '.thermal-cut{border-top:1px dashed #000;text-align:center;margin:5mm 0;padding-top:2mm;font-size:9px}';
+
     const janela = window.open('', '_blank', 'width=900,height=950');
     if (!janela) {
       toast({ variant: 'destructive', title: 'Permita janelas pop-up para visualizar ou imprimir o ticket.' });
@@ -426,7 +455,7 @@ export default function TicketsWorkspace({
     }
     janela.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ticket ' +
       exibicao(ticket.numero) + ' - 2 vias</title><style>' +
-      '@page{size:A4 portrait;margin:8mm 10mm}' +
+      (termica ? estilosTermicos : '@page{size:A4 portrait;margin:8mm 10mm}') +
       '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;background:white}body *{color:#000!important}' +
       '.preview-actions{display:flex;justify-content:center;gap:10px;padding:10px;margin-bottom:8px}' +
       '.preview-actions button{font:600 13px Arial,sans-serif;color:#000;background:#fff;border:1px solid #555;border-radius:5px;padding:10px 22px;cursor:pointer}' +
@@ -450,13 +479,12 @@ export default function TicketsWorkspace({
       '.signatures span{display:block;border-top:1px solid #000;margin-bottom:5px}' +
       '.cut{height:8mm;display:flex;align-items:center;gap:8px;font-size:9px;white-space:nowrap}' +
       '.cut:before,.cut:after{content:"";border-top:1px dashed #777;flex:1}' +
-      '@media screen{body{background:#eee;padding:20px}.sheet{background:white;max-width:210mm;margin:auto;padding:8mm 10mm;box-shadow:0 5px 25px #0002}}' +
+      (termica ? '' : '@media screen{body{background:#eee;padding:20px}.sheet{background:white;max-width:210mm;margin:auto;padding:8mm 10mm;box-shadow:0 5px 25px #0002}}') +
       '@media print{html,body{width:100%;height:auto}.preview-actions{display:none!important}.sheet{padding:0;box-shadow:none}}' +
       '</style></head><body>' +
       (visualizar ? '<nav class="preview-actions"><button type="button" onclick="window.print()">Imprimir ticket</button><button type="button" onclick="window.close()">Fechar</button></nav>' : '') +
       '<main class="sheet">' +
-      via(1, 'FAZENDA') + '<div class="cut">✂ &nbsp; RECORTAR AQUI</div>' +
-      via(2, 'MOTORISTA') + '</main>' +
+      (termica ? viaTermica(1, 'FAZENDA') + '<div class="thermal-cut">RECORTAR AQUI</div>' + viaTermica(2, 'MOTORISTA') : via(1, 'FAZENDA') + '<div class="cut">✂ &nbsp; RECORTAR AQUI</div>' + via(2, 'MOTORISTA')) + '</main>' +
       (visualizar ? '' : '<script>window.addEventListener("load",()=>{window.focus();setTimeout(()=>window.print(),350)});<\/script>') +
       '</body></html>');
     janela.document.close();
