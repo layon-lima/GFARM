@@ -1,7 +1,7 @@
 {
-  "name": "Gestão Estoque Novo Horizonte",
-  "short_name": "Estoque NH",
-  "description": "Gestão de estoque da Fazenda Novo Horizonte",
+  "name": "GFARM - Gestão de Estoque",
+  "short_name": "GFARM",
+  "description": "Gestão de Estoque da Fazenda Novo Horizonte",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",
@@ -11,10 +11,10 @@
   "theme_color": "#0f8b68",
   "icons": [
     {
-      "src": "/icons/gfarm-icon.svg",
+      "src": "/icons/gfarm-icon.svg?v=3",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
