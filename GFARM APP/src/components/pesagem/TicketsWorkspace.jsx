@@ -391,7 +391,7 @@ export default function TicketsWorkspace({
     const via = (numero, destinatario) =>
       '<section class="ticket">' +
         '<div class="topline"><div class="brand">' +
-          '<img src="/icons/gfarm-icon.svg" alt="GFARM" />' +
+          '<img src="/icons/ticket-logo.svg" alt="Fazenda Novo Horizonte" />' +
           '<div><h1>FAZENDA NOVO HORIZONTE</h1><p>TICKET DE PESAGEM RODOVIÁRIA</p></div>' +
         '</div><span class="copy">' + numero + 'ª VIA · ' + destinatario + '</span></div>' +
         '<div class="ticket-head"><div><span>TICKET Nº</span><strong>' + exibicao(ticket.numero) +
@@ -410,29 +410,29 @@ export default function TicketsWorkspace({
     }
     janela.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ticket ' +
       exibicao(ticket.numero) + ' - 2 vias</title><style>' +
-      '@page{size:A4 portrait;margin:9mm 11mm}' +
-      '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172c25;margin:0;background:white}' +
+      '@page{size:A4 portrait;margin:8mm 10mm}' +
+      '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;background:white}body *{color:#000!important}' +
       '.sheet{width:100%;display:flex;flex-direction:column}' +
-      '.ticket{height:132mm;display:flex;flex-direction:column;padding:4mm 2mm 2mm;break-inside:avoid;overflow:hidden}' +
-      '.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:2px solid #126647;padding-bottom:9px}' +
-      '.brand{display:flex;align-items:center;gap:9px;min-width:0}.brand img{width:37px;height:37px;object-fit:cover;border-radius:8px}' +
-      'h1{font-size:14px;margin:0;letter-spacing:.3px}p{margin:3px 0 0;color:#61746c;font-size:9px;letter-spacing:.5px}' +
-      '.copy{font-size:9px;font-weight:700;color:#1b684f;white-space:nowrap}' +
-      '.ticket-head{display:flex;align-items:center;gap:18px;padding:10px 0 8px;border-bottom:1px solid #cddbd3}' +
-      '.ticket-head div{display:flex;gap:7px;align-items:baseline;min-width:0}.ticket-head div:nth-child(2){flex:1}' +
-      '.ticket-head span:not(.status){font-size:9px;color:#66786f;font-weight:700}' +
-      '.ticket-head strong{font-size:12px;overflow-wrap:anywhere}.status{font-size:9px;font-weight:700;color:#126647;border:1px solid #b9d8c9;background:#f0f8f3;padding:5px 7px;border-radius:5px}' +
-      '.data-grid{margin-top:3px}.data-row{display:grid;grid-template-columns:132px minmax(0,1fr);gap:8px;align-items:baseline;padding:5px 2px;border-bottom:1px solid #e1e8e4;font-size:10px}' +
-      '.data-label{font-size:9px;font-weight:700;color:#53685d}.data-row strong{font-size:10.5px;overflow-wrap:anywhere}' +
-      '.weights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:11px}' +
-      '.weight{border:1px solid #cbded3;border-radius:7px;text-align:center;padding:8px 3px 5px;display:flex;flex-direction:column;gap:4px}' +
-      '.weight span{font-size:9px;font-weight:700;color:#416050}.weight strong{font-size:18px;letter-spacing:-.3px}.weight small{font-size:9px;color:#76877c}' +
-      '.notes{font-size:9px;margin-top:7px;overflow-wrap:anywhere;max-height:26px;overflow:hidden}' +
-      '.signatures{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:auto;padding:12px 15px 0;text-align:center;font-size:9px;color:#465c50}' +
-      '.signatures span{display:block;border-top:1px solid #4d5f55;margin-bottom:5px}' +
-      '.cut{height:10mm;display:flex;align-items:center;gap:8px;color:#84978c;font-size:9px;white-space:nowrap}' +
-      '.cut:before,.cut:after{content:"";border-top:1px dashed #a6b9ae;flex:1}' +
-      '@media screen{body{background:#edf1ee;padding:20px}.sheet{background:white;max-width:210mm;margin:auto;padding:9mm 11mm;box-shadow:0 5px 25px #0002}}' +
+      '.ticket{height:127mm;display:flex;flex-direction:column;padding:3mm 2mm 2mm;break-inside:avoid;page-break-inside:avoid;min-width:0}' +
+      '.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #000;padding-bottom:7px;min-width:0}' +
+      '.brand{display:flex;align-items:center;gap:9px;min-width:0}.brand img{width:37px;height:37px;object-fit:contain;flex-shrink:0}' +
+      'h1{font-size:13px;margin:0;letter-spacing:.2px}p{margin:3px 0 0;font-size:9px;letter-spacing:.3px}' +
+      '.copy{font-size:9px;font-weight:700;white-space:nowrap}' +
+      '.ticket-head{display:grid;grid-template-columns:120px minmax(0,1fr) 85px;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #bbb;min-width:0}' +
+      '.ticket-head div{display:flex;gap:5px;align-items:baseline;min-width:0;flex-wrap:wrap}.ticket-head div:nth-child(2){min-width:0}' +
+      '.ticket-head span:not(.status){font-size:9px;font-weight:700}' +
+      '.ticket-head strong{font-size:11px;overflow-wrap:anywhere}.status{font-size:9px;font-weight:700;border:1px solid #aaa;padding:4px 5px;border-radius:4px;text-align:center}' +
+      '.data-grid{margin-top:2px;min-width:0}.data-row{display:grid;grid-template-columns:125px minmax(0,1fr);gap:8px;align-items:start;padding:5px 2px;border-bottom:1px solid #ddd;min-width:0}' +
+      '.data-label{font-size:9px;font-weight:700}.data-row strong{font-size:10px;line-height:1.25;overflow-wrap:anywhere;min-width:0}' +
+      '.weights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px;min-width:0}' +
+      '.weight{border:1px solid #aaa;border-radius:5px;text-align:center;padding:7px 3px 5px;display:flex;flex-direction:column;gap:3px;min-width:0}' +
+      '.weight span{font-size:9px;font-weight:700}.weight strong{font-size:17px;letter-spacing:-.3px;overflow-wrap:anywhere}.weight small{font-size:9px}' +
+      '.notes{font-size:9px;margin-top:6px;overflow-wrap:anywhere;line-height:1.25}' +
+      '.signatures{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:auto;padding:10px 15px 2px;text-align:center;font-size:9px}' +
+      '.signatures span{display:block;border-top:1px solid #000;margin-bottom:5px}' +
+      '.cut{height:8mm;display:flex;align-items:center;gap:8px;font-size:9px;white-space:nowrap}' +
+      '.cut:before,.cut:after{content:"";border-top:1px dashed #777;flex:1}' +
+      '@media screen{body{background:#eee;padding:20px}.sheet{background:white;max-width:210mm;margin:auto;padding:8mm 10mm;box-shadow:0 5px 25px #0002}}' +
       '@media print{html,body{width:100%;height:auto}.sheet{padding:0;box-shadow:none}}' +
       '</style></head><body><main class="sheet">' +
       via(1, 'FAZENDA') + '<div class="cut">✂ &nbsp; RECORTAR AQUI</div>' +
