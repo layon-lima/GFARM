@@ -42,11 +42,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Origens públicas opcionais configuradas por ambiente, sem liberar qualquer domínio.
+# A PWA servida pela própria API é same-origin e não precisa de CORS.
+import os
+
+PUBLIC_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip().startswith(("https://", "http://"))
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        *PUBLIC_ORIGINS,
     ],
     allow_origin_regex=(
         r"^https?://("
