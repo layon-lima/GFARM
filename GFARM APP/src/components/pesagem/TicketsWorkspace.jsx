@@ -337,8 +337,8 @@ export default function TicketsWorkspace({
   }
 
   function selecionarTicket(ticket) {
-    // Consultar um ticket não altera o formulário nem a captura de pesagem.
-    setTicketConsultaId(ticket.id);
+    // Tickets fechados são apenas visualizados no duplo clique.
+    if (ticket?.status === 'aberto') continuarPesagem(ticket);
   }
 
   function continuarPesagem(ticket) {
@@ -1547,20 +1547,20 @@ export default function TicketsWorkspace({
               Resumo do Ticket
             </h2>
             <p className="text-xs text-muted-foreground">
-              {ticketConsulta?.status === 'fechado' ? 'Consulta de ticket fechado.' : 'Confira os dados e feche após registrar as duas pesagens.'}
+              {'Resumo exclusivo do ticket em preenchimento ou pesagem.'}
             </p>
           </div>
           <div className="flex flex-1 flex-col gap-3 p-3">
             <div className="space-y-2 rounded-lg bg-muted/20 p-3 text-xs">
               {[
-                ['Ticket', ticketConsulta?.numero || 'Novo ticket'],
-                ['Tipo', tipoLabel(ticketConsulta?.tipo || tipoAtual)],
-                ['Motorista', ticketConsulta?.motorista || form.motorista || '—'],
-                ['Placa', formatPlaca(ticketConsulta?.placa || form.placa) || '—'],
-                ['Transportadora', (transportadoras.find((t) => t.id === ticketConsulta?.transportadora_id)?.nome || ticketConsulta?.transportadora_nome || transportadoraAtual?.nome || '—')],
-                ['Cliente / Fornecedor', (pessoas.find((p) => p.id === ticketConsulta?.cliente_id)?.nome || ticketConsulta?.cliente_nome || clienteAtual?.nome || '—')],
-                ['Produto', (produtos.find((p) => p.id === ticketConsulta?.produto_id)?.nome || ticketConsulta?.produto_nome || produtoAtual?.nome || '—')],
-                ['Origem / Destino', `${ticketConsulta?.origem || form.origem || '—'} / ${ticketConsulta?.destino || form.destino || '—'}`],
+                ['Ticket', ticketAtivo?.status === 'aberto' ? ticketAtivo.numero : 'Novo ticket'],
+                ['Tipo', tipoLabel(ticketAtivo?.tipo || tipoAtual)],
+                ['Motorista', (ticketAtivo?.status === 'aberto' ? ticketAtivo.motorista : null) || form.motorista || '—'],
+                ['Placa', formatPlaca((ticketAtivo?.status === 'aberto' ? ticketAtivo.placa : null) || form.placa) || '—'],
+                ['Transportadora', (transportadoras.find((t) => t.id === ticketAtivo?.transportadora_id)?.nome || ticketAtivo?.transportadora_nome || transportadoraAtual?.nome || '—')],
+                ['Cliente / Fornecedor', (pessoas.find((p) => p.id === ticketAtivo?.cliente_id)?.nome || ticketAtivo?.cliente_nome || clienteAtual?.nome || '—')],
+                ['Produto', (produtos.find((p) => p.id === ticketAtivo?.produto_id)?.nome || ticketAtivo?.produto_nome || produtoAtual?.nome || '—')],
+                ['Origem / Destino', `${ticketAtivo?.origem || form.origem || '—'} / ${ticketAtivo?.destino || form.destino || '—'}`],
               ].map(([label, value]) => (
                 <div key={label} className="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
                   <span className="text-muted-foreground">{label}</span>
@@ -1573,43 +1573,40 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2">
                 <span>1ª Pesagem</span>
                 <span className="font-semibold">
-                  {ticketConsulta ? formatKg(consultaSeparada ? ((Number(ticketConsulta.peso_tara) || 0) || (Number(ticketConsulta.peso_bruto) || 0)) : primeiraPesagem) : '—'}
+                  {ticketAtivo ? formatKg(primeiraPesagem) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {ticketConsulta ? 'Registrada' : 'Aguardando captura'}
+                {ticketAtivo ? 'Registrada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2">
                 <span>2ª Pesagem</span>
                 <span className="font-semibold">
-                  {pesoConsulta2 > 0 ? formatKg(pesoConsulta2) : '—'}
+                  {segundaExibida > 0 ? formatKg(segundaExibida) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {pesoConsulta2 > 0 ? 'Registrada' : 'Aguardando captura'}
+                {segundaExibida > 0 ? 'Registrada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
                 <span>Peso Líquido</span>
-                <span className="text-base text-primary">{pesoConsulta2 > 0 ? formatKg(liquidoConsulta) : '—'}</span>
+                <span className="text-base text-primary">{segundaExibida > 0 ? formatKg(liquidoExibido) : '—'}</span>
               </div>
             </div>
 
-            {!consultaSeparada && ticketAtivo?.tipo === 'venda' && pedidoSel && !pedidoSel.sem_limite &&
+            {ticketAtivo?.tipo === 'venda' && pedidoSel && !pedidoSel.sem_limite &&
               liquido > (Number(pedidoSel.saldo_kg) || 0) && (
                 <p className="text-xs font-semibold text-destructive">
                   Peso líquido acima do saldo disponível do pedido.
                 </p>
               )}
 
-            {ticketConsulta && ((Number(ticketConsulta.peso_tara) || 0) > 0 || (Number(ticketConsulta.peso_bruto) || 0) > 0) && (
-              <Button type="button" variant="outline" className="mt-auto h-9 w-full gap-2" onClick={() => imprimirTicket(ticketConsulta)}>
+            {ticketAtivo?.status === 'aberto' && ((Number(ticketAtivo.peso_tara) || 0) > 0 || (Number(ticketAtivo.peso_bruto) || 0) > 0) && (
+              <Button type="button" variant="outline" className="mt-auto h-9 w-full gap-2" onClick={() => imprimirTicket(ticketAtivo)}>
                 <Printer className="h-4 w-4" /> Imprimir Ticket
               </Button>
             )}
-            {consultaSeparada && ticketConsulta?.status === 'aberto' && (
-              <Button type="button" variant="outline" onClick={() => continuarPesagem(ticketConsulta)}>Continuar pesagem</Button>
-            )}
-            {!consultaSeparada && !ticketFechado && <Button
+            {ticketAtivo?.status === 'aberto' && <Button
               type="button"
               className="h-10 w-full gap-2"
               disabled={saving || ticketFechado || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
@@ -1826,7 +1823,7 @@ export default function TicketsWorkspace({
                         (Number(ticket.peso_tara) || 0) ||
                         (Number(ticket.peso_bruto) || 0);
 
-                      const selected = ticket.id === ticketConsulta?.id;
+                      const selected = ticket.status === 'aberto' && ticket.id === ticketAtivo?.id;
 
                       return (
                         <tr
