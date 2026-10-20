@@ -352,10 +352,10 @@ export default function TicketsWorkspace({
     setSegundaRegistradaEm('');
   }
 
-  function imprimirTicket(ticket = ticketAtivo) {
+  function imprimirTicket(ticket = ticketAtivo, visualizar = false) {
     if (!ticket) return;
     const primeira = (Number(ticket.peso_tara) || 0) || (Number(ticket.peso_bruto) || 0);
-    if (!(primeira > 0)) return;
+    if (!(primeira > 0) && !visualizar) return;
 
     const segunda = ticket.status === 'fechado'
       ? ((Number(ticket.peso_tara) || 0) === primeira
@@ -421,13 +421,16 @@ export default function TicketsWorkspace({
 
     const janela = window.open('', '_blank', 'width=900,height=950');
     if (!janela) {
-      toast({ variant: 'destructive', title: 'Permita janelas pop-up para imprimir o ticket.' });
+      toast({ variant: 'destructive', title: 'Permita janelas pop-up para visualizar ou imprimir o ticket.' });
       return;
     }
     janela.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ticket ' +
       exibicao(ticket.numero) + ' - 2 vias</title><style>' +
       '@page{size:A4 portrait;margin:8mm 10mm}' +
       '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;background:white}body *{color:#000!important}' +
+      '.preview-actions{display:flex;justify-content:center;gap:10px;padding:10px;margin-bottom:8px}' +
+      '.preview-actions button{font:600 13px Arial,sans-serif;color:#000;background:#fff;border:1px solid #555;border-radius:5px;padding:10px 22px;cursor:pointer}' +
+      '.preview-actions button:first-child{background:#eaf1ed}' +
       '.sheet{width:100%;display:flex;flex-direction:column}' +
       '.ticket{height:127mm;display:flex;flex-direction:column;padding:3mm 2mm 2mm;break-inside:avoid;page-break-inside:avoid;min-width:0}' +
       '.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #000;padding-bottom:7px;min-width:0}' +
@@ -448,11 +451,13 @@ export default function TicketsWorkspace({
       '.cut{height:8mm;display:flex;align-items:center;gap:8px;font-size:9px;white-space:nowrap}' +
       '.cut:before,.cut:after{content:"";border-top:1px dashed #777;flex:1}' +
       '@media screen{body{background:#eee;padding:20px}.sheet{background:white;max-width:210mm;margin:auto;padding:8mm 10mm;box-shadow:0 5px 25px #0002}}' +
-      '@media print{html,body{width:100%;height:auto}.sheet{padding:0;box-shadow:none}}' +
-      '</style></head><body><main class="sheet">' +
+      '@media print{html,body{width:100%;height:auto}.preview-actions{display:none!important}.sheet{padding:0;box-shadow:none}}' +
+      '</style></head><body>' +
+      (visualizar ? '<nav class="preview-actions"><button type="button" onclick="window.print()">Imprimir ticket</button><button type="button" onclick="window.close()">Fechar</button></nav>' : '') +
+      '<main class="sheet">' +
       via(1, 'FAZENDA') + '<div class="cut">✂ &nbsp; RECORTAR AQUI</div>' +
       via(2, 'MOTORISTA') + '</main>' +
-      '<script>window.addEventListener("load",()=>{window.focus();setTimeout(()=>window.print(),350)});<\/script>' +
+      (visualizar ? '' : '<script>window.addEventListener("load",()=>{window.focus();setTimeout(()=>window.print(),350)});<\/script>') +
       '</body></html>');
     janela.document.close();
   }
@@ -1827,6 +1832,7 @@ export default function TicketsWorkspace({
                         <tr
                           key={ticket.id}
                           onClick={() => selecionarTicket(ticket)}
+                          onDoubleClick={() => { selecionarTicket(ticket); imprimirTicket(ticket, true); }}
                           className={`border-t transition-colors ${
                             selected
                               ? 'bg-primary/5'
@@ -1875,7 +1881,7 @@ export default function TicketsWorkspace({
                           >
                             {primeira > 0 && (
                               <Button size="icon" variant="ghost" className="h-7 w-7" title="Imprimir ticket"
-                                onClick={() => imprimirTicket(ticket)}>
+                                onClick={(event) => { event.stopPropagation(); imprimirTicket(ticket); }}>
                                 <Printer className="h-3.5 w-3.5" />
                               </Button>
                             )}
