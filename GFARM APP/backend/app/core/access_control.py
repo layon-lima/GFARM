@@ -189,14 +189,21 @@ def permissoes_usuario(user: User) -> set[str]:
 
     registros = _records(user)
     if registros:
-        return {
+        permissoes = {
             str(item.permission_key)
             for item in registros
             if not str(item.scope_value or "").strip()
             and str(item.permission_key) in VALID_PERMISSION_KEYS
         }
+    else:
+        permissoes = _legacy_permissions(user)
 
-    return _legacy_permissions(user)
+    # Exceção solicitada para a conta operacional ADM: pode informar
+    # peso manual na pesagem, sem conceder outras permissões administrativas.
+    if str(user.username or "").strip().casefold() == "adm":
+        permissoes.add("operacao.pesagem.digitar_peso")
+
+    return permissoes
 
 
 def permissoes_publicas(user: User) -> list[str]:
