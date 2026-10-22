@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeftRight,
   CheckCircle2,
@@ -94,6 +94,7 @@ export default function TicketsWorkspace({
   const { toast } = useToast();
   const { user } = useAuth();
   const podeDigitar = podeDigitarPeso(user);
+  const pesoInputRef = useRef(null);
 
   const {
     status: statusBalanca,
@@ -822,11 +823,13 @@ export default function TicketsWorkspace({
   }
 
   function selecionarEtapa(etapa) {
-    if (saving || lendo || ticketFechado) return;
+    if (saving || lendo || ticketFechado || !tipoAtual) return;
     if (etapa === 2 && !ticketAtivo) return;
     setEtapaSelecionada(etapa);
     // Nunca reutilizar manualmente a leitura anterior numa nova captura.
     setPesoAtual('');
+    // O ADM digita no campo de peso ao selecionar a 1ª ou 2ª pesagem.
+    if (podeDigitar) pesoInputRef.current?.focus();
   }
 
   async function capturarPeso() {
@@ -1665,18 +1668,21 @@ export default function TicketsWorkspace({
 
           <div className="flex flex-1 flex-col gap-2.5 p-3">
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <p className="mb-1 text-xs text-muted-foreground">Peso em tempo real</p>
+              <p className="mb-1 text-xs text-muted-foreground">{podeDigitar ? 'Digite o peso da pesagem (kg)' : 'Peso em tempo real'}</p>
               <div className="flex items-center gap-2">
                 <Package className="h-5 w-5 shrink-0 text-primary" />
                 {podeDigitar ? (
                   <Input
-                    aria-label="Peso manual autorizado"
+                    ref={pesoInputRef}
+                    aria-label="Digite o peso manual em quilogramas"
                     inputMode="decimal"
+                    type="text"
+                    autoComplete="off"
                     value={pesoAtual}
                     onChange={(event) => setPesoAtual(event.target.value)}
-                    placeholder={displayPeso}
+                    placeholder={tipoAtual ? 'Digite aqui' : 'Selecione o tipo de ticket'}
                     disabled={saving || lendo || ticketFechado || !tipoAtual}
-                    className="h-14 min-w-0 border-0 bg-transparent text-right !text-3xl font-bold shadow-none placeholder:text-foreground 2xl:!text-4xl"
+                    className="h-14 min-w-0 border border-primary/40 bg-background text-right !text-3xl font-bold shadow-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary 2xl:!text-4xl"
                   />
                 ) : (
                   <span className="min-w-0 flex-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
@@ -1702,7 +1708,7 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="font-semibold">1ª Pesagem</span>
                 <span className={ticketAtivo ? 'text-emerald-700' : 'text-muted-foreground'}>
-                  {ticketAtivo ? 'Registrada' : 'Aguardando'}
+                  {etapaCaptura === 1 && podeDigitar ? 'Digite o peso acima' : ticketAtivo ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
               <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
@@ -1730,7 +1736,7 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="font-semibold">2ª Pesagem</span>
                 <span className={segundaPesagem > 0 ? 'text-emerald-700' : 'text-muted-foreground'}>
-                  {segundaPesagem > 0 ? 'Registrada' : 'Aguardando'}
+                  {etapaCaptura === 2 && podeDigitar ? 'Digite o peso acima' : segundaPesagem > 0 ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
               <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
@@ -1765,10 +1771,12 @@ export default function TicketsWorkspace({
                 ? 'Aguarde...'
                 : etapaCaptura === 0
                   ? 'Selecione a pesagem para refazer'
-                  : `Capturar ${etapaCaptura}ª Pesagem`}
+                  : `${podeDigitar && pesoAtual.trim() ? 'Registrar peso digitado' : 'Capturar'} ${etapaCaptura}ª Pesagem`}
             </Button>
             <p className="text-center text-[11px] text-muted-foreground">
-              Um clique registra o peso. Para corrigir, selecione a pesagem acima.
+              {podeDigitar
+                ? 'Selecione a 1ª ou 2ª pesagem, digite o peso no campo acima e clique para registrar.'
+                : 'Um clique registra o peso. Para corrigir, selecione a pesagem acima.'}
             </p>
           </div>
         </Card>
