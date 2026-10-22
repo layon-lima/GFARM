@@ -80,6 +80,9 @@ export const canAccessAplicacao = (user) =>
   userCanAccess(user, 'aplicacao');
 
 export const podeDigitarPeso = (user) =>
+  // A conta operacional ADM pode lançar peso manualmente, inclusive
+  // quando a sessão ainda usa permissões obtidas antes da atualização.
+  String(user?.username || '').trim().toLowerCase() === 'adm' ||
   hasPermission(user, 'operacao.pesagem.digitar_peso');
 
 export const isAdminTotal = (user) =>
