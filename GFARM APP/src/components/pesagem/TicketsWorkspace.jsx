@@ -1285,8 +1285,8 @@ export default function TicketsWorkspace({
       encerrarCapturaAutomatica();
       return;
     }
-    autoRef.current.aguardandoZerar = false;
-    setAutoAguardandoZerar(false);
+    // Se houve captura manual/automática, preservar a trava até a
+    // plataforma ficar abaixo de 40 kg, mesmo após reativar o modo Auto.
     setAutoRetentativaAte(0);
     setAutoRetentativaSegundos(0);
     setAutoOscilou(false);
