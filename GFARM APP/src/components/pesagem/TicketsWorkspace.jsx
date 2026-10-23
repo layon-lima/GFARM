@@ -1135,6 +1135,113 @@ export default function TicketsWorkspace({
     }
   }
 
+  // Só inicia a contagem depois que o formulário da 1ª pesagem está
+  // completo. Na 2ª, utiliza exclusivamente um ticket aberto carregado.
+  const transportadorasPedidoAuto = String(pedidoSel?.transportadora_ids || '')
+    .split(',').map((id) => id.trim()).filter(Boolean);
+  const transportadoraVendaPronta = transportadorasPedidoAuto.length <= 1
+    || transportadorasPedidoAuto.includes(form.transportadora_id);
+  const autoDadosProntos = ticketAtivo
+    ? ticketAtivo.status === 'aberto'
+    : Boolean(form.tipo && form.motorista.trim()
+      && normalizePlaca(form.placa).length === 7
+      && (form.tipo === 'venda'
+        ? pedidoSel?.status === 'aberto' && transportadoraVendaPronta
+        : form.produto_id && form.transportadora_id));
+
+  // Mudar motorista, placa, pedido ou etapa exige iniciar novamente os 6s.
+  const autoContexto = ticketAtivo
+    ? `aberto|${ticketAtivo.id}|${etapaCaptura}`
+    : [
+      'novo', form.tipo, form.motorista.trim(), normalizePlaca(form.placa),
+      form.pedido_id, form.produto_id, form.cliente_id, form.transportadora_id,
+    ].join('|');
+
+  // Mantém a função de captura atualizada para o temporizador, sem criar
+  // intervalos duplicados durante as atualizações do formulário.
+  useEffect(() => {
+    capturarPesoRef.current = capturarPeso;
+  });
+
+  useEffect(() => {
+    const limparContagem = () => {
+      const estado = autoRef.current;
+      estado.peso = null;
+      estado.desde = 0;
+      estado.chave = '';
+      setAutoRestante((atual) => atual === null ? atual : null);
+    };
+
+    const timer = setInterval(() => {
+      const estado = autoRef.current;
+      const agora = Date.now();
+      const peso = ultimaLeitura?.peso == null ? NaN : Number(ultimaLeitura.peso);
+      const dataLeitura = Date.parse(ultimaLeitura?.timestamp || '');
+      const leituraRecente = balancaConectada
+        && Number.isFinite(peso) && Number.isFinite(dataLeitura)
+        && agora >= dataLeitura
+        && agora - dataLeitura <= AUTO_LEITURA_VALIDADE_MS;
+
+      // Depois de uma captura, exige que o veículo saia da plataforma
+      // (< 40 kg) antes de armar a próxima pesagem automaticamente.
+      if (estado.aguardandoZerar && leituraRecente && peso < AUTO_PESO_MINIMO_KG) {
+        estado.aguardandoZerar = false;
+        setAutoAguardandoZerar(false);
+        limparContagem();
+      }
+
+      const podeIniciar = autoAtivo && !estado.aguardandoZerar
+        && !estado.disparando && autoDadosProntos
+        && etapaSelecionada === 0 && (etapaCaptura === 1 || etapaCaptura === 2)
+        && !ticketFechado && !saving && !lendo && !pesoAtual.trim()
+        && document.visibilityState === 'visible' && leituraRecente
+        && peso >= AUTO_PESO_MINIMO_KG
+        && (etapaCaptura !== 2 || Math.abs(peso - primeiraPesagem) >= 0.0001);
+
+      if (!podeIniciar) {
+        limparContagem();
+        return;
+      }
+
+      if (estado.peso !== peso || estado.chave !== autoContexto || !estado.desde) {
+        estado.peso = peso;
+        estado.desde = agora;
+        estado.chave = autoContexto;
+        setAutoRestante(AUTO_ESTABILIDADE_MS / 1000);
+        return;
+      }
+
+      const faltamMs = Math.max(0, AUTO_ESTABILIDADE_MS - (agora - estado.desde));
+      if (faltamMs > 0) {
+        const segundos = Math.ceil(faltamMs / 1000);
+        setAutoRestante((atual) => atual === segundos ? atual : segundos);
+        return;
+      }
+
+      // Bloqueio síncrono: evita dupla captura antes de o React mudar
+      // para a próxima etapa e impede registrar duas vezes o mesmo veículo.
+      estado.disparando = true;
+      estado.aguardandoZerar = true;
+      setAutoAguardandoZerar(true);
+      setAutoCapturando(true);
+      limparContagem();
+      Promise.resolve(capturarPesoRef.current?.(peso))
+        .catch((error) => {
+          console.error('[Pesagem] Falha na captura automática:', error);
+        })
+        .finally(() => {
+          estado.disparando = false;
+          setAutoCapturando(false);
+        });
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [
+    autoAtivo, autoDadosProntos, autoContexto, balancaConectada,
+    etapaSelecionada, etapaCaptura, ticketFechado, primeiraPesagem,
+    saving, lendo, pesoAtual, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
+  ]);
+
   const pedidoOptions = pedidosAbertos
     .map((pedido) => {
       const cliente = pessoas.find((p) => p.id === pedido.cliente_id);
