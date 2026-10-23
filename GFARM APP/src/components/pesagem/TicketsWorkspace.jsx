@@ -1190,22 +1190,139 @@ export default function TicketsWorkspace({
       form.pedido_id, form.produto_id, form.cliente_id, form.transportadora_id,
     ].join('|');
 
-  // Mantém a função de captura atualizada para o temporizador, sem criar
-  // intervalos duplicados durante as atualizações do formulário.
+  function limparContagemAutomatica() {
+    const estado = autoRef.current;
+    estado.peso = null;
+    estado.desde = 0;
+    estado.chave = '';
+    estado.leituraEstavelDesde = '';
+    setAutoRestante((atual) => atual === null ? atual : null);
+  }
+
+  // O prazo de 10 s é de decisão. Sem intervenção, confirma o peso que foi
+  // congelado no popup após 3 s de estabilidade.
+  async function confirmarCapturaAutomatica(captura = autoPopupRef.current) {
+    const estado = autoRef.current;
+    if (!captura || captura.fase !== 'confirmar'
+      || autoPopupRef.current !== captura || estado.confirmando || estado.disparando) return;
+    estado.confirmando = true;
+    estado.disparando = true;
+    setAutoCapturando(true);
+    try {
+      const registrado = await capturarPeso(captura);
+      if (autoPopupRef.current !== captura) return;
+      if (registrado === true) {
+        estado.aguardandoZerar = true;
+        setAutoAguardandoZerar(true);
+        setAutoOscilou(false);
+        alterarPopupAuto(null);
+      } else {
+        alterarPopupAuto({
+          ...captura,
+          fase: 'opcoes',
+          motivo: 'Não foi possível registrar o peso automaticamente. Confira a conexão e o ticket, depois escolha como continuar.',
+        });
+      }
+    } catch (error) {
+      console.error('[Pesagem] Erro na confirmação automática:', error);
+      if (autoPopupRef.current === captura) {
+        alterarPopupAuto({
+          ...captura,
+          fase: 'opcoes',
+          motivo: 'Erro ao registrar a pesagem. Você pode tentar novamente ou assumir o controle manual.',
+        });
+      }
+    } finally {
+      estado.confirmando = false;
+      estado.disparando = false;
+      setAutoCapturando(false);
+    }
+  }
+
+  // O interval abaixo não pode usar um callback antigo após re-render.
   useEffect(() => {
-    capturarPesoRef.current = capturarPeso;
+    confirmarAutoRef.current = confirmarCapturaAutomatica;
   });
 
-  useEffect(() => {
-    const limparContagem = () => {
-      const estado = autoRef.current;
-      estado.peso = null;
-      estado.desde = 0;
-      estado.chave = '';
-      estado.leituraEstavelDesde = '';
-      setAutoRestante((atual) => atual === null ? atual : null);
-    };
+  function cancelarPrimeiraConfirmacao() {
+    const captura = autoPopupRef.current;
+    if (!captura || captura.fase !== 'confirmar' || autoRef.current.confirmando) return;
+    alterarPopupAuto({
+      ...captura,
+      fase: 'opcoes',
+      motivo: 'Você cancelou este peso. Deseja pesar novamente ou cancelar a automação?',
+    });
+  }
 
+  function pesarNovamenteAutomatico() {
+    if (!autoPopupRef.current || autoPopupRef.current.fase !== 'opcoes'
+      || autoRef.current.confirmando) return;
+    alterarPopupAuto(null);
+    limparContagemAutomatica();
+    setAutoOscilou(false);
+    const ate = Date.now() + AUTO_ESPERA_NOVA_TENTATIVA_MS;
+    setAutoRetentativaAte(ate);
+    setAutoRetentativaSegundos(Math.ceil(AUTO_ESPERA_NOVA_TENTATIVA_MS / 1000));
+  }
+
+  function encerrarCapturaAutomatica() {
+    if (autoRef.current.confirmando) return;
+    alterarPopupAuto(null);
+    limparContagemAutomatica();
+    setAutoRetentativaAte(0);
+    setAutoRetentativaSegundos(0);
+    setAutoOscilou(false);
+    setAutoAtivo(false);
+    toast({
+      title: 'Captura automática desativada',
+      description: 'A pesagem pode ser registrada pelo botão manual. Para reativar, clique em Auto desligada.',
+    });
+  }
+
+  function alternarCapturaAutomatica() {
+    if (autoRef.current.confirmando) return;
+    if (autoAtivo) {
+      encerrarCapturaAutomatica();
+      return;
+    }
+    autoRef.current.aguardandoZerar = false;
+    setAutoAguardandoZerar(false);
+    setAutoRetentativaAte(0);
+    setAutoRetentativaSegundos(0);
+    setAutoOscilou(false);
+    limparContagemAutomatica();
+    setAutoAtivo(true);
+  }
+
+  useEffect(() => {
+    if (!autoPopup || autoPopup.fase !== 'confirmar') return undefined;
+    const atualizar = () => {
+      const captura = autoPopupRef.current;
+      if (captura !== autoPopup || captura?.fase !== 'confirmar') return;
+      const restante = Math.max(0, captura.expiresAt - Date.now());
+      setAutoPopupSegundos(Math.ceil(restante / 1000));
+      if (restante <= 0) confirmarAutoRef.current?.(captura);
+    };
+    atualizar();
+    const timer = setInterval(atualizar, 200);
+    return () => clearInterval(timer);
+  }, [autoPopup]);
+
+  // Se o usuário alterar o ticket ou selecionar outra etapa, nunca
+  // confirma um peso identificado para o ticket anterior.
+  useEffect(() => {
+    const captura = autoPopupRef.current;
+    if (captura?.fase === 'confirmar'
+      && (captura.contexto !== autoContexto || captura.etapa !== etapaCaptura)) {
+      alterarPopupAuto({
+        ...captura,
+        fase: 'opcoes',
+        motivo: 'O ticket ou a etapa de pesagem mudou. Esta leitura não será registrada.',
+      });
+    }
+  }, [autoContexto, etapaCaptura]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       const estado = autoRef.current;
       const agora = Date.now();
@@ -1217,17 +1334,29 @@ export default function TicketsWorkspace({
         && agora >= dataLeitura
         && agora - dataLeitura <= AUTO_LEITURA_VALIDADE_MS;
 
-      // Depois de uma captura, exige que o veículo saia da plataforma
-      // (< 40 kg) antes de armar a próxima pesagem automaticamente.
       if (estado.aguardandoZerar && leituraRecente && peso < AUTO_PESO_MINIMO_KG) {
         estado.aguardandoZerar = false;
         setAutoAguardandoZerar(false);
-        setAutoFalhou(false);
-        limparContagem();
+        setAutoOscilou(false);
+        limparContagemAutomatica();
       }
 
+      // Nenhuma leitura gera captura enquanto existir confirmação/opções
+      // pendentes ou enquanto uma gravação anterior estiver em andamento.
+      if (autoPopupRef.current || estado.confirmando || estado.disparando) {
+        limparContagemAutomatica();
+        return;
+      }
+
+      if (autoRetentativaAte > agora) {
+        setAutoRetentativaSegundos(Math.ceil((autoRetentativaAte - agora) / 1000));
+        limparContagemAutomatica();
+        return;
+      }
+      if (autoRetentativaSegundos !== 0) setAutoRetentativaSegundos(0);
+
       const podeIniciar = autoAtivo && !estado.aguardandoZerar
-        && !estado.disparando && autoDadosProntos
+        && autoDadosProntos
         && etapaSelecionada === 0 && (etapaCaptura === 1 || etapaCaptura === 2)
         && !ticketFechado && !saving && !lendo && !pesoAtual.trim()
         && document.visibilityState === 'visible' && leituraRecente
@@ -1236,12 +1365,19 @@ export default function TicketsWorkspace({
         && (etapaCaptura !== 2 || Math.abs(peso - primeiraPesagem) >= 0.0001);
 
       if (!podeIniciar) {
-        limparContagem();
+        limparContagemAutomatica();
+        if (!leituraRecente || peso < AUTO_PESO_MINIMO_KG) setAutoOscilou(false);
         return;
       }
 
       if (estado.peso !== peso || estado.chave !== autoContexto
         || estado.leituraEstavelDesde !== inicioEstavelNaBalanca || !estado.desde) {
+        // Exibe que a contagem foi reiniciada por oscilação de leitura.
+        if (estado.peso !== null && estado.chave === autoContexto
+          && (estado.peso !== peso
+            || estado.leituraEstavelDesde !== inicioEstavelNaBalanca)) {
+          setAutoOscilou(true);
+        }
         estado.peso = peso;
         estado.desde = agora;
         estado.chave = autoContexto;
@@ -1257,27 +1393,21 @@ export default function TicketsWorkspace({
         return;
       }
 
-      // Bloqueio síncrono: evita dupla captura antes de o React mudar
-      // para a próxima etapa e impede registrar duas vezes o mesmo veículo.
-      estado.disparando = true;
-      estado.aguardandoZerar = true;
-      setAutoAguardandoZerar(true);
-      setAutoFalhou(false);
-      setAutoCapturando(true);
-      limparContagem();
-      Promise.resolve(capturarPesoRef.current?.(peso))
-        .then((registrado) => {
-          // Falhas de validação ou leitura não podem aparecer como pesagem salva.
-          if (registrado !== true) setAutoFalhou(true);
-        })
-        .catch((error) => {
-          console.error('[Pesagem] Falha na captura automática:', error);
-          setAutoFalhou(true);
-        })
-        .finally(() => {
-          estado.disparando = false;
-          setAutoCapturando(false);
-        });
+      // Não salva aqui. Constrói uma fotografia imutável do peso e
+      // espera até 10 s por Confirmar/Cancelar. Sem ação, confirma.
+      const captura = {
+        fase: 'confirmar',
+        peso,
+        etapa: etapaCaptura,
+        contexto: autoContexto,
+        estavelDesde: inicioEstavelNaBalanca,
+        criadoEm: new Date(agora).toISOString(),
+        expiresAt: agora + AUTO_CONFIRMACAO_MS,
+      };
+      setAutoOscilou(false);
+      setAutoPopupSegundos(Math.ceil(AUTO_CONFIRMACAO_MS / 1000));
+      limparContagemAutomatica();
+      alterarPopupAuto(captura);
     }, 250);
 
     return () => clearInterval(timer);
@@ -1285,7 +1415,7 @@ export default function TicketsWorkspace({
     autoAtivo, autoDadosProntos, autoContexto, balancaConectada,
     etapaSelecionada, etapaCaptura, ticketFechado, primeiraPesagem,
     saving, lendo, pesoAtual, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
-    ultimaLeitura?.estavelDesde,
+    ultimaLeitura?.estavelDesde, autoRetentativaAte, autoRetentativaSegundos,
   ]);
 
   const pedidoOptions = pedidosAbertos
