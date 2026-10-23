@@ -1312,7 +1312,9 @@ export default function TicketsWorkspace({
   // confirma um peso identificado para o ticket anterior.
   useEffect(() => {
     const captura = autoPopupRef.current;
-    if (captura?.fase === 'confirmar'
+    // Durante o POST da 1ª pesagem, o ticket muda naturalmente de
+    // "novo" para "aberto". Não interprete essa transição como cancelamento.
+    if (captura?.fase === 'confirmar' && !autoRef.current.confirmando
       && (captura.contexto !== autoContexto || captura.etapa !== etapaCaptura)) {
       alterarPopupAuto({
         ...captura,
