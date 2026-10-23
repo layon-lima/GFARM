@@ -105,6 +105,7 @@ export default function TicketsWorkspace({
     peso: null,
     desde: 0,
     chave: '',
+    leituraEstavelDesde: '',
     aguardandoZerar: false,
     disparando: false,
   });
@@ -861,10 +862,12 @@ export default function TicketsWorkspace({
     const automatico = typeof pesoAutomatico === 'number' && Number.isFinite(pesoAutomatico);
     if (automatico) {
       const idade = Date.now() - Date.parse(ultimaLeitura?.timestamp || '');
+      const estabilidade = Date.now() - Date.parse(ultimaLeitura?.estavelDesde || '');
       // A captura automática usa exclusivamente o peso físico, jamais
       // campo manual, leitura velha ou um valor que já mudou no indicador.
       if (!balancaConectada || !Number.isFinite(idade)
         || idade < 0 || idade > AUTO_LEITURA_VALIDADE_MS
+        || !Number.isFinite(estabilidade) || estabilidade < AUTO_ESTABILIDADE_MS
         || Number(ultimaLeitura?.peso) !== pesoAutomatico
         || pesoAutomatico < AUTO_PESO_MINIMO_KG
         || pesoAtual.trim()) return false;
@@ -1170,6 +1173,7 @@ export default function TicketsWorkspace({
       estado.peso = null;
       estado.desde = 0;
       estado.chave = '';
+      estado.leituraEstavelDesde = '';
       setAutoRestante((atual) => atual === null ? atual : null);
     };
 
@@ -1178,6 +1182,7 @@ export default function TicketsWorkspace({
       const agora = Date.now();
       const peso = ultimaLeitura?.peso == null ? NaN : Number(ultimaLeitura.peso);
       const dataLeitura = Date.parse(ultimaLeitura?.timestamp || '');
+      const inicioEstavelNaBalanca = ultimaLeitura?.estavelDesde || '';
       const leituraRecente = balancaConectada
         && Number.isFinite(peso) && Number.isFinite(dataLeitura)
         && agora >= dataLeitura
@@ -1197,6 +1202,7 @@ export default function TicketsWorkspace({
         && etapaSelecionada === 0 && (etapaCaptura === 1 || etapaCaptura === 2)
         && !ticketFechado && !saving && !lendo && !pesoAtual.trim()
         && document.visibilityState === 'visible' && leituraRecente
+        && Number.isFinite(Date.parse(inicioEstavelNaBalanca))
         && peso >= AUTO_PESO_MINIMO_KG
         && (etapaCaptura !== 2 || Math.abs(peso - primeiraPesagem) >= 0.0001);
 
@@ -1205,10 +1211,12 @@ export default function TicketsWorkspace({
         return;
       }
 
-      if (estado.peso !== peso || estado.chave !== autoContexto || !estado.desde) {
+      if (estado.peso !== peso || estado.chave !== autoContexto
+        || estado.leituraEstavelDesde !== inicioEstavelNaBalanca || !estado.desde) {
         estado.peso = peso;
         estado.desde = agora;
         estado.chave = autoContexto;
+        estado.leituraEstavelDesde = inicioEstavelNaBalanca;
         setAutoRestante(AUTO_ESTABILIDADE_MS / 1000);
         return;
       }
@@ -1248,6 +1256,7 @@ export default function TicketsWorkspace({
     autoAtivo, autoDadosProntos, autoContexto, balancaConectada,
     etapaSelecionada, etapaCaptura, ticketFechado, primeiraPesagem,
     saving, lendo, pesoAtual, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
+    ultimaLeitura?.estavelDesde,
   ]);
 
   const pedidoOptions = pedidosAbertos
