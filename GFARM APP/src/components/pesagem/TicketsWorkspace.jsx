@@ -113,6 +113,7 @@ export default function TicketsWorkspace({
   const {
     status: statusBalanca,
     ultimaLeitura,
+    leituraRemota,
     formatarPeso,
     lerPeso,
     lendo,
@@ -250,13 +251,19 @@ export default function TicketsWorkspace({
   });
 
   const balancaConectada = statusBalanca === 'conectado';
-  // O visor mostra exclusivamente a leitura da balança; o campo manual
-  // não pode substituir nem mascarar o peso recebido pela conexão serial.
+  const remotoAoVivo = Boolean(leituraRemota?.online
+    && leituraRemota?.peso_kg != null
+    && Number.isFinite(Number(leituraRemota.peso_kg)));
+  const mostrandoRemoto = !balancaConectada && remotoAoVivo;
+  // A leitura via VPS é estritamente visual. Toda captura, inclusive
+  // automática, continua usando somente a porta serial local.
   const leituraBalanca = ultimaLeitura?.peso;
   const displayPeso = balancaConectada && leituraBalanca != null
     && Number.isFinite(Number(leituraBalanca))
     ? formatarPeso(Number(leituraBalanca))
-    : '0,00';
+    : mostrandoRemoto
+      ? formatarPeso(Number(leituraRemota.peso_kg))
+      : '0,00';
 
   const abertos = useMemo(
     () =>
@@ -1837,17 +1844,21 @@ export default function TicketsWorkspace({
                 variant="outline"
                 className={balancaConectada
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border-red-200 bg-red-50 text-red-700'}
+                  : mostrandoRemoto
+                    ? 'border-sky-200 bg-sky-50 text-sky-700'
+                    : 'border-red-200 bg-red-50 text-red-700'}
               >
-                <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${balancaConectada ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                {balancaConectada ? 'Balança conectada' : 'Balança desconectada'}
+                <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${balancaConectada ? 'bg-emerald-500' : mostrandoRemoto ? 'bg-sky-500' : 'bg-red-500'}`} />
+                {balancaConectada ? 'Serial local' : mostrandoRemoto ? 'Monitor remoto' : 'Balança desconectada'}
               </Badge>
             </div>
           </div>
 
           <div className="flex flex-1 flex-col gap-2.5 p-3">
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <p className="mb-1 text-xs text-muted-foreground">Peso em tempo real</p>
+              <p className="mb-1 text-xs text-muted-foreground">
+                {mostrandoRemoto ? 'Peso em tempo real pela VPS — SOMENTE CONSULTA' : 'Peso em tempo real'}
+              </p>
               <div className="flex items-center gap-2">
                 <Package className="h-5 w-5 shrink-0 text-primary" />
                 <span className="min-w-0 flex-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
@@ -1856,6 +1867,12 @@ export default function TicketsWorkspace({
                 <span className="text-sm text-muted-foreground">kg</span>
               </div>
             </div>
+
+            {mostrandoRemoto && (
+              <p className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-[11px] text-sky-800">
+                Este peso vem do computador da balança. Não é usado para capturar nem registrar tickets neste PC.
+              </p>
+            )}
 
             {autoAtivo && (
               <p className="px-1 text-[11px] text-muted-foreground" role="status">
