@@ -864,6 +864,13 @@ export function BalancaProvider({ children }) {
         return;
       }
 
+      // Uma COM autorizada não significa necessariamente ser a Toledo.
+      // Só reivindica a publicação após receber ao menos um frame válido.
+      if (port && !publicou && !ultimaLeituraRef.current) {
+        setStatusPublicacao((v) => v === 'aguardando_leitura' ? v : 'aguardando_leitura');
+        return;
+      }
+
       const conectado = Boolean(port && port.readable
         && statusSerialRef.current === 'conectado');
       const leitura = ultimaLeituraRef.current;
