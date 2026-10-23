@@ -1233,6 +1233,120 @@ export default function TicketsWorkspace({
       form.pedido_id, form.produto_id, form.cliente_id, form.transportadora_id,
     ].join('|');
 
+  // Este estado é enviado pelo PC da Toledo a cada publicação serial.
+  // O monitor ADM mostra POR QUE a automação não capturou, mesmo quando
+  // a balança já tem um peso acima de 40 kg.
+  useEffect(() => {
+    return () => {
+      atualizarEstadoMonitor({
+        tela_ativa: false,
+        auto_ativa: false,
+        etapa: 0,
+        estado: 'tela_fechada',
+        detalhe: 'A aba Tickets não está aberta no PC da balança.',
+        segundos: null,
+        peso_candidato: null,
+        ticket: '',
+      });
+    };
+  }, [atualizarEstadoMonitor]);
+
+  useEffect(() => {
+    const agora = Date.now();
+    const peso = ultimaLeitura?.peso == null ? null : Number(ultimaLeitura.peso);
+    const idade = agora - Date.parse(ultimaLeitura?.timestamp || '');
+    const leituraValida = balancaConectada && peso !== null
+      && Number.isFinite(peso) && Number.isFinite(idade)
+      && idade >= 0 && idade <= AUTO_LEITURA_VALIDADE_MS;
+    const numero = String(ticketAtivo?.numero || form.placa || '');
+    let estado = 'aguardando_peso';
+    let detalhe = 'Aguardando um peso estável na Toledo.';
+    let segundos = null;
+    let candidato = null;
+
+    if (autoCapturando) {
+      estado = 'registrando';
+      detalhe = 'PC está enviando a confirmação do peso para o sistema.';
+      candidato = autoPopup?.peso ?? null;
+    } else if (autoPopup?.fase === 'confirmar') {
+      estado = 'popup_aberto';
+      detalhe = 'Peso identificado: popup de confirmação aberto no PC.';
+      segundos = autoPopupSegundos;
+      candidato = autoPopup.peso;
+    } else if (autoPopup?.fase === 'opcoes') {
+      estado = 'peso_cancelado';
+      detalhe = 'Peso cancelado. PC aguardando Pesar novamente ou Cancelar automação.';
+      candidato = autoPopup.peso;
+    } else if (!autoAtivo) {
+      estado = 'manual';
+      detalhe = 'Captura automática desligada no PC: somente pesagem manual.';
+    } else if (autoRetentativaSegundos > 0) {
+      estado = 'pausa_retentativa';
+      detalhe = 'Nova tentativa solicitada. Aguardando 3 s antes de buscar estabilidade.';
+      segundos = autoRetentativaSegundos;
+    } else if (!balancaConectada) {
+      estado = 'sem_serial';
+      detalhe = 'Serial Toledo não está conectada no PC.';
+    } else if (!leituraValida) {
+      estado = 'sem_leitura';
+      detalhe = 'Porta serial conectada, mas sem peso válido recente da Toledo.';
+    } else if (!autoDadosProntos) {
+      estado = 'cadastro_incompleto';
+      if (!form.tipo && !ticketAtivo) detalhe = 'Selecione o tipo de ticket.';
+      else if (!form.motorista.trim() && !ticketAtivo) detalhe = 'Preencha o motorista.';
+      else if (normalizePlaca(form.placa).length !== 7 && !ticketAtivo) detalhe = 'Preencha a placa completa.';
+      else if (form.tipo === 'venda' && !pedidoSel && !ticketAtivo) detalhe = 'Selecione um pedido de venda aberto.';
+      else if (form.tipo === 'venda' && !transportadoraVendaPronta && !ticketAtivo) detalhe = 'Selecione uma transportadora válida.';
+      else if (!ticketAtivo && !form.produto_id) detalhe = 'Selecione o produto.';
+      else if (!ticketAtivo && !form.transportadora_id) detalhe = 'Selecione a transportadora.';
+      else detalhe = 'Complete os campos obrigatórios do ticket.';
+    } else if (etapaCaptura === 0 || ticketFechado) {
+      estado = 'aguardando_ticket';
+      detalhe = 'Etapa finalizada. Aguarde outro ticket ou feche o atual.';
+    } else if (autoAguardandoZerar) {
+      estado = 'aguardando_zera';
+      detalhe = 'Peso capturado. Aguarde cair abaixo de 40 kg para liberar a próxima etapa.';
+    } else if (document.visibilityState !== 'visible') {
+      estado = 'aba_oculta';
+      detalhe = 'A aba do GFARM precisa estar visível no PC para a captura automática.';
+    } else if (saving || lendo || pesoAtual.trim()) {
+      estado = 'ocupada';
+      detalhe = 'Captura automática pausada: existe uma operação ou peso manual em andamento.';
+    } else if (peso < AUTO_PESO_MINIMO_KG) {
+      estado = 'abaixo_minimo';
+      detalhe = 'Aguardando pelo menos 40 kg na Toledo.';
+    } else if (etapaCaptura === 2 && Math.abs(peso - primeiraPesagem) < 0.0001) {
+      estado = 'peso_igual';
+      detalhe = 'A 2ª pesagem deve ser diferente da 1ª.';
+    } else if (autoRestante !== null) {
+      estado = autoOscilou ? 'oscilando' : 'estabilizando';
+      detalhe = autoOscilou
+        ? 'O peso variou. Contagem de 2 s foi reiniciada.'
+        : 'Peso detectado. Aguardando completar 2 s sem variação.';
+      segundos = autoRestante;
+      candidato = peso;
+    }
+
+    atualizarEstadoMonitor({
+      tela_ativa: true,
+      auto_ativa: autoAtivo,
+      etapa: etapaCaptura,
+      estado,
+      detalhe,
+      segundos,
+      peso_candidato: candidato,
+      ticket: numero.slice(0, 100),
+    });
+  }, [
+    atualizarEstadoMonitor, autoAtivo, autoCapturando, autoPopup,
+    autoPopupSegundos, autoRetentativaSegundos, autoAguardandoZerar,
+    autoDadosProntos, autoRestante, autoOscilou, balancaConectada,
+    ultimaLeitura?.peso, ultimaLeitura?.timestamp, etapaCaptura,
+    ticketFechado, primeiraPesagem, ticketAtivo?.numero, form.tipo,
+    form.motorista, form.placa, form.produto_id, form.transportadora_id,
+    pedidoSel, transportadoraVendaPronta, saving, lendo, pesoAtual,
+  ]);
+
   function limparContagemAutomatica() {
     const estado = autoRef.current;
     estado.peso = null;
