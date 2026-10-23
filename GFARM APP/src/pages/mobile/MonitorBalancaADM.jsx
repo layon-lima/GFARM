@@ -80,7 +80,9 @@ export default function MonitorBalancaADM() {
   const titulo = !online ? 'PC sem sinal'
     : !estado.tela_ativa ? 'Aba Tickets fechada'
       : NOME[estado.estado] || 'Aguardando diagnóstico';
-  const statusPeso = leitura ? 'PESO AO VIVO' : online ? 'SEM LEITURA VÁLIDA' : 'SEM SINAL';
+  const statusPeso = leitura ? 'PESO AO VIVO'
+    : !online ? 'SEM SINAL'
+      : dados.status === 'desconectada' ? 'SERIAL DESCONECTADA' : 'SEM LEITURA VÁLIDA';
 
   return (
     <div className="mobile-page mx-auto max-w-xl space-y-3 px-3 py-3 pb-8">
@@ -110,7 +112,9 @@ export default function MonitorBalancaADM() {
         </div>
         <p className="text-xs text-muted-foreground">
           {!online ? 'Nenhum sinal recente do PC conectado à Toledo.'
-            : !leitura ? 'O PC está transmitindo, mas sem peso serial válido.' : 'Leitura recebida da VPS.'}
+            : !leitura ? (dados.status === 'desconectada'
+      ? 'PC está online, mas a serial Toledo está desconectada.'
+      : 'O PC está transmitindo, mas sem peso serial válido.') : 'Leitura recebida da VPS.'}
           {' '}Último envio: {horario(dados.atualizado_em)}.
         </p>
       </section>
