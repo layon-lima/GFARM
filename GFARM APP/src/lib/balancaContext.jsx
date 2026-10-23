@@ -163,6 +163,8 @@ export function BalancaProvider({ children }) {
   const [erro, setErro] = useState(null);
   const [lendo, setLendo] = useState(false);
   const [rawData, setRawData] = useState('');
+  const [diagnostico, setDiagnostico] = useState('Aguardando conexão.');
+  const [ultimoDadoEm, setUltimoDadoEm] = useState(null);
   const [dataBits, setDataBits] = useState(() => parseInt(loadSetting(DATABITS_KEY, '8'), 10));
   const [stopBits, setStopBits] = useState(() => parseInt(loadSetting(STOPBITS_KEY, '1'), 10));
   const [parity, setParity] = useState(() => loadSetting(PARITY_KEY, 'none'));
@@ -183,6 +185,7 @@ export function BalancaProvider({ children }) {
   const parityRef = useRef(parity);
   const portaPreferidaRef = useRef(null);
   const acordarEsperaRef = useRef(null);
+  const ultimoDadoMsRef = useRef(0);
 
   useEffect(() => {
     casasDecimaisRef.current = casasDecimais;
@@ -225,6 +228,7 @@ export function BalancaProvider({ children }) {
         // Stream perdido: recuperar apenas a porta previamente autorizada.
         if (!port.readable) {
           setStatus('reconectando');
+          setDiagnostico('Conexão serial interrompida. Tentando recuperar o conversor USB...');
           try { await port.close(); } catch {}
           if (shouldStopRef.current) break;
           try {
@@ -252,9 +256,11 @@ export function BalancaProvider({ children }) {
             port = autorizada;
             portRef.current = port;
             portaPreferidaRef.current = port.getInfo();
-            setPortaInfo(port.getInfo());
+            portaPreferidaRef.current = port.getInfo();
+      setPortaInfo(port.getInfo());
             setStatus('conectado');
             setErro(null);
+            setDiagnostico('Porta recuperada. Aguardando dados da balança...');
             tentativas = 0;
             continue;
           } catch (error) {
@@ -279,6 +285,11 @@ export function BalancaProvider({ children }) {
             if (!value?.length) continue;
             tentativas = 0;
             dadosRecebidosRef.current = true;
+            const agora = Date.now();
+            if (agora - ultimoDadoMsRef.current > 1000) {
+              ultimoDadoMsRef.current = agora;
+              setUltimoDadoEm(new Date(agora).toISOString());
+            }
 
             // Acumula bytes crus no buffer
             for (let i = 0; i < value.length; i++) buffer.push(value[i]);
@@ -312,14 +323,15 @@ export function BalancaProvider({ children }) {
               if (peso !== null) {
                 const anterior = ultimaLeituraRef.current;
                 // Só atualiza a tela quando o peso muda — espelha o visor físico da balança
-                if (!anterior || anterior.peso !== peso) {
-                  const leitura = { peso, timestamp: new Date().toISOString() };
-                  ultimaLeituraRef.current = leitura;
+                const leitura = { peso, timestamp: new Date().toISOString() };
+                ultimaLeituraRef.current = leitura;
+                if (!anterior || anterior.peso !== peso
+                  || Date.now() - new Date(anterior.timestamp).getTime() >= 1000) {
                   setUltimaLeitura(leitura);
-                } else {
-                  // Atualiza só o timestamp para que lerPeso saiba que a leitura é fresca
-                  ultimaLeituraRef.current = { ...anterior, timestamp: new Date().toISOString() };
                 }
+                setDiagnostico((atual) => atual === 'Recebendo pesos da Toledo.'
+                  ? atual : 'Recebendo pesos da Toledo.');
+                setErro((atual) => atual === null ? atual : null);
               }
             }
 
@@ -333,7 +345,12 @@ export function BalancaProvider({ children }) {
           tentativas++;
           console.warn('[Balança] Recuperando leitura serial:', e);
           setErro('Falha de leitura serial: ' + (e?.message || String(e)));
-          if (!port.readable) setStatus('reconectando');
+          if (!port.readable) {
+            setStatus('reconectando');
+            setDiagnostico('Porta serial caiu. Tentando reabrir automaticamente...');
+          } else {
+            setDiagnostico('Erro de leitura temporário. Retomando dados...');
+          }
           await aguardar(Math.min(3000, 300 * tentativas));
         } finally {
           if (reader) {
@@ -382,6 +399,7 @@ export function BalancaProvider({ children }) {
         parity: parityRef.current,
       });
       portRef.current = port;
+      portaPreferidaRef.current = port.getInfo();
       setPortaInfo(port.getInfo());
       setStatus('conectado');
       shouldStopRef.current = false;
@@ -391,7 +409,8 @@ export function BalancaProvider({ children }) {
       // mas se for InvalidStateError (já aberta), reutiliza a porta
       if (e.name === 'InvalidStateError') {
         portRef.current = port;
-        setPortaInfo(port.getInfo());
+        portaPreferidaRef.current = port.getInfo();
+      setPortaInfo(port.getInfo());
         setStatus('conectado');
         shouldStopRef.current = false;
         if (!loopRunningRef.current) iniciarLeituraContinua();
@@ -422,20 +441,25 @@ export function BalancaProvider({ children }) {
 
     // Quando um cabo é plugado fisicamente, tenta conectar automaticamente
     const handleConnect = (event) => {
-      if (cancelled || portRef.current) return;
+      if (cancelled) return;
+      if (portRef.current) {
+        acordarEsperaRef.current?.();
+        if (!loopRunningRef.current) iniciarLeituraContinua();
+        return;
+      }
       tentarAutoConectar(event.target);
     };
 
     // Quando o cabo é desconectado fisicamente, atualiza o status
     const handleDisconnect = (event) => {
       if (portRef.current === event.target) {
-        shouldStopRef.current = true;
+        setStatus('reconectando');
+        setErro('Adaptador USB desconectado ou reiniciado. Aguardando reconexão...');
+        setDiagnostico('Dispositivo USB perdido. Reconexão automática ativa.');
         const reader = readerRef.current;
         if (reader) { try { reader.cancel(); } catch {} }
-        portRef.current = null;
-        setPortaInfo(null);
-        setStatus('desconectado');
-        ultimaLeituraRef.current = null;
+        acordarEsperaRef.current?.();
+        if (!loopRunningRef.current) iniciarLeituraContinua();
       }
     };
 
@@ -445,6 +469,7 @@ export function BalancaProvider({ children }) {
     return () => {
       cancelled = true;
       shouldStopRef.current = true;
+      acordarEsperaRef.current?.();
       navigator.serial.removeEventListener('connect', handleConnect);
       navigator.serial.removeEventListener('disconnect', handleDisconnect);
       const reader = readerRef.current;
@@ -452,7 +477,6 @@ export function BalancaProvider({ children }) {
       const port = portRef.current;
       if (port) { try { port.close(); } catch {} }
       portRef.current = null;
-      loopRunningRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -474,6 +498,7 @@ export function BalancaProvider({ children }) {
       }
       await port.open({ baudRate, dataBits, stopBits, parity });
       portRef.current = port;
+      portaPreferidaRef.current = port.getInfo();
       setPortaInfo(port.getInfo());
       setStatus('conectado');
       shouldStopRef.current = false;
@@ -611,7 +636,8 @@ export function BalancaProvider({ children }) {
             parity: parityRef.current,
           });
           portRef.current = port;
-          setPortaInfo(port.getInfo());
+          portaPreferidaRef.current = port.getInfo();
+      setPortaInfo(port.getInfo());
           shouldStopRef.current = false;
           ultimaLeituraRef.current = null;
           dadosRecebidosRef.current = false;
@@ -624,7 +650,8 @@ export function BalancaProvider({ children }) {
         } catch (e) {
           if (e.name === 'InvalidStateError') {
             portRef.current = port;
-            setPortaInfo(port.getInfo());
+            portaPreferidaRef.current = port.getInfo();
+      setPortaInfo(port.getInfo());
             setStatus('conectado');
             shouldStopRef.current = false;
             if (!loopRunningRef.current) iniciarLeituraContinua();
@@ -702,6 +729,7 @@ export function BalancaProvider({ children }) {
         parity: parityRef.current,
       });
       portRef.current = port;
+      portaPreferidaRef.current = port.getInfo();
       setPortaInfo(port.getInfo());
       shouldStopRef.current = false;
       ultimaLeituraRef.current = null;
@@ -743,6 +771,8 @@ export function BalancaProvider({ children }) {
 
   const value = {
     suportado,
+    diagnostico,
+    ultimoDadoEm,
     status,
     portaInfo,
     baudRate,
