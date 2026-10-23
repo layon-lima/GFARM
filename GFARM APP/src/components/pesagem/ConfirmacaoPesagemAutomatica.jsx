@@ -89,7 +89,7 @@ export default function ConfirmacaoPesagemAutomatica({
         ) : (
           <>
             <p className="text-xs text-muted-foreground">
-              Pesar novamente: aguarda 3 segundos e reinicia a busca por 3 segundos de peso estável.
+              Pesar novamente: aguarda 3 segundos e reinicia a busca por 2 segundos de peso estável.
               Cancelar automação: devolve a captura ao usuário.
             </p>
             <AlertDialogFooter className="gap-2 sm:space-x-0">
