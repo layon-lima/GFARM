@@ -22,7 +22,7 @@ export default function ConfirmacaoPesagemAutomatica({
   return (
     <AlertDialog open onOpenChange={() => {}}>
       <AlertDialogContent
-        className="w-[calc(100%-1.5rem)] max-w-md gap-4"
+        className="w-[calc(100%_-_1.5rem)] max-w-md gap-4"
         onEscapeKeyDown={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
       >
