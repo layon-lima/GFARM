@@ -190,6 +190,43 @@ export function BalancaProvider({ children }) {
   const [casasDecimais, setCasasDecimais] = useState(() => parseInt(loadSetting(CASAS_KEY, '0'), 10));
 
   const portRef = useRef(null);
+  const monitorAutomacaoRef = useRef({
+    estado: {
+      tela_ativa: false, auto_ativa: false, etapa: 0,
+      estado: 'tela_fechada', detalhe: 'Abra Pesagem > Tickets no PC da Toledo.',
+      segundos: null, peso_candidato: null, ticket: '',
+    },
+    eventos: [],
+    ultima_captura: null,
+  });
+
+  const atualizarEstadoMonitor = useCallback((estado) => {
+    monitorAutomacaoRef.current.estado = {
+      ...monitorAutomacaoRef.current.estado,
+      ...estado,
+    };
+  }, []);
+
+  const registrarEventoMonitor = useCallback((evento) => {
+    const id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID() : `evt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const novo = {
+      id,
+      horario: new Date().toISOString(),
+      tipo: String(evento.tipo || 'aviso'),
+      descricao: String(evento.descricao || ''),
+      etapa: Number(evento.etapa) || 0,
+      peso_kg: evento.peso_kg == null ? null : Number(evento.peso_kg),
+      registro: String(evento.registro || ''),
+      ticket: String(evento.ticket || ''),
+    };
+    const ref = monitorAutomacaoRef.current;
+    ref.eventos = [novo, ...ref.eventos].slice(0, 8);
+    if (['primeira_gravada', 'segunda_capturada', 'ticket_fechado'].includes(novo.tipo)) {
+      ref.ultima_captura = novo;
+    }
+  }, []);
+
   const statusSerialRef = useRef(status);
   useEffect(() => { statusSerialRef.current = status; }, [status]);
   const readerRef = useRef(null);
@@ -864,13 +901,8 @@ export function BalancaProvider({ children }) {
         return;
       }
 
-      // Uma COM autorizada não significa necessariamente ser a Toledo.
-      // Só reivindica a publicação após receber ao menos um frame válido.
-      if (port && !publicou && !ultimaLeituraRef.current) {
-        setStatusPublicacao((v) => v === 'aguardando_leitura' ? v : 'aguardando_leitura');
-        return;
-      }
-
+      // Publica também o diagnóstico de porta aberta sem frames: assim
+      // o ADM distingue "PC não envia" de "PC ligado sem leitura válida".
       const conectado = Boolean(port && port.readable
         && statusSerialRef.current === 'conectado');
       const leitura = ultimaLeituraRef.current;
@@ -887,6 +919,9 @@ export function BalancaProvider({ children }) {
           publicador_id: publicadorId,
           conectada: conectado,
           peso_kg: fresco ? peso : null,
+          estado_automacao: monitorAutomacaoRef.current.estado,
+          eventos_automacao: monitorAutomacaoRef.current.eventos,
+          ultima_captura: monitorAutomacaoRef.current.ultima_captura,
         });
         publicou = true;
         desligamentoEnviado = !port;
@@ -949,6 +984,8 @@ export function BalancaProvider({ children }) {
   }, [podeAcompanhar, user?.id]);
 
   const value = {
+    atualizarEstadoMonitor,
+    registrarEventoMonitor,
     leituraRemota,
     statusPublicacao,
     erroPublicacao,
