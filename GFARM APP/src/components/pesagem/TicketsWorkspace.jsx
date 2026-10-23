@@ -103,6 +103,8 @@ export default function TicketsWorkspace({
   const { user } = useAuth();
   const podeDigitar = podeDigitarPeso(user);
   const pesoInputRef = useRef(null);
+  const autoPopupRef = useRef(null);
+  const confirmarAutoRef = useRef(null);
   const autoRef = useRef({
     peso: null,
     desde: 0,
@@ -147,6 +149,12 @@ export default function TicketsWorkspace({
   const [autoRetentativaAte, setAutoRetentativaAte] = useState(0);
   const [autoRetentativaSegundos, setAutoRetentativaSegundos] = useState(0);
   const [autoOscilou, setAutoOscilou] = useState(false);
+
+  function alterarPopupAuto(proximo) {
+    // Ref síncrono: evita dois cliques/confirmações causados pelo timer.
+    autoPopupRef.current = proximo;
+    setAutoPopup(proximo);
+  }
 
   useEffect(() => {
     try { localStorage.setItem(AUTO_PREF_KEY, String(autoAtivo)); } catch {}
@@ -861,7 +869,7 @@ export default function TicketsWorkspace({
   }
 
   function selecionarEtapa(etapa) {
-    if (saving || lendo || ticketFechado || !tipoAtual) return;
+    if (saving || lendo || ticketFechado || !tipoAtual || autoPopupRef.current) return;
     if (etapa === 2 && !ticketAtivo) return;
     setEtapaSelecionada(etapa);
     // Nunca reutilizar manualmente a leitura anterior numa nova captura.
@@ -872,18 +880,22 @@ export default function TicketsWorkspace({
 
   async function capturarPeso(pesoAutomatico = null) {
     if (saving || lendo || ticketFechado || etapaCaptura === 0) return false;
+    if (!pesoAutomatico && autoPopupRef.current) return false;
 
     const automatico = pesoAutomatico && typeof pesoAutomatico === 'object';
     if (automatico) {
       const idade = Date.now() - Date.parse(ultimaLeitura?.timestamp || '');
-      const estabilidade = Date.now() - Date.parse(ultimaLeitura?.estavelDesde || '');
-      // Exige o peso físico ainda inalterado e a mesma etapa/ticket do
-      // popup, evitando gravar captura velha ou peso enviado pela VPS.
-      if (!autoAtivo || !balancaConectada || document.visibilityState !== 'visible'
+      // O peso foi validado ao abrir o popup e fica CONGELADO durante
+      // os 10 segundos. Oscilações posteriores (vento) não alteram o
+      // número confirmado; exigimos apenas fonte serial recente e
+      // o mesmo ticket/etapa para evitar um registro no veículo errado.
+      const inicioEstavel = Date.parse(pesoAutomatico.estavelDesde || '');
+      const momentoCaptura = Date.parse(pesoAutomatico.criadoEm || '');
+      if (!autoAtivo || !balancaConectada
         || !Number.isFinite(idade) || idade < 0 || idade > AUTO_LEITURA_VALIDADE_MS
-        || !Number.isFinite(estabilidade) || estabilidade < AUTO_ESTABILIDADE_MS
-        || Number(ultimaLeitura?.peso) !== pesoAutomatico.peso
-        || ultimaLeitura?.estavelDesde !== pesoAutomatico.estavelDesde
+        || !Number.isFinite(inicioEstavel) || !Number.isFinite(momentoCaptura)
+        || momentoCaptura - inicioEstavel < AUTO_ESTABILIDADE_MS
+        || !Number.isFinite(pesoAutomatico.peso)
         || pesoAutomatico.contexto !== autoContexto
         || pesoAutomatico.etapa !== etapaCaptura
         || pesoAutomatico.peso < AUTO_PESO_MINIMO_KG
