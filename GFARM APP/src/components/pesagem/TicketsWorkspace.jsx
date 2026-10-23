@@ -122,6 +122,8 @@ export default function TicketsWorkspace({
     formatarPeso,
     lerPeso,
     lendo,
+    atualizarEstadoMonitor,
+    registrarEventoMonitor,
   } = useBalanca();
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -971,6 +973,14 @@ export default function TicketsWorkspace({
         }
         autoRef.current.aguardandoZerar = true;
         setAutoAguardandoZerar(true);
+        registrarEventoMonitor({
+          tipo: 'primeira_gravada',
+          descricao: `1ª pesagem corrigida e salva no servidor (${automatico ? 'auto' : 'manual'}).`,
+          etapa: 1,
+          peso_kg: pesoLido,
+          registro: 'servidor',
+          ticket: String(ticketAtivo?.numero || ''),
+        });
         return true;
       }
 
@@ -984,6 +994,14 @@ export default function TicketsWorkspace({
           setPesoAtual('');
           autoRef.current.aguardandoZerar = true;
           setAutoAguardandoZerar(true);
+          registrarEventoMonitor({
+            tipo: 'primeira_gravada',
+            descricao: `1ª pesagem gravada no servidor (${automatico ? 'auto' : 'manual'}).`,
+            etapa: 1,
+            peso_kg: pesoLido,
+            registro: 'servidor',
+            ticket: String(criado?.numero || ''),
+          });
           return true;
         }
         return false;
@@ -997,6 +1015,14 @@ export default function TicketsWorkspace({
         setPesoAtual('');
         autoRef.current.aguardandoZerar = true;
         setAutoAguardandoZerar(true);
+        registrarEventoMonitor({
+          tipo: 'segunda_capturada',
+          descricao: `2ª pesagem confirmada no PC (${automatico ? 'auto' : 'manual'}). Aguardando fechamento do ticket.`,
+          etapa: 2,
+          peso_kg: pesoLido,
+          registro: 'pc_aguarda_fechamento',
+          ticket: String(ticketAtivo?.numero || ''),
+        });
         return true;
       }
       return false;
@@ -1134,6 +1160,14 @@ export default function TicketsWorkspace({
         });
       }
 
+      registrarEventoMonitor({
+        tipo: 'ticket_fechado',
+        descricao: 'Ticket fechado e gravado no servidor.',
+        etapa: 2,
+        peso_kg: segundaPesagem,
+        registro: 'servidor',
+        ticket: String(fechado?.numero || ticketAtivo?.numero || ''),
+      });
       resetNovoTicket();
       await onReload?.();
     } catch (error) {
