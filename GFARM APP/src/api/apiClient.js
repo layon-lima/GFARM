@@ -1028,6 +1028,20 @@ async function uploadFile(file) {
 export const api = {
   entities,
 
+  balanca: {
+    // A VPS recebe apenas a leitura atual; nunca controla a porta serial.
+    async publicarPeso(dados) {
+      return request("/balanca/live", {
+        method: "POST",
+        body: JSON.stringify(dados),
+        cache: "no-store",
+      });
+    },
+    async consultarPeso() {
+      return request("/balanca/live", { cache: "no-store" });
+    },
+  },
+
   integrations: {
     Core: {
       async UploadFile({
