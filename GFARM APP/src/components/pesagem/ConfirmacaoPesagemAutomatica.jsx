@@ -1,10 +1,11 @@
 import { CheckCircle2, Clock3, RefreshCw, ShieldAlert, XCircle } from 'lucide-react';
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { formatKg } from '@/lib/pesagem';
 
-// O reconhecimento do peso NÃO grava o ticket. Somente o botão Confirmar
-// chama a gravação, e o timer nunca confirma automaticamente.
+
+// Primeiro congela o peso; o botão Confirmar registra imediatamente,
+// e o fim dos 10 segundos também confirma automaticamente.
+// Cancelar impede a gravação e oferece nova pesagem ou modo manual.
 export default function ConfirmacaoPesagemAutomatica({
   captura,
   segundos,
@@ -34,7 +35,7 @@ export default function ConfirmacaoPesagemAutomatica({
           </AlertDialogTitle>
           <AlertDialogDescription>
             {confirmando
-              ? `A Toledo identificou a ${captura.etapa}ª pesagem estável. Confira o peso antes de registrar.`
+              ? `A Toledo identificou a ${captura.etapa}ª pesagem estável. Confirme, cancele ou aguarde: em 10 segundos este peso será registrado automaticamente.`
               : (captura.motivo || 'A captura foi cancelada. Escolha como deseja continuar.')}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -44,10 +45,13 @@ export default function ConfirmacaoPesagemAutomatica({
             {captura.etapa}ª pesagem — peso identificado
           </p>
           <p className="mt-1 text-4xl font-bold tabular-nums text-primary sm:text-5xl">
-            {formatKg(captura.peso)} <span className="text-base font-medium">kg</span>
+            {Number(captura.peso).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}{' '}
+            <span className="text-base font-medium">kg</span>
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Valor congelado para conferência; nenhuma pesagem foi registrada ainda.
+            {confirmando
+              ? 'Peso congelado: confirmação automática ao fim da contagem, se ninguém cancelar.'
+              : 'Captura cancelada: este peso não foi registrado.'}
           </p>
         </div>
 
@@ -55,7 +59,7 @@ export default function ConfirmacaoPesagemAutomatica({
           <>
             <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
               <span className="flex items-center gap-2 text-xs font-medium">
-                <Clock3 className="h-4 w-4" /> Tempo para decidir
+                <Clock3 className="h-4 w-4" /> Confirma automaticamente em
               </span>
               <span className={`text-xl font-bold tabular-nums ${segundos <= 3 ? 'text-destructive' : 'text-primary'}`}>
                 {segundos} s
