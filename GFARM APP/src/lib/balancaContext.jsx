@@ -174,6 +174,7 @@ export function BalancaProvider({ children }) {
   const acordarEsperaRef = useRef(null);
   const ultimoDadoMsRef = useRef(0);
   const ultimoFrameValidoMsRef = useRef(0);
+  const ultimoRenderPesoMsRef = useRef(0);
 
   useEffect(() => {
     casasDecimaisRef.current = casasDecimais;
@@ -315,11 +316,14 @@ export function BalancaProvider({ children }) {
               if (peso !== null) {
                 ultimoFrameValidoMsRef.current = Date.now();
                 const anterior = ultimaLeituraRef.current;
-                // Só atualiza a tela quando o peso muda — espelha o visor físico da balança
-                const leitura = { peso, timestamp: new Date().toISOString() };
+                // Atualiza o timestamp da UI ao menos 1x/s mesmo com peso
+                // constante. Assim a captura automática exige leituras
+                // reais e recentes, sem confundir peso parado com dados velhos.
+                const agora = Date.now();
+                const leitura = { peso, timestamp: new Date(agora).toISOString() };
                 ultimaLeituraRef.current = leitura;
-                if (!anterior || anterior.peso !== peso
-                  || Date.now() - new Date(anterior.timestamp).getTime() >= 1000) {
+                if (!anterior || anterior.peso !== peso || agora - ultimoRenderPesoMsRef.current >= 1000) {
+                  ultimoRenderPesoMsRef.current = agora;
                   setUltimaLeitura(leitura);
                 }
                 setDiagnostico((atual) => atual === 'Recebendo pesos da Toledo.'
