@@ -1287,7 +1287,7 @@ export default function TicketsWorkspace({
     } else if (!balancaConectada) {
       estado = 'sem_serial';
       detalhe = 'Serial Toledo não está conectada no PC.';
-    } else if (!leituraValida) {
+    } else if (!leituraValida || autoSemLeitura) {
       estado = 'sem_leitura';
       detalhe = 'Porta serial conectada, mas sem peso válido recente da Toledo.';
     } else if (!autoDadosProntos) {
@@ -1341,7 +1341,7 @@ export default function TicketsWorkspace({
     atualizarEstadoMonitor, autoAtivo, autoCapturando, autoPopup,
     autoPopupSegundos, autoRetentativaSegundos, autoAguardandoZerar,
     autoDadosProntos, autoRestante, autoOscilou, balancaConectada,
-    ultimaLeitura?.peso, ultimaLeitura?.timestamp, etapaCaptura,
+    ultimaLeitura?.peso, ultimaLeitura?.timestamp, autoSemLeitura, etapaCaptura,
     ticketFechado, primeiraPesagem, ticketAtivo?.numero, form.tipo,
     form.motorista, form.placa, form.produto_id, form.transportadora_id,
     pedidoSel, transportadoraVendaPronta, saving, lendo, pesoAtual,
