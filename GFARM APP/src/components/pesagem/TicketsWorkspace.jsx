@@ -149,6 +149,7 @@ export default function TicketsWorkspace({
   const [autoRetentativaAte, setAutoRetentativaAte] = useState(0);
   const [autoRetentativaSegundos, setAutoRetentativaSegundos] = useState(0);
   const [autoOscilou, setAutoOscilou] = useState(false);
+  const [autoSemLeitura, setAutoSemLeitura] = useState(false);
 
   function alterarPopupAuto(proximo) {
     // Ref síncrono: evita dois cliques/confirmações causados pelo timer.
@@ -1335,6 +1336,7 @@ export default function TicketsWorkspace({
         && Number.isFinite(peso) && Number.isFinite(dataLeitura)
         && agora >= dataLeitura
         && agora - dataLeitura <= AUTO_LEITURA_VALIDADE_MS;
+      setAutoSemLeitura(balancaConectada && !leituraRecente);
 
       if (estado.aguardandoZerar && leituraRecente && peso < AUTO_PESO_MINIMO_KG) {
         estado.aguardandoZerar = false;
@@ -2047,9 +2049,13 @@ export default function TicketsWorkspace({
                               ? 'Captura automática aguardando preenchimento do ticket.'
                               : etapaCaptura === 0
                                 ? 'Pesagens registradas. Feche o ticket para concluir.'
-                                : autoRestante !== null
-                                  ? `${autoOscilou ? 'Peso oscilou; contagem reiniciada. ' : ''}Buscando estabilidade: ${autoRestante} s restantes.`
-                                  : 'Aguardando peso de 40 kg ou mais, sem variação durante 3 s.'}
+                                : autoSemLeitura
+                                  ? 'Sem leitura recente válida da Toledo. Verifique a conexão serial: não é oscilação, faltam dados.'
+                                  : etapaCaptura === 2 && Number(ultimaLeitura?.peso) === primeiraPesagem
+                                    ? 'A 2ª pesagem exige um peso diferente da 1ª. Aguardando nova leitura.'
+                                    : autoRestante !== null
+                                      ? `${autoOscilou ? 'Peso oscilou; contagem reiniciada. ' : ''}Buscando estabilidade: ${autoRestante} s restantes.`
+                                      : 'Aguardando peso de 40 kg ou mais, sem variação durante 3 s.'}
               </p>
             )}
 
