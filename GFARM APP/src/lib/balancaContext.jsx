@@ -145,7 +145,7 @@ function isDeviceLostError(e) {
   );
 }
 
-const MAX_RETRIES = 5;
+const MAX_BACKOFF_MS = 12000;
 
 export function BalancaProvider({ children }) {
   const [suportado, setSuportado] = useState(true);
@@ -181,6 +181,8 @@ export function BalancaProvider({ children }) {
   const dataBitsRef = useRef(dataBits);
   const stopBitsRef = useRef(stopBits);
   const parityRef = useRef(parity);
+  const portaPreferidaRef = useRef(null);
+  const acordarEsperaRef = useRef(null);
 
   useEffect(() => {
     casasDecimaisRef.current = casasDecimais;
@@ -198,7 +200,7 @@ export function BalancaProvider({ children }) {
    * Cada frame é delimitado por CR (0x0D) no fim. STX é opcional e pode não ser transmitido.
    */
   const iniciarLeituraContinua = useCallback(async () => {
-    const port = portRef.current;
+    let port = portRef.current;
     if (!port) return;
 
     // Guarda: não inicia loop duplicado
@@ -207,18 +209,61 @@ export function BalancaProvider({ children }) {
 
     shouldStopRef.current = false;
     let tentativas = 0;
+    const aguardar = (ms) => new Promise((resolve) => {
+      let timer;
+      const concluir = () => {
+        clearTimeout(timer);
+        if (acordarEsperaRef.current === concluir) acordarEsperaRef.current = null;
+        resolve();
+      };
+      timer = setTimeout(concluir, ms);
+      acordarEsperaRef.current = concluir;
+    });
 
     try {
-      while (!shouldStopRef.current && tentativas < MAX_RETRIES) {
-        // Se a porta não é mais legível, o dispositivo foi removido fisicamente
+      while (!shouldStopRef.current) {
+        // Stream perdido: recuperar apenas a porta previamente autorizada.
         if (!port.readable) {
-          if (!shouldStopRef.current) {
-            setStatus('desconectado');
-            portRef.current = null;
-            setPortaInfo(null);
-            ultimaLeituraRef.current = null;
+          setStatus('reconectando');
+          try { await port.close(); } catch {}
+          if (shouldStopRef.current) break;
+          try {
+            const ports = await navigator.serial.getPorts();
+            const info = portaPreferidaRef.current || port.getInfo();
+            const autorizada = ports.find((p) => p === port) || ports.find((p) => {
+              const atual = p.getInfo();
+              return info?.usbVendorId != null && info?.usbProductId != null
+                && atual.usbVendorId === info.usbVendorId
+                && atual.usbProductId === info.usbProductId;
+            });
+            if (!autorizada) throw new Error('Conversor serial não encontrado. Verifique USB e driver.');
+            if (!autorizada.readable) await autorizada.open({
+              baudRate: baudRateRef.current,
+              dataBits: dataBitsRef.current,
+              stopBits: stopBitsRef.current,
+              parity: parityRef.current,
+              bufferSize: 4096,
+              flowControl: 'none',
+            });
+            if (shouldStopRef.current) {
+              try { await autorizada.close(); } catch {}
+              break;
+            }
+            port = autorizada;
+            portRef.current = port;
+            portaPreferidaRef.current = port.getInfo();
+            setPortaInfo(port.getInfo());
+            setStatus('conectado');
+            setErro(null);
+            tentativas = 0;
+            continue;
+          } catch (error) {
+            if (shouldStopRef.current) break;
+            tentativas++;
+            setErro('Tentando reconectar a porta serial: ' + (error?.message || String(error)));
+            await aguardar(Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(tentativas - 1, 4)));
+            continue;
           }
-          return;
         }
 
         let reader;
@@ -228,11 +273,11 @@ export function BalancaProvider({ children }) {
           // Acumula bytes CRUS (Uint8Array) — NÃO usa TextDecoder UTF-8, que corrompe
           // bytes de status com bit 7 ligado (paridade) e quebra o alinhamento do frame.
           let buffer = [];
-          tentativas = 0; // Resetou — leitura está funcionando
-
           while (!shouldStopRef.current) {
             const { value, done } = await reader.read();
             if (done) break;
+            if (!value?.length) continue;
+            tentativas = 0;
             dadosRecebidosRef.current = true;
 
             // Acumula bytes crus no buffer
@@ -283,36 +328,22 @@ export function BalancaProvider({ children }) {
         } catch (e) {
           if (shouldStopRef.current) break;
 
-          // Erro fatal: dispositivo foi removido fisicamente
-          if (isDeviceLostError(e) || !port.readable) {
-            setStatus('desconectado');
-            portRef.current = null;
-            setPortaInfo(null);
-            ultimaLeituraRef.current = null;
-            return;
-          }
-
-          // Erro recuperável: incrementa tentativas e tenta novamente
+          // NetworkError pode ser transitório; o browser indica queda
+          // realmente fatal quando port.readable se torna null.
           tentativas++;
-          console.warn(`[Balanca] Loop reiniciando após erro (tentativa ${tentativas}/${MAX_RETRIES}):`, e);
-          if (tentativas < MAX_RETRIES) {
-            // Backoff exponencial: 1s, 2s, 3s, 4s...
-            await new Promise(r => setTimeout(r, 1000 * tentativas));
-          }
+          console.warn('[Balança] Recuperando leitura serial:', e);
+          setErro('Falha de leitura serial: ' + (e?.message || String(e)));
+          if (!port.readable) setStatus('reconectando');
+          await aguardar(Math.min(3000, 300 * tentativas));
         } finally {
           if (reader) {
             try { reader.releaseLock(); } catch {}
           }
-          readerRef.current = null;
+          if (readerRef.current === reader) readerRef.current = null;
         }
+        if (!shouldStopRef.current) await aguardar(150);
       }
 
-      // Esgotou as tentativas sem shouldStop — sinaliza erro ao usuário
-      if (!shouldStopRef.current && tentativas >= MAX_RETRIES) {
-        setStatus('erro');
-        const raw = rawDataRef.current || '';
-        setErro('A balança parou de responder. Verifique o cabo USB, o driver do conversor serial e se a balança está ligada.');
-      }
     } finally {
       loopRunningRef.current = false;
     }
@@ -321,6 +352,7 @@ export function BalancaProvider({ children }) {
   /** Para o loop de leitura contínua e libera o reader (com timeout para não travar). */
   const pararLeitura = useCallback(async () => {
     shouldStopRef.current = true;
+    acordarEsperaRef.current?.();
     const reader = readerRef.current;
     if (reader) {
       try {
