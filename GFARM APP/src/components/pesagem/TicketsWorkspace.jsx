@@ -223,16 +223,14 @@ export default function TicketsWorkspace({
     etapaSelecionada,
   });
 
-  const leituraBalanca = Number(ultimaLeitura?.peso);
-  const displayPeso =
-    pesoAtual ||
-    (
-      Number.isFinite(leituraBalanca)
-        ? formatarPeso(leituraBalanca)
-        : '0,00'
-    );
-
   const balancaConectada = statusBalanca === 'conectado';
+  // O visor mostra exclusivamente a leitura da balança; o campo manual
+  // não pode substituir nem mascarar o peso recebido pela conexão serial.
+  const leituraBalanca = ultimaLeitura?.peso;
+  const displayPeso = balancaConectada && leituraBalanca != null
+    && Number.isFinite(Number(leituraBalanca))
+    ? formatarPeso(Number(leituraBalanca))
+    : '0,00';
 
   const abertos = useMemo(
     () =>
@@ -1668,30 +1666,42 @@ export default function TicketsWorkspace({
 
           <div className="flex flex-1 flex-col gap-2.5 p-3">
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <p className="mb-1 text-xs text-muted-foreground">{podeDigitar ? 'Digite o peso da pesagem (kg)' : 'Peso em tempo real'}</p>
+              <p className="mb-1 text-xs text-muted-foreground">Peso em tempo real</p>
               <div className="flex items-center gap-2">
                 <Package className="h-5 w-5 shrink-0 text-primary" />
-                {podeDigitar ? (
+                <span className="min-w-0 flex-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
+                  {displayPeso}
+                </span>
+                <span className="text-sm text-muted-foreground">kg</span>
+              </div>
+            </div>
+
+            {podeDigitar && (
+              <div className="rounded-lg border border-dashed border-primary/30 bg-muted/10 px-3 py-2.5">
+                <label htmlFor="peso-manual-pesagem" className="mb-1.5 block text-xs font-semibold">
+                  Peso manual (ADM)
+                </label>
+                <div className="flex items-center gap-2">
                   <Input
+                    id="peso-manual-pesagem"
                     ref={pesoInputRef}
-                    aria-label="Digite o peso manual em quilogramas"
+                    aria-label="Peso manual em quilogramas"
                     inputMode="decimal"
                     type="text"
                     autoComplete="off"
                     value={pesoAtual}
                     onChange={(event) => setPesoAtual(event.target.value)}
-                    placeholder={tipoAtual ? 'Digite aqui' : 'Selecione o tipo de ticket'}
+                    placeholder="Informe o peso em kg"
                     disabled={saving || lendo || ticketFechado || !tipoAtual}
-                    className="h-14 min-w-0 border border-primary/40 bg-background text-right !text-3xl font-bold shadow-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary 2xl:!text-4xl"
+                    className="h-10 min-w-0 flex-1 bg-background text-right text-lg font-semibold tabular-nums"
                   />
-                ) : (
-                  <span className="min-w-0 flex-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
-                    {displayPeso}
-                  </span>
-                )}
-                <span className="text-sm text-muted-foreground">kg</span>
+                  <span className="text-xs text-muted-foreground">kg</span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Opcional. Quando preenchido, o peso digitado será registrado no lugar da leitura da balança.
+                </p>
               </div>
-            </div>
+            )}
 
             <button
               type="button"
@@ -1708,7 +1718,7 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="font-semibold">1ª Pesagem</span>
                 <span className={ticketAtivo ? 'text-emerald-700' : 'text-muted-foreground'}>
-                  {etapaCaptura === 1 && podeDigitar ? 'Digite o peso acima' : ticketAtivo ? 'Registrada' : 'Aguardando'}
+                  {ticketAtivo ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
               <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
@@ -1736,7 +1746,7 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="font-semibold">2ª Pesagem</span>
                 <span className={segundaPesagem > 0 ? 'text-emerald-700' : 'text-muted-foreground'}>
-                  {etapaCaptura === 2 && podeDigitar ? 'Digite o peso acima' : segundaPesagem > 0 ? 'Registrada' : 'Aguardando'}
+                  {segundaPesagem > 0 ? 'Registrada' : 'Aguardando'}
                 </span>
               </div>
               <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
@@ -1775,7 +1785,7 @@ export default function TicketsWorkspace({
             </Button>
             <p className="text-center text-[11px] text-muted-foreground">
               {podeDigitar
-                ? 'Selecione a 1ª ou 2ª pesagem, digite o peso no campo acima e clique para registrar.'
+                ? 'Captura o peso da balança; se informar um peso manual, registra o valor digitado.'
                 : 'Um clique registra o peso. Para corrigir, selecione a pesagem acima.'}
             </p>
           </div>
