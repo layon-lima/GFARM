@@ -14,6 +14,7 @@ import {
   allowedPagesForUser,
   canAccessBalanca,
   canAccessUsuarios,
+  podeMonitorarBalancaADM,
   pageKeyForPath,
   userCanAccess,
 } from '@/lib/permissions';
@@ -54,6 +55,7 @@ export default function Layout() {
   const pageKey = pageKeyForPath(location.pathname);
   const isUsuarios = location.pathname.startsWith('/usuarios');
   const isBalanca = location.pathname === '/balanca';
+  const isMonitorBalanca = location.pathname === '/monitor-balanca';
   const isMobileHome = isMobile && location.pathname === '/';
 
   const isUsuariosAllowed = canAccessUsuarios(user);
@@ -64,7 +66,9 @@ export default function Layout() {
       ? isUsuariosAllowed
       : isBalanca
         ? canAccessBalanca(user)
-        : userCanAccess(user, pageKey);
+        : isMonitorBalanca
+          ? podeMonitorarBalancaADM(user)
+          : userCanAccess(user, pageKey);
 
   const allowed = allowedPagesForUser(user);
 
