@@ -820,7 +820,12 @@ export default function TicketsWorkspace({
         description: `${numero} • ${formatKg(pesoConfirmado)}`,
       });
 
-      await onReload?.();
+      // O ticket JÁ foi criado. Se a atualização da lista falhar,
+      // jamais informar que a pesagem não foi registrada.
+      try { await onReload?.(); }
+      catch (erroRefresh) {
+        console.warn('[Pesagem] Ticket salvo, mas a lista não atualizou:', erroRefresh);
+      }
       return created;
     } catch (error) {
       toast({
@@ -960,7 +965,10 @@ export default function TicketsWorkspace({
           title: '1ª pesagem atualizada',
           description: formatKg(pesoLido),
         });
-        await onReload?.();
+        try { await onReload?.(); }
+        catch (erroRefresh) {
+          console.warn('[Pesagem] Peso atualizado, mas a lista não recarregou:', erroRefresh);
+        }
         autoRef.current.aguardandoZerar = true;
         setAutoAguardandoZerar(true);
         return true;
