@@ -4,6 +4,7 @@ import { canAccessBalanca } from '@/lib/permissions';
 import BalancaStatusGrid from '@/components/balanca/BalancaStatusGrid';
 import BalancaControles from '@/components/balanca/BalancaControles';
 import BalancaConfig from '@/components/balanca/BalancaConfig';
+import BalancaMonitorRemoto from '@/components/balanca/BalancaMonitorRemoto';
 
 export default function Balanca() {
   const { user } = useAuth();
@@ -32,6 +33,7 @@ export default function Balanca() {
         </p>
       </header>
 
+      <BalancaMonitorRemoto />
       <BalancaStatusGrid />
       <BalancaControles />
       <BalancaConfig />
