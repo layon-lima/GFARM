@@ -22,12 +22,15 @@ export default function BalancaMonitorRemoto() {
     && leituraRemota?.peso_kg != null
     && Number.isFinite(Number(leituraRemota.peso_kg));
   const semLeitura = leituraRemota?.status === 'sem_leitura';
+  const desconectada = leituraRemota?.status === 'desconectada';
 
   const tituloStatus = aoVivo
     ? 'Ao vivo'
-    : semLeitura
-      ? 'Sem peso válido'
-      : 'Sem sinal';
+    : desconectada
+      ? 'Serial desconectada'
+      : semLeitura
+        ? 'Sem peso válido'
+        : 'Sem sinal';
 
   return (
     <section className="rounded-xl border bg-card p-4 shadow-none space-y-3" aria-label="Monitoramento remoto da balança">
@@ -63,9 +66,11 @@ export default function BalancaMonitorRemoto() {
           <>
             <span className="text-3xl font-bold text-muted-foreground">—</span>
             <span className="mt-1 text-xs text-muted-foreground">
-              {semLeitura
-                ? 'PC da balança está online, mas ainda não enviou uma leitura válida.'
-                : 'Aguardando transmissão do computador conectado à Toledo.'}
+              {desconectada
+                ? 'O computador está online, mas a porta serial da Toledo está desconectada.'
+                : semLeitura
+                  ? 'PC da balança conectado, mas sem leitura recente válida.'
+                  : 'Aguardando transmissão do computador conectado à Toledo.'}
             </span>
           </>
         )}
