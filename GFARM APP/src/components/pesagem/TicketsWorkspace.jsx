@@ -65,7 +65,7 @@ const EMPTY_FORM = {
 };
 
 const AUTO_PESO_MINIMO_KG = 40;
-const AUTO_ESTABILIDADE_MS = 3000;
+const AUTO_ESTABILIDADE_MS = 2000;
 const AUTO_CONFIRMACAO_MS = 10000;
 const AUTO_ESPERA_NOVA_TENTATIVA_MS = 3000;
 const AUTO_LEITURA_VALIDADE_MS = 2500;
@@ -1191,7 +1191,7 @@ export default function TicketsWorkspace({
         ? pedidoSel?.status === 'aberto' && transportadoraVendaPronta
         : form.produto_id && form.transportadora_id));
 
-  // Mudar motorista, placa, pedido ou etapa reinicia a estabilidade de 3 s.
+  // Mudar motorista, placa, pedido ou etapa reinicia a estabilidade de 2 s.
   const autoContexto = ticketAtivo
     ? `aberto|${ticketAtivo.id}|${etapaCaptura}`
     : [
@@ -1209,7 +1209,7 @@ export default function TicketsWorkspace({
   }
 
   // O prazo de 10 s é de decisão. Sem intervenção, confirma o peso que foi
-  // congelado no popup após 3 s de estabilidade.
+  // congelado no popup após 2 s de estabilidade.
   async function confirmarCapturaAutomatica(captura = autoPopupRef.current) {
     const estado = autoRef.current;
     if (!captura || captura.fase !== 'confirmar'
@@ -1996,7 +1996,7 @@ export default function TicketsWorkspace({
               <button
                 type="button"
                 aria-pressed={autoAtivo}
-                title="Captura automática: peso a partir de 40 kg estável por 3 segundos, seguido de popup de 10 segundos"
+                title="Captura automática: peso a partir de 40 kg estável por 2 segundos, seguido de popup de 10 segundos"
                 disabled={autoCapturando}
                 onClick={alternarCapturaAutomatica}
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${autoAtivo
@@ -2048,7 +2048,7 @@ export default function TicketsWorkspace({
                     : autoPopup?.fase === 'opcoes'
                       ? 'Peso cancelado. Escolha Pesar novamente ou Cancelar automação no popup.'
                       : autoRetentativaSegundos > 0
-                        ? `Nova tentativa em ${autoRetentativaSegundos} s; depois serão necessários 3 s de peso estável.`
+                        ? `Nova tentativa em ${autoRetentativaSegundos} s; depois serão necessários 2 s de peso estável.`
                         : autoAguardandoZerar
                           ? 'Pesagem registrada. Aguarde o peso cair abaixo de 40 kg antes de uma nova captura automática.'
                           : !balancaConectada
@@ -2063,7 +2063,7 @@ export default function TicketsWorkspace({
                                     ? 'A 2ª pesagem exige um peso diferente da 1ª. Aguardando nova leitura.'
                                     : autoRestante !== null
                                       ? `${autoOscilou ? 'Peso oscilou; contagem reiniciada. ' : ''}Buscando estabilidade: ${autoRestante} s restantes.`
-                                      : 'Aguardando peso de 40 kg ou mais, sem variação durante 3 s.'}
+                                      : 'Aguardando peso de 40 kg ou mais, sem variação durante 2 s.'}
               </p>
             )}
 
