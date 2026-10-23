@@ -273,6 +273,7 @@ export function BalancaProvider({ children }) {
             if (!value?.length) continue;
             tentativas = 0;
             dadosRecebidosRef.current = true;
+            setStatus((anterior) => anterior === 'conectado' ? anterior : 'conectado');
             const agora = Date.now();
             if (agora - ultimoDadoMsRef.current > 1000) {
               ultimoDadoMsRef.current = agora;
@@ -354,6 +355,22 @@ export function BalancaProvider({ children }) {
       loopRunningRef.current = false;
     }
   }, []);
+
+  // Indica se o problema está na porta, na chegada de bytes ou no protocolo.
+  useEffect(() => {
+    if (status !== 'conectado') return undefined;
+    const timer = setInterval(() => {
+      const agora = Date.now();
+      const ultimoByte = ultimoDadoMsRef.current;
+      const ultimoFrame = ultimoFrameValidoMsRef.current;
+      if (!ultimoByte || agora - ultimoByte > 10000) {
+        setDiagnostico('Porta serial aberta, mas sem receber dados. Verifique cabo, saída contínua e parâmetros da Toledo.');
+      } else if (!ultimoFrame || agora - ultimoFrame > 10000) {
+        setDiagnostico('Bytes recebidos, porém sem peso válido P03. Confira baud rate, paridade e protocolo.');
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [status]);
 
   /** Para o loop de leitura contínua e libera o reader (com timeout para não travar). */
   const pararLeitura = useCallback(async () => {
