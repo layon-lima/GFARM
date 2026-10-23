@@ -216,6 +216,9 @@ export function BalancaProvider({ children }) {
         // Stream perdido: recuperar apenas a porta previamente autorizada.
         if (!port.readable) {
           setStatus('reconectando');
+          ultimaLeituraRef.current = null;
+          setUltimaLeitura(null);
+          ultimoFrameValidoMsRef.current = 0;
           setDiagnostico('Conexão serial interrompida. Tentando recuperar o conversor USB...');
           try { await port.close(); } catch {}
           if (shouldStopRef.current) break;
@@ -462,6 +465,9 @@ export function BalancaProvider({ children }) {
     const handleDisconnect = (event) => {
       if (portRef.current === event.target) {
         setStatus('reconectando');
+        ultimaLeituraRef.current = null;
+        setUltimaLeitura(null);
+        ultimoFrameValidoMsRef.current = 0;
         setErro('Adaptador USB desconectado ou reiniciado. Aguardando reconexão...');
         setDiagnostico('Dispositivo USB perdido. Reconexão automática ativa.');
         const reader = readerRef.current;
