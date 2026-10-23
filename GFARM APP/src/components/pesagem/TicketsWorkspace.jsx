@@ -1605,10 +1605,13 @@ export default function TicketsWorkspace({
           setAutoOscilou(true);
         }
         estado.peso = peso;
-        estado.desde = agora;
+        // O relógio começa no primeiro frame serial com esse peso,
+        // NÃO quando o React montou/recriou seu intervalo. Isso evita
+        // exigir mais 2 segundos além do tempo já estável na Toledo.
+        estado.desde = Date.parse(inicioEstavelNaBalanca);
         estado.chave = autoContexto;
         estado.leituraEstavelDesde = inicioEstavelNaBalanca;
-        setAutoRestante(AUTO_ESTABILIDADE_MS / 1000);
+        setAutoRestante(Math.ceil(Math.max(0, AUTO_ESTABILIDADE_MS - (agora - estado.desde)) / 1000));
         return;
       }
 
