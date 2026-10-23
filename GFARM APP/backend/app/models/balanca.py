@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, String, JSON, text
+from sqlalchemy import Boolean, DateTime, Float, String, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -26,10 +27,11 @@ class BalancaLeituraRemota(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     estado_automacao = mapped_column(
-        JSON, nullable=False, server_default=text("'{}'::jsonb")
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     eventos_automacao = mapped_column(
-        JSON, nullable=False, server_default=text("'[]'::jsonb")
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
-    ultima_captura = mapped_column(JSON, nullable=True)
+    ultima_captura = mapped_column(
+        JSONB, nullable=True)
 
