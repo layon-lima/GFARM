@@ -132,19 +132,6 @@ function bytesToHex(bytes) {
   return Array.from(bytes).map(b => '0x' + (b & 0xFF).toString(16).padStart(2, '0').toUpperCase()).join(' ');
 }
 
-/** Verifica se um erro indica que o dispositivo físico foi removido. */
-function isDeviceLostError(e) {
-  const errName = e.name || '';
-  const errMsg = (e.message || String(e)).toLowerCase();
-  return (
-    errName === 'NetworkError' ||
-    errMsg.includes('device has been lost') ||
-    errMsg.includes('port is not open') ||
-    errMsg.includes('the port is no longer') ||
-    errMsg.includes('usb device')
-  );
-}
-
 const MAX_BACKOFF_MS = 12000;
 
 export function BalancaProvider({ children }) {
@@ -186,6 +173,7 @@ export function BalancaProvider({ children }) {
   const portaPreferidaRef = useRef(null);
   const acordarEsperaRef = useRef(null);
   const ultimoDadoMsRef = useRef(0);
+  const ultimoFrameValidoMsRef = useRef(0);
 
   useEffect(() => {
     casasDecimaisRef.current = casasDecimais;
@@ -321,6 +309,7 @@ export function BalancaProvider({ children }) {
 
               const peso = parseFrameP03(frame, casasDecimaisRef.current);
               if (peso !== null) {
+                ultimoFrameValidoMsRef.current = Date.now();
                 const anterior = ultimaLeituraRef.current;
                 // Só atualiza a tela quando o peso muda — espelha o visor físico da balança
                 const leitura = { peso, timestamp: new Date().toISOString() };
@@ -490,8 +479,9 @@ export function BalancaProvider({ children }) {
     }
     setErro(null);
     setStatus('conectando');
+    let port = null;
     try {
-      const port = await navigator.serial.requestPort();
+      port = await navigator.serial.requestPort();
       await pararLeitura();
       const oldPort = portRef.current;
       if (oldPort) {
@@ -509,14 +499,13 @@ export function BalancaProvider({ children }) {
     } catch (e) {
       if (e.name === 'NotFoundError' || e.name === 'AbortError') {
         setStatus('desconectado');
-      } else if (e.name === 'InvalidStateError') {
-        // Porta já aberta — reutiliza
-        portRef.current = portRef.current;
+      } else if (e.name === 'InvalidStateError' && port?.readable) {
+        portRef.current = port;
+        portaPreferidaRef.current = port.getInfo();
+        setPortaInfo(port.getInfo());
         setStatus('conectado');
-        if (!loopRunningRef.current) {
-          shouldStopRef.current = false;
-          iniciarLeituraContinua();
-        }
+        shouldStopRef.current = false;
+        if (!loopRunningRef.current) iniciarLeituraContinua();
         return true;
       } else if (e.name === 'SecurityError') {
         setStatus('erro');
@@ -541,6 +530,11 @@ export function BalancaProvider({ children }) {
     setStatus('desconectado');
     ultimaLeituraRef.current = null;
     setRawData('');
+    setUltimaLeitura(null);
+    setUltimoDadoEm(null);
+    setDiagnostico('Desconectada pelo usuário.');
+    ultimoDadoMsRef.current = 0;
+    ultimoFrameValidoMsRef.current = 0;
   }, [pararLeitura]);
 
   /**
@@ -633,6 +627,8 @@ export function BalancaProvider({ children }) {
             dataBits: dataBitsRef.current,
             stopBits: stopBitsRef.current,
             parity: parityRef.current,
+            bufferSize: 4096,
+            flowControl: 'none',
           });
           portRef.current = port;
           portaPreferidaRef.current = port.getInfo();
@@ -647,7 +643,7 @@ export function BalancaProvider({ children }) {
           iniciarLeituraContinua();
           return true;
         } catch (e) {
-          if (e.name === 'InvalidStateError') {
+          if (e.name === 'InvalidStateError' && port.readable) {
             portRef.current = port;
             portaPreferidaRef.current = port.getInfo();
       setPortaInfo(port.getInfo());
@@ -745,8 +741,8 @@ export function BalancaProvider({ children }) {
       if (e.name === 'NotFoundError' || e.name === 'AbortError') {
         // Usuário cancelou a seleção de porta
         setStatus('desconectado');
-      } else if (e.name === 'InvalidStateError') {
-        // A porta já estava aberta — usa ela
+      } else if (e.name === 'InvalidStateError' && portRef.current?.readable) {
+        // Reutiliza somente quando existe uma porta legível.
         setStatus('conectado');
         if (!loopRunningRef.current) {
           shouldStopRef.current = false;
