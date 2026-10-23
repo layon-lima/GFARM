@@ -85,7 +85,10 @@ def retorno_leitura(registro) -> dict:
 
     status = "sem_sinal"
     if fonte_ativa:
-        status = "ao_vivo" if conectada and peso is not None else "sem_leitura"
+        if not conectada:
+            status = "desconectada"
+        else:
+            status = "ao_vivo" if peso is not None else "sem_leitura"
 
     return {
         "status": status,
