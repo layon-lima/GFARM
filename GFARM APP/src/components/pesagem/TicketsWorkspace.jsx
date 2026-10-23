@@ -1804,15 +1804,28 @@ export default function TicketsWorkspace({
               <Weight className="h-4 w-4 text-primary" />
               Pesagem
             </h2>
-            <Badge
-              variant="outline"
-              className={balancaConectada
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-red-200 bg-red-50 text-red-700'}
-            >
-              <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${balancaConectada ? 'bg-emerald-500' : 'bg-red-500'}`} />
-              {balancaConectada ? 'Balança conectada' : 'Balança desconectada'}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                aria-pressed={autoAtivo}
+                title="Capturar automaticamente pesos a partir de 40 kg estáveis por 6 segundos"
+                onClick={() => setAutoAtivo((anterior) => !anterior)}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${autoAtivo
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-border bg-muted/30 text-muted-foreground'}`}
+              >
+                Auto {autoAtivo ? 'ligada' : 'desligada'}
+              </button>
+              <Badge
+                variant="outline"
+                className={balancaConectada
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-red-200 bg-red-50 text-red-700'}
+              >
+                <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${balancaConectada ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                {balancaConectada ? 'Balança conectada' : 'Balança desconectada'}
+              </Badge>
+            </div>
           </div>
 
           <div className="flex flex-1 flex-col gap-2.5 p-3">
@@ -1826,6 +1839,24 @@ export default function TicketsWorkspace({
                 <span className="text-sm text-muted-foreground">kg</span>
               </div>
             </div>
+
+            {autoAtivo && (
+              <p className="px-1 text-[11px] text-muted-foreground" role="status">
+                {autoCapturando
+                  ? 'Registrando pesagem automática...'
+                  : autoAguardandoZerar
+                    ? 'Pesagem registrada. Aguarde o peso cair abaixo de 40 kg para a próxima captura automática.'
+                    : !balancaConectada
+                      ? 'Captura automática aguardando conexão com a balança.'
+                      : !autoDadosProntos
+                        ? 'Captura automática aguardando preenchimento do ticket.'
+                        : etapaCaptura === 0
+                          ? 'Pesagens registradas. Feche o ticket para concluir.'
+                          : autoRestante !== null
+                            ? `Peso estável: captura automática em ${autoRestante} s.`
+                            : 'Captura automática: aguardando peso de 40 kg ou mais, estável por 6 s.'}
+              </p>
+            )}
 
             {podeDigitar && (
               <div className="rounded-lg border border-dashed border-primary/30 bg-muted/10 px-3 py-2.5">
