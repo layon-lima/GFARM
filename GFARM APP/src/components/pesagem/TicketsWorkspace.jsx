@@ -137,6 +137,7 @@ export default function TicketsWorkspace({
   const [autoRestante, setAutoRestante] = useState(null);
   const [autoAguardandoZerar, setAutoAguardandoZerar] = useState(false);
   const [autoCapturando, setAutoCapturando] = useState(false);
+  const [autoFalhou, setAutoFalhou] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(AUTO_PREF_KEY, String(autoAtivo)); } catch {}
@@ -1187,6 +1188,7 @@ export default function TicketsWorkspace({
       if (estado.aguardandoZerar && leituraRecente && peso < AUTO_PESO_MINIMO_KG) {
         estado.aguardandoZerar = false;
         setAutoAguardandoZerar(false);
+        setAutoFalhou(false);
         limparContagem();
       }
 
@@ -1223,11 +1225,17 @@ export default function TicketsWorkspace({
       estado.disparando = true;
       estado.aguardandoZerar = true;
       setAutoAguardandoZerar(true);
+      setAutoFalhou(false);
       setAutoCapturando(true);
       limparContagem();
       Promise.resolve(capturarPesoRef.current?.(peso))
+        .then((registrado) => {
+          // Falhas de validação ou leitura não podem aparecer como pesagem salva.
+          if (registrado !== true) setAutoFalhou(true);
+        })
         .catch((error) => {
           console.error('[Pesagem] Falha na captura automática:', error);
+          setAutoFalhou(true);
         })
         .finally(() => {
           estado.disparando = false;
@@ -1845,7 +1853,9 @@ export default function TicketsWorkspace({
                 {autoCapturando
                   ? 'Registrando pesagem automática...'
                   : autoAguardandoZerar
-                    ? 'Pesagem registrada. Aguarde o peso cair abaixo de 40 kg para a próxima captura automática.'
+                    ? autoFalhou
+                      ? 'Captura automática não concluída. Aguarde o peso cair abaixo de 40 kg para tentar novamente ou utilize o botão manual.'
+                      : 'Pesagem registrada. Aguarde o peso cair abaixo de 40 kg para a próxima captura automática.'
                     : !balancaConectada
                       ? 'Captura automática aguardando conexão com a balança.'
                       : !autoDadosProntos
