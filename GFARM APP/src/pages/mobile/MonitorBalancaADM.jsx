@@ -19,6 +19,7 @@ const NOME = {
   sem_leitura: 'Sem leitura válida',
   cadastro_incompleto: 'Cadastro do ticket incompleto',
   aguardando_ticket: 'Aguardando próximo ticket',
+  recaptura_manual: 'Modo de recaptura manual selecionado',
   aguardando_zera: 'Aguardando esvaziar a balança',
   aba_oculta: 'Aba do GFARM em segundo plano',
   ocupada: 'Operação em andamento',
