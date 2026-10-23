@@ -1298,7 +1298,7 @@ export default function TicketsWorkspace({
       detalhe = 'Serial Toledo não está conectada no PC.';
     } else if (!leituraValida || autoSemLeitura) {
       estado = 'sem_leitura';
-      detalhe = 'Porta serial conectada, mas sem peso válido recente da Toledo.';
+      detalhe = String(diagnosticoSerial || 'Porta serial conectada, mas sem peso válido recente da Toledo.').slice(0, 240);
     } else if (!autoDadosProntos) {
       estado = 'cadastro_incompleto';
       if (!form.tipo && !ticketAtivo) detalhe = 'Selecione o tipo de ticket.';
@@ -1312,6 +1312,9 @@ export default function TicketsWorkspace({
     } else if (etapaCaptura === 0 || ticketFechado) {
       estado = 'aguardando_ticket';
       detalhe = 'Etapa finalizada. Aguarde outro ticket ou feche o atual.';
+    } else if (etapaSelecionada !== 0) {
+      estado = 'recaptura_manual';
+      detalhe = 'Uma etapa foi selecionada manualmente para refazer o peso. Volte à etapa automática para rearmar a captura.';
     } else if (autoAguardandoZerar) {
       estado = 'aguardando_zera';
       detalhe = 'Peso capturado. Aguarde cair abaixo de 40 kg para liberar a próxima etapa.';
@@ -1364,6 +1367,7 @@ export default function TicketsWorkspace({
     ticketFechado, primeiraPesagem, ticketAtivo?.numero, form.tipo,
     form.motorista, form.placa, form.produto_id, form.transportadora_id,
     pedidoSel, transportadoraVendaPronta, saving, lendo, pesoAtual,
+    etapaSelecionada, diagnosticoSerial,
   ]);
 
   function limparContagemAutomatica() {
