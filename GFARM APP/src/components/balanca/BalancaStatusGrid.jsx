@@ -17,7 +17,7 @@ function portaLabel(info) {
 }
 
 export default function BalancaStatusGrid() {
-  const { suportado, status, portaInfo, baudRate, dataBits, stopBits, parity, ultimaLeitura, erro, lendo, formatarPeso } = useBalanca();
+  const { suportado, status, portaInfo, baudRate, dataBits, stopBits, parity, ultimaLeitura, erro, lendo, formatarPeso, diagnostico, ultimoDadoEm, rawData } = useBalanca();
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -41,7 +41,7 @@ export default function BalancaStatusGrid() {
           <span className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Conexão</span>
           {status === 'conectado' ? (
             <Usb className="w-5 h-5 text-green-600" />
-          ) : status === 'conectando' ? (
+          ) : (status === 'conectando' || status === 'reconectando') ? (
             <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
           ) : (
             <XCircle className="w-5 h-5 text-destructive" />
@@ -54,12 +54,22 @@ export default function BalancaStatusGrid() {
             ? 'Conectada'
             : status === 'conectando'
             ? 'Conectando...'
+            : status === 'reconectando'
+            ? 'Reconectando automaticamente...'
             : status === 'erro'
             ? 'Erro'
             : 'Desconectada'}
         </p>
         <p className="text-xs text-muted-foreground">{portaLabel(portaInfo)} · {baudRate} baud · {dataBits}{parity !== 'none' ? parity[0].toUpperCase() : 'N'}{stopBits}</p>
+        {diagnostico && <p className="text-xs text-muted-foreground mt-1">{diagnostico}</p>}
         {erro && <p className="text-xs text-destructive mt-1">{erro}</p>}
+        <p className="text-xs text-muted-foreground">Últimos dados da serial: {ultimoDadoEm ? formatTimestamp(ultimoDadoEm) : 'Nenhum dado recebido'}</p>
+        {rawData && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground">Diagnóstico técnico (HEX)</summary>
+            <code className="mt-1 block max-h-24 overflow-auto break-all rounded border bg-muted/30 p-2 text-[10px]">{rawData}</code>
+          </details>
+        )}
       </div>
 
       {/* Última leitura */}
