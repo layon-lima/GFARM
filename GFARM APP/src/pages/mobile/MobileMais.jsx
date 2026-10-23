@@ -8,10 +8,11 @@ import {
   Sprout,
   UserRound,
   ShieldCheck,
+  Activity,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
-import { canAccessBalanca, hasPermission } from '@/lib/permissions';
+import { canAccessBalanca, hasPermission, podeMonitorarBalancaADM } from '@/lib/permissions';
 import { mobilePageAllowed } from '@/lib/mobileAccess';
 import { getDisplayInitial, getDisplayName } from '@/lib/userName';
 
@@ -51,6 +52,13 @@ export default function MobileMais() {
         </div>
 
         <div className="mobile-more-list">
+          {podeMonitorarBalancaADM(user) && (
+            <Link to="/monitor-balanca" className="mobile-more-row">
+              <span className="mobile-more-row__icon"><Activity className="h-5 w-5" /></span>
+              <strong>Monitor da Balança — ADM</strong>
+              <span className="mobile-more-row__arrow">›</span>
+            </Link>
+          )}
           {hasPermission(user, 'admin.cadastros_mobile.solicitar') && (
             <Link to="/admin-mobile" className="mobile-more-row">
               <span className="mobile-more-row__icon"><ShieldCheck className="h-5 w-5" /></span>
