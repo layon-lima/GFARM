@@ -1182,7 +1182,7 @@ export default function TicketsWorkspace({
         ? pedidoSel?.status === 'aberto' && transportadoraVendaPronta
         : form.produto_id && form.transportadora_id));
 
-  // Mudar motorista, placa, pedido ou etapa exige iniciar novamente os 6s.
+  // Mudar motorista, placa, pedido ou etapa reinicia a estabilidade de 3 s.
   const autoContexto = ticketAtivo
     ? `aberto|${ticketAtivo.id}|${etapaCaptura}`
     : [
@@ -1984,8 +1984,9 @@ export default function TicketsWorkspace({
               <button
                 type="button"
                 aria-pressed={autoAtivo}
-                title="Capturar automaticamente pesos a partir de 40 kg estáveis por 6 segundos"
-                onClick={() => setAutoAtivo((anterior) => !anterior)}
+                title="Captura automática: peso a partir de 40 kg estável por 3 segundos, seguido de popup de 10 segundos"
+                disabled={autoCapturando}
+                onClick={alternarCapturaAutomatica}
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${autoAtivo
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                   : 'border-border bg-muted/30 text-muted-foreground'}`}
@@ -2029,20 +2030,24 @@ export default function TicketsWorkspace({
             {autoAtivo && (
               <p className="px-1 text-[11px] text-muted-foreground" role="status">
                 {autoCapturando
-                  ? 'Registrando pesagem automática...'
-                  : autoAguardandoZerar
-                    ? autoFalhou
-                      ? 'Captura automática não concluída. Aguarde o peso cair abaixo de 40 kg para tentar novamente ou utilize o botão manual.'
-                      : 'Pesagem registrada. Aguarde o peso cair abaixo de 40 kg para a próxima captura automática.'
-                    : !balancaConectada
-                      ? 'Captura automática aguardando conexão com a balança.'
-                      : !autoDadosProntos
-                        ? 'Captura automática aguardando preenchimento do ticket.'
-                        : etapaCaptura === 0
-                          ? 'Pesagens registradas. Feche o ticket para concluir.'
-                          : autoRestante !== null
-                            ? `Peso estável: captura automática em ${autoRestante} s.`
-                            : 'Captura automática: aguardando peso de 40 kg ou mais, estável por 6 s.'}
+                  ? 'Confirmando e registrando o peso capturado...'
+                  : autoPopup?.fase === 'confirmar'
+                    ? `Peso identificado: ${formatKg(autoPopup.peso)}. Confirmação automática em ${autoPopupSegundos} s, se ninguém cancelar.`
+                    : autoPopup?.fase === 'opcoes'
+                      ? 'Peso cancelado. Escolha Pesar novamente ou Cancelar automação no popup.'
+                      : autoRetentativaSegundos > 0
+                        ? `Nova tentativa em ${autoRetentativaSegundos} s; depois serão necessários 3 s de peso estável.`
+                        : autoAguardandoZerar
+                          ? 'Pesagem registrada. Aguarde o peso cair abaixo de 40 kg antes de uma nova captura automática.'
+                          : !balancaConectada
+                            ? 'Automação parada: balança serial desconectada ou reconectando.'
+                            : !autoDadosProntos
+                              ? 'Captura automática aguardando preenchimento do ticket.'
+                              : etapaCaptura === 0
+                                ? 'Pesagens registradas. Feche o ticket para concluir.'
+                                : autoRestante !== null
+                                  ? `${autoOscilou ? 'Peso oscilou; contagem reiniciada. ' : ''}Buscando estabilidade: ${autoRestante} s restantes.`
+                                  : 'Aguardando peso de 40 kg ou mais, sem variação durante 3 s.'}
               </p>
             )}
 
@@ -2316,6 +2321,16 @@ export default function TicketsWorkspace({
               </div>
             )}
           </Card>
+
+      <ConfirmacaoPesagemAutomatica
+        captura={autoPopup}
+        segundos={autoPopupSegundos}
+        salvando={autoCapturando || saving}
+        onConfirmar={() => confirmarCapturaAutomatica()}
+        onCancelar={cancelarPrimeiraConfirmacao}
+        onPesarNovamente={pesarNovamenteAutomatico}
+        onEncerrar={encerrarCapturaAutomatica}
+      />
 
       <AlertDialog
         open={!!excluirTicket}
