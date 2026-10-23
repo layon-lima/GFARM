@@ -1040,6 +1040,9 @@ export const api = {
     async consultarPeso() {
       return request("/balanca/live", { cache: "no-store" });
     },
+    async consultarMonitorADM() {
+      return request("/balanca/live/monitor", { cache: "no-store" });
+    },
   },
 
   integrations: {
