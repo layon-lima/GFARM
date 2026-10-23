@@ -17,6 +17,7 @@ from app.api.users import router as users_router
 from app.api.inventario_pendencias import router as inventario_pendencias_router
 from app.api.cadastros_mobile import router as cadastros_mobile_router
 from app.api.entrada_saldo_mobile import router as entrada_saldo_mobile_router
+from app.api.balanca_live import router as balanca_live_router, garantir_tabela_balanca_remota
 from app.core.logging_config import configurar_logging
 from app.core.scheduler import (
     iniciar_agendador,
@@ -29,6 +30,8 @@ configurar_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Tabela isolada, sem alterar pesagens ou estoque anteriores.
+    garantir_tabela_balanca_remota()
     iniciar_agendador()
 
     yield
@@ -87,6 +90,7 @@ app.include_router(users_router)
 app.include_router(inventario_pendencias_router)
 app.include_router(cadastros_mobile_router)
 app.include_router(entrada_saldo_mobile_router)
+app.include_router(balanca_live_router)
 app.include_router(files_router)
 app.include_router(entities_router)
 app.include_router(relatorios_router)
