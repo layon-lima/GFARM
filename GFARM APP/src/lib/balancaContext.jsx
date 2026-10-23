@@ -175,6 +175,7 @@ export function BalancaProvider({ children }) {
   const ultimoDadoMsRef = useRef(0);
   const ultimoFrameValidoMsRef = useRef(0);
   const ultimoRenderPesoMsRef = useRef(0);
+  const estabilidadePesoRef = useRef({ peso: null, desdeMs: 0 });
 
   useEffect(() => {
     casasDecimaisRef.current = casasDecimais;
@@ -218,6 +219,7 @@ export function BalancaProvider({ children }) {
         if (!port.readable) {
           setStatus('reconectando');
           ultimaLeituraRef.current = null;
+          estabilidadePesoRef.current = { peso: null, desdeMs: 0 };
           setUltimaLeitura(null);
           ultimoFrameValidoMsRef.current = 0;
           setDiagnostico('Conexão serial interrompida. Tentando recuperar o conversor USB...');
@@ -316,11 +318,18 @@ export function BalancaProvider({ children }) {
               if (peso !== null) {
                 ultimoFrameValidoMsRef.current = Date.now();
                 const anterior = ultimaLeituraRef.current;
-                // Atualiza o timestamp da UI ao menos 1x/s mesmo com peso
-                // constante. Assim a captura automática exige leituras
-                // reais e recentes, sem confundir peso parado com dados velhos.
+                // Toda alteração recebida em qualquer frame reinicia a
+                // estabilidade, mesmo que dois valores mudem no mesmo
+                // pacote USB e a UI apresente somente o último.
                 const agora = Date.now();
-                const leitura = { peso, timestamp: new Date(agora).toISOString() };
+                if (estabilidadePesoRef.current.peso !== peso) {
+                  estabilidadePesoRef.current = { peso, desdeMs: agora };
+                }
+                const leitura = {
+                  peso,
+                  timestamp: new Date(agora).toISOString(),
+                  estavelDesde: new Date(estabilidadePesoRef.current.desdeMs).toISOString(),
+                };
                 ultimaLeituraRef.current = leitura;
                 if (!anterior || anterior.peso !== peso || agora - ultimoRenderPesoMsRef.current >= 1000) {
                   ultimoRenderPesoMsRef.current = agora;
@@ -470,6 +479,7 @@ export function BalancaProvider({ children }) {
       if (portRef.current === event.target) {
         setStatus('reconectando');
         ultimaLeituraRef.current = null;
+        estabilidadePesoRef.current = { peso: null, desdeMs: 0 };
         setUltimaLeitura(null);
         ultimoFrameValidoMsRef.current = 0;
         setErro('Adaptador USB desconectado ou reiniciado. Aguardando reconexão...');
@@ -558,6 +568,7 @@ export function BalancaProvider({ children }) {
     ultimaLeituraRef.current = null;
     setRawData('');
     setUltimaLeitura(null);
+    estabilidadePesoRef.current = { peso: null, desdeMs: 0 };
     setUltimoDadoEm(null);
     setDiagnostico('Desconectada pelo usuário.');
     ultimoDadoMsRef.current = 0;
