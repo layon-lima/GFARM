@@ -122,6 +122,9 @@ export default function TicketsWorkspace({
     formatarPeso,
     lerPeso,
     lendo,
+    diagnostico: diagnosticoSerial,
+    statusPublicacao,
+    erroPublicacao,
     atualizarEstadoMonitor,
     registrarEventoMonitor,
   } = useBalanca();
@@ -152,6 +155,12 @@ export default function TicketsWorkspace({
   const [autoRetentativaSegundos, setAutoRetentativaSegundos] = useState(0);
   const [autoOscilou, setAutoOscilou] = useState(false);
   const [autoSemLeitura, setAutoSemLeitura] = useState(false);
+  const [statusAutoLocal, setStatusAutoLocal] = useState({
+    estado: 'iniciando',
+    detalhe: 'Verificando se a automação está pronta.',
+    segundos: null,
+    peso_candidato: null,
+  });
 
   function alterarPopupAuto(proximo) {
     // Ref síncrono: evita dois cliques/confirmações causados pelo timer.
@@ -1327,7 +1336,7 @@ export default function TicketsWorkspace({
       candidato = peso;
     }
 
-    atualizarEstadoMonitor({
+    const novoStatus = {
       tela_ativa: true,
       auto_ativa: autoAtivo,
       etapa: etapaCaptura,
@@ -1336,7 +1345,17 @@ export default function TicketsWorkspace({
       segundos,
       peso_candidato: candidato,
       ticket: numero.slice(0, 100),
-    });
+    };
+    atualizarEstadoMonitor(novoStatus);
+    // Exibir exatamente o mesmo diagnóstico também no PC, mesmo quando
+    // o envio à VPS falhar, para ninguém ficar sem sinal do que acontece.
+    setStatusAutoLocal((anterior) => (
+      anterior.estado === estado &&
+      anterior.detalhe === detalhe &&
+      anterior.segundos === segundos &&
+      anterior.peso_candidato === candidato
+        ? anterior : novoStatus
+    ));
   }, [
     atualizarEstadoMonitor, autoAtivo, autoCapturando, autoPopup,
     autoPopupSegundos, autoRetentativaSegundos, autoAguardandoZerar,
@@ -2240,6 +2259,48 @@ export default function TicketsWorkspace({
                 Este peso vem do computador da balança. Não é usado para capturar nem registrar tickets neste PC.
               </p>
             )}
+
+            <div
+              role="status"
+              aria-live="polite"
+              className={`rounded-lg border px-3 py-2.5 text-xs ${
+                ['sem_serial', 'sem_leitura', 'cadastro_incompleto', 'aba_oculta'].includes(statusAutoLocal.estado)
+                  ? 'border-amber-200 bg-amber-50 text-amber-900'
+                  : ['popup_aberto', 'registrando', 'estabilizando'].includes(statusAutoLocal.estado)
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                    : 'border-border bg-muted/20'
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong className="text-[12px]">DIAGNÓSTICO DA CAPTURA NO PC</strong>
+                <span className="font-semibold">
+                  {autoAtivo ? 'Auto ligada · 2 s' : 'Auto desligada'}
+                </span>
+              </div>
+              <p className="mt-1 font-medium">{statusAutoLocal.detalhe}</p>
+              {statusAutoLocal.segundos != null && (
+                <p className="mt-1 font-bold tabular-nums">
+                  Contagem: {statusAutoLocal.segundos} s
+                  {statusAutoLocal.peso_candidato != null
+                    ? ` · Peso: ${formatKg(statusAutoLocal.peso_candidato)}` : ''}
+                </p>
+              )}
+              {!balancaConectada && diagnosticoSerial && (
+                <p className="mt-1 text-[11px]">
+                  Serial: {diagnosticoSerial}
+                </p>
+              )}
+              {balancaConectada && statusAutoLocal.estado === 'sem_leitura' && diagnosticoSerial && (
+                <p className="mt-1 text-[11px]">Diagnóstico Toledo: {diagnosticoSerial}</p>
+              )}
+              {['erro', 'outra_estacao'].includes(statusPublicacao) && (
+                <p className="mt-1 text-[11px]">
+                  Monitor remoto: {statusPublicacao === 'outra_estacao'
+                    ? 'outra estação está transmitindo'
+                    : erroPublicacao || 'não está conseguindo publicar na VPS'}
+                </p>
+              )}
+            </div>
 
             {autoAtivo && (
               <p className="px-1 text-[11px] text-muted-foreground" role="status">
