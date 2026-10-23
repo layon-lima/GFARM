@@ -25,6 +25,8 @@ from app.models.entities import (
     Veiculo,
 )
 
+from app.models.balanca import BalancaLeituraRemota
+
 from app.models.estoque import (
     EstoqueDocumento,
     EstoqueDocumentoItem,
@@ -57,6 +59,7 @@ __all__ = [
     "User",
     "UserPermission",
     "Veiculo",
+    "BalancaLeituraRemota",
     "EstoqueDocumento",
     "EstoqueDocumentoItem",
     "EstoqueSaldo",
