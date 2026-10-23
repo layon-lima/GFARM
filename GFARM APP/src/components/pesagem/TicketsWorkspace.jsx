@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import SearchSelect from '@/components/SearchSelect';
+import ConfirmacaoPesagemAutomatica from '@/components/pesagem/ConfirmacaoPesagemAutomatica';
 import { useBalanca } from '@/lib/balancaContext';
 import { useAuth } from '@/lib/AuthContext';
 import { podeDigitarPeso } from '@/lib/permissions';
@@ -64,7 +65,9 @@ const EMPTY_FORM = {
 };
 
 const AUTO_PESO_MINIMO_KG = 40;
-const AUTO_ESTABILIDADE_MS = 6000;
+const AUTO_ESTABILIDADE_MS = 3000;
+const AUTO_CONFIRMACAO_MS = 10000;
+const AUTO_ESPERA_NOVA_TENTATIVA_MS = 3000;
 const AUTO_LEITURA_VALIDADE_MS = 2500;
 const AUTO_PREF_KEY = 'gfarm_pesagem_captura_auto';
 
@@ -100,7 +103,6 @@ export default function TicketsWorkspace({
   const { user } = useAuth();
   const podeDigitar = podeDigitarPeso(user);
   const pesoInputRef = useRef(null);
-  const capturarPesoRef = useRef(null);
   const autoRef = useRef({
     peso: null,
     desde: 0,
@@ -108,6 +110,7 @@ export default function TicketsWorkspace({
     leituraEstavelDesde: '',
     aguardandoZerar: false,
     disparando: false,
+    confirmando: false,
   });
 
   const {
@@ -139,7 +142,11 @@ export default function TicketsWorkspace({
   const [autoRestante, setAutoRestante] = useState(null);
   const [autoAguardandoZerar, setAutoAguardandoZerar] = useState(false);
   const [autoCapturando, setAutoCapturando] = useState(false);
-  const [autoFalhou, setAutoFalhou] = useState(false);
+  const [autoPopup, setAutoPopup] = useState(null);
+  const [autoPopupSegundos, setAutoPopupSegundos] = useState(10);
+  const [autoRetentativaAte, setAutoRetentativaAte] = useState(0);
+  const [autoRetentativaSegundos, setAutoRetentativaSegundos] = useState(0);
+  const [autoOscilou, setAutoOscilou] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(AUTO_PREF_KEY, String(autoAtivo)); } catch {}
@@ -866,17 +873,20 @@ export default function TicketsWorkspace({
   async function capturarPeso(pesoAutomatico = null) {
     if (saving || lendo || ticketFechado || etapaCaptura === 0) return false;
 
-    const automatico = typeof pesoAutomatico === 'number' && Number.isFinite(pesoAutomatico);
+    const automatico = pesoAutomatico && typeof pesoAutomatico === 'object';
     if (automatico) {
       const idade = Date.now() - Date.parse(ultimaLeitura?.timestamp || '');
       const estabilidade = Date.now() - Date.parse(ultimaLeitura?.estavelDesde || '');
-      // A captura automática usa exclusivamente o peso físico, jamais
-      // campo manual, leitura velha ou um valor que já mudou no indicador.
-      if (!balancaConectada || !Number.isFinite(idade)
-        || idade < 0 || idade > AUTO_LEITURA_VALIDADE_MS
+      // Exige o peso físico ainda inalterado e a mesma etapa/ticket do
+      // popup, evitando gravar captura velha ou peso enviado pela VPS.
+      if (!autoAtivo || !balancaConectada || document.visibilityState !== 'visible'
+        || !Number.isFinite(idade) || idade < 0 || idade > AUTO_LEITURA_VALIDADE_MS
         || !Number.isFinite(estabilidade) || estabilidade < AUTO_ESTABILIDADE_MS
-        || Number(ultimaLeitura?.peso) !== pesoAutomatico
-        || pesoAutomatico < AUTO_PESO_MINIMO_KG
+        || Number(ultimaLeitura?.peso) !== pesoAutomatico.peso
+        || ultimaLeitura?.estavelDesde !== pesoAutomatico.estavelDesde
+        || pesoAutomatico.contexto !== autoContexto
+        || pesoAutomatico.etapa !== etapaCaptura
+        || pesoAutomatico.peso < AUTO_PESO_MINIMO_KG
         || pesoAtual.trim()) return false;
     }
 
@@ -886,7 +896,7 @@ export default function TicketsWorkspace({
         ? parseQtd(pesoAtual)
         : null;
       const valor = automatico
-        ? pesoAutomatico
+        ? pesoAutomatico.peso
         : (manual ?? (balancaConectada ? await lerPeso() : null));
 
       if (!(Number(valor) > 0) || !Number.isFinite(Number(valor))) {
