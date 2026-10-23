@@ -76,6 +76,10 @@ export const canAccessUsuarios = (user) =>
 export const canAccessBalanca = (user) =>
   hasPermission(user, 'admin.balanca.acessar');
 
+// Monitor operacional confidencial: somente o login ADM.
+export const podeMonitorarBalancaADM = (user) =>
+  String(user?.username || '').trim().toLowerCase() === 'adm';
+
 export const canAccessAplicacao = (user) =>
   userCanAccess(user, 'aplicacao');
 
