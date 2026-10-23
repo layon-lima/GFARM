@@ -63,6 +63,11 @@ const EMPTY_FORM = {
   observacao: '',
 };
 
+const AUTO_PESO_MINIMO_KG = 40;
+const AUTO_ESTABILIDADE_MS = 6000;
+const AUTO_LEITURA_VALIDADE_MS = 2500;
+const AUTO_PREF_KEY = 'gfarm_pesagem_captura_auto';
+
 const TIPOS = [
   { value: 'venda', label: 'Venda', icon: ShoppingCart },
   { value: 'lavoura', label: 'Saída para Lavoura', icon: Sprout },
@@ -95,6 +100,14 @@ export default function TicketsWorkspace({
   const { user } = useAuth();
   const podeDigitar = podeDigitarPeso(user);
   const pesoInputRef = useRef(null);
+  const capturarPesoRef = useRef(null);
+  const autoRef = useRef({
+    peso: null,
+    desde: 0,
+    chave: '',
+    aguardandoZerar: false,
+    disparando: false,
+  });
 
   const {
     status: statusBalanca,
@@ -117,6 +130,17 @@ export default function TicketsWorkspace({
   const [buscaAbertos, setBuscaAbertos] = useState('');
   const [saving, setSaving] = useState(false);
   const [excluirTicket, setExcluirTicket] = useState(null);
+  const [autoAtivo, setAutoAtivo] = useState(() => {
+    try { return localStorage.getItem(AUTO_PREF_KEY) !== 'false'; }
+    catch { return true; }
+  });
+  const [autoRestante, setAutoRestante] = useState(null);
+  const [autoAguardandoZerar, setAutoAguardandoZerar] = useState(false);
+  const [autoCapturando, setAutoCapturando] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(AUTO_PREF_KEY, String(autoAtivo)); } catch {}
+  }, [autoAtivo]);
 
   const ticketAtivo =
     (ticketLocal?.id === ticketAtivoId ? ticketLocal : null) ||
@@ -830,19 +854,29 @@ export default function TicketsWorkspace({
     if (podeDigitar) pesoInputRef.current?.focus();
   }
 
-  async function capturarPeso() {
-    if (saving || lendo || ticketFechado || etapaCaptura === 0) return;
+  async function capturarPeso(pesoAutomatico = null) {
+    if (saving || lendo || ticketFechado || etapaCaptura === 0) return false;
+
+    const automatico = typeof pesoAutomatico === 'number' && Number.isFinite(pesoAutomatico);
+    if (automatico) {
+      const idade = Date.now() - Date.parse(ultimaLeitura?.timestamp || '');
+      // A captura automática usa exclusivamente o peso físico, jamais
+      // campo manual, leitura velha ou um valor que já mudou no indicador.
+      if (!balancaConectada || !Number.isFinite(idade)
+        || idade < 0 || idade > AUTO_LEITURA_VALIDADE_MS
+        || Number(ultimaLeitura?.peso) !== pesoAutomatico
+        || pesoAutomatico < AUTO_PESO_MINIMO_KG
+        || pesoAtual.trim()) return false;
+    }
 
     setSaving(true);
     try {
-      // Peso manual apenas para usuário autorizado; caso contrário,
-      // captura uma leitura válida e recente da balança conectada.
-      const manual = podeDigitar && pesoAtual.trim()
+      const manual = !automatico && podeDigitar && pesoAtual.trim()
         ? parseQtd(pesoAtual)
         : null;
-      const valor = manual ?? (
-        balancaConectada ? await lerPeso() : null
-      );
+      const valor = automatico
+        ? pesoAutomatico
+        : (manual ?? (balancaConectada ? await lerPeso() : null));
 
       if (!(Number(valor) > 0) || !Number.isFinite(Number(valor))) {
         toast({
@@ -893,7 +927,9 @@ export default function TicketsWorkspace({
           description: formatKg(pesoLido),
         });
         await onReload?.();
-        return;
+        autoRef.current.aguardandoZerar = true;
+        setAutoAguardandoZerar(true);
+        return true;
       }
 
       if (etapaCaptura === 1) {
@@ -904,8 +940,11 @@ export default function TicketsWorkspace({
         if (criado) {
           setEtapaSelecionada(0);
           setPesoAtual('');
+          autoRef.current.aguardandoZerar = true;
+          setAutoAguardandoZerar(true);
+          return true;
         }
-        return;
+        return false;
       }
 
       if (
@@ -914,13 +953,18 @@ export default function TicketsWorkspace({
       ) {
         setEtapaSelecionada(0);
         setPesoAtual('');
+        autoRef.current.aguardandoZerar = true;
+        setAutoAguardandoZerar(true);
+        return true;
       }
+      return false;
     } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Erro ao capturar peso',
         description: String(error?.message || error),
       });
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1774,7 +1818,7 @@ export default function TicketsWorkspace({
               type="button"
               className="mt-auto h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
               disabled={saving || lendo || ticketFechado || !tipoAtual || etapaCaptura === 0}
-              onClick={capturarPeso}
+              onClick={() => capturarPeso()}
             >
               <Play className="mr-2 h-4 w-4" />
               {saving || lendo
