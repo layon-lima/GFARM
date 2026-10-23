@@ -1251,6 +1251,13 @@ export default function TicketsWorkspace({
     estado.confirmando = true;
     estado.disparando = true;
     setAutoCapturando(true);
+    registrarEventoMonitor({
+      tipo: 'confirmacao_iniciada',
+      descricao: 'PC iniciou gravação do peso mostrado no popup.',
+      etapa: captura.etapa,
+      peso_kg: captura.peso,
+      ticket: String(ticketAtivo?.numero || ''),
+    });
     try {
       const registrado = await capturarPeso(captura);
       if (autoPopupRef.current !== captura) return;
@@ -1260,6 +1267,13 @@ export default function TicketsWorkspace({
         setAutoOscilou(false);
         alterarPopupAuto(null);
       } else {
+        registrarEventoMonitor({
+          tipo: 'falha_captura',
+          descricao: 'Popup confirmou, mas o PC não registrou o peso. Verifique o ticket e a serial.',
+          etapa: captura.etapa,
+          peso_kg: captura.peso,
+          ticket: String(ticketAtivo?.numero || ''),
+        });
         alterarPopupAuto({
           ...captura,
           fase: 'opcoes',
@@ -1268,6 +1282,13 @@ export default function TicketsWorkspace({
       }
     } catch (error) {
       console.error('[Pesagem] Erro na confirmação automática:', error);
+      registrarEventoMonitor({
+        tipo: 'falha_captura',
+        descricao: 'Falha ao registrar peso no PC: ' + String(error?.message || error).slice(0, 130),
+        etapa: captura.etapa,
+        peso_kg: captura.peso,
+        ticket: String(ticketAtivo?.numero || ''),
+      });
       if (autoPopupRef.current === captura) {
         alterarPopupAuto({
           ...captura,
@@ -1290,6 +1311,13 @@ export default function TicketsWorkspace({
   function cancelarPrimeiraConfirmacao() {
     const captura = autoPopupRef.current;
     if (!captura || captura.fase !== 'confirmar' || autoRef.current.confirmando) return;
+    registrarEventoMonitor({
+      tipo: 'cancelado',
+      descricao: 'Operador cancelou o peso sugerido no popup.',
+      etapa: captura.etapa,
+      peso_kg: captura.peso,
+      ticket: String(ticketAtivo?.numero || ''),
+    });
     alterarPopupAuto({
       ...captura,
       fase: 'opcoes',
@@ -1300,6 +1328,13 @@ export default function TicketsWorkspace({
   function pesarNovamenteAutomatico() {
     if (!autoPopupRef.current || autoPopupRef.current.fase !== 'opcoes'
       || autoRef.current.confirmando) return;
+    registrarEventoMonitor({
+      tipo: 'nova_tentativa',
+      descricao: 'Operador pediu nova pesagem: pausa de 3 s antes da estabilidade de 2 s.',
+      etapa: autoPopupRef.current.etapa,
+      peso_kg: autoPopupRef.current.peso,
+      ticket: String(ticketAtivo?.numero || ''),
+    });
     alterarPopupAuto(null);
     limparContagemAutomatica();
     setAutoOscilou(false);
@@ -1310,6 +1345,12 @@ export default function TicketsWorkspace({
 
   function encerrarCapturaAutomatica() {
     if (autoRef.current.confirmando) return;
+    registrarEventoMonitor({
+      tipo: 'auto_desligada',
+      descricao: 'Operador desativou a captura automática: processo agora é manual.',
+      etapa: etapaCaptura,
+      ticket: String(ticketAtivo?.numero || ''),
+    });
     alterarPopupAuto(null);
     limparContagemAutomatica();
     setAutoRetentativaAte(0);
@@ -1335,6 +1376,12 @@ export default function TicketsWorkspace({
     setAutoOscilou(false);
     limparContagemAutomatica();
     setAutoAtivo(true);
+    registrarEventoMonitor({
+      tipo: 'auto_ligada',
+      descricao: 'Automação reativada no PC da Toledo.',
+      etapa: etapaCaptura,
+      ticket: String(ticketAtivo?.numero || ''),
+    });
   }
 
   useEffect(() => {
@@ -1452,6 +1499,13 @@ export default function TicketsWorkspace({
       };
       setAutoOscilou(false);
       setAutoPopupSegundos(Math.ceil(AUTO_CONFIRMACAO_MS / 1000));
+      registrarEventoMonitor({
+        tipo: 'peso_identificado',
+        descricao: 'Peso estável por 2 s. Popup aberto no PC aguardando decisão por 10 s.',
+        etapa: etapaCaptura,
+        peso_kg: peso,
+        ticket: String(ticketAtivo?.numero || ''),
+      });
       limparContagemAutomatica();
       alterarPopupAuto(captura);
     }, 250);
