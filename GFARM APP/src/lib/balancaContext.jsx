@@ -397,6 +397,8 @@ export function BalancaProvider({ children }) {
         dataBits: dataBitsRef.current,
         stopBits: stopBitsRef.current,
         parity: parityRef.current,
+        bufferSize: 4096,
+        flowControl: 'none',
       });
       portRef.current = port;
       portaPreferidaRef.current = port.getInfo();
@@ -407,7 +409,7 @@ export function BalancaProvider({ children }) {
     } catch (e) {
       // Porta não autorizada ou em uso — ignora silenciosamente na auto-conexão
       // mas se for InvalidStateError (já aberta), reutiliza a porta
-      if (e.name === 'InvalidStateError') {
+      if (e.name === 'InvalidStateError' && port.readable) {
         portRef.current = port;
         portaPreferidaRef.current = port.getInfo();
       setPortaInfo(port.getInfo());
@@ -496,7 +498,7 @@ export function BalancaProvider({ children }) {
         try { await oldPort.close(); } catch {}
         portRef.current = null;
       }
-      await port.open({ baudRate, dataBits, stopBits, parity });
+      await port.open({ baudRate, dataBits, stopBits, parity, bufferSize: 4096, flowControl: 'none' });
       portRef.current = port;
       portaPreferidaRef.current = port.getInfo();
       setPortaInfo(port.getInfo());
@@ -551,13 +553,11 @@ export function BalancaProvider({ children }) {
     let port = portRef.current;
     if (!port) return null;
 
-    // Se a porta morreu (dispositivo removido), limpa e falha
+    // Preserva a porta para permitir a reconexão automática.
     if (!port.readable) {
-      setStatus('desconectado');
-      portRef.current = null;
-      setPortaInfo(null);
-      ultimaLeituraRef.current = null;
-      setErro('A balança foi desconectada. Conecte novamente.');
+      setStatus('reconectando');
+      setErro('Porta serial temporariamente indisponível. Reconexão automática em andamento.');
+      if (!loopRunningRef.current) iniciarLeituraContinua();
       return null;
     }
 
@@ -595,10 +595,9 @@ export function BalancaProvider({ children }) {
           setErro('Tempo esgotado: a balança não enviou dados em 8 segundos. Verifique se está ligada, se o cabo está conectado e se o driver USB do conversor serial está instalado neste PC.');
         }
       } else if (msg === 'porta_perdida') {
-        setErro('A conexão com a balança foi perdida. Reconecte na página Balança.');
-        setStatus('desconectado');
-        portRef.current = null;
-        setPortaInfo(null);
+        setErro('Conexão com a balança perdida. Reconexão automática em andamento.');
+        setStatus('reconectando');
+        if (!loopRunningRef.current) iniciarLeituraContinua();
       } else {
         setErro(`Erro na leitura: ${msg}`);
       }
@@ -727,6 +726,8 @@ export function BalancaProvider({ children }) {
         dataBits: dataBitsRef.current,
         stopBits: stopBitsRef.current,
         parity: parityRef.current,
+        bufferSize: 4096,
+        flowControl: 'none',
       });
       portRef.current = port;
       portaPreferidaRef.current = port.getInfo();
