@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '@/lib/AuthContext';
+import { userCanAccess, canAccessBalanca } from '@/lib/permissions';
+import { api } from '@/api/apiClient';
 
 const BalancaContext = createContext(null);
 
@@ -133,8 +136,37 @@ function bytesToHex(bytes) {
 }
 
 const MAX_BACKOFF_MS = 12000;
+const ENVIO_REMOTO_MS = 1000;
+const CONSULTA_REMOTA_MS = 1200;
+const LEITURA_FRESCA_MS = 3000;
+const ID_PUBLICADOR_KEY = 'gfarm_balanca_publicador';
+
+function obterIdPublicador() {
+  try {
+    const anterior = sessionStorage.getItem(ID_PUBLICADOR_KEY);
+    if (anterior && /^[a-zA-Z0-9_-]{20,100}$/.test(anterior)) return anterior;
+    const novo = crypto.randomUUID().replace(/-/g, '');
+    sessionStorage.setItem(ID_PUBLICADOR_KEY, novo);
+    return novo;
+  } catch {
+    // Fallback para navegadores que impedem sessionStorage.
+    return 'gfarm_' + String(Date.now()) + '_' + Math.random().toString(36).slice(2, 14);
+  }
+}
 
 export function BalancaProvider({ children }) {
+  const { user, isAuthenticated } = useAuth();
+  const podeAcompanhar = Boolean(isAuthenticated && user
+    && (userCanAccess(user, 'pesagem') || canAccessBalanca(user)));
+  const [leituraRemota, setLeituraRemota] = useState({
+    online: false,
+    status: 'sem_sinal',
+    peso_kg: null,
+    atualizado_em: null,
+    idade_segundos: null,
+  });
+  const [statusPublicacao, setStatusPublicacao] = useState('inativa');
+  const [erroPublicacao, setErroPublicacao] = useState(null);
   const [suportado, setSuportado] = useState(true);
   const [status, setStatus] = useState('desconectado'); // desconectado | conectando | conectado | erro | nao_suportado
   const [portaInfo, setPortaInfo] = useState(null);
@@ -158,6 +190,8 @@ export function BalancaProvider({ children }) {
   const [casasDecimais, setCasasDecimais] = useState(() => parseInt(loadSetting(CASAS_KEY, '0'), 10));
 
   const portRef = useRef(null);
+  const statusSerialRef = useRef(status);
+  useEffect(() => { statusSerialRef.current = status; }, [status]);
   const readerRef = useRef(null);
   const shouldStopRef = useRef(false);
   const ultimaLeituraRef = useRef(null);
@@ -804,7 +838,113 @@ export function BalancaProvider({ children }) {
     }
   }, [iniciarLeituraContinua]);
 
+  // O envio é feito somente no computador com a porta serial aberta.
+  // Nunca manda leituras digitadas no formulário ou valores recebidos da VPS.
+  useEffect(() => {
+    if (!podeAcompanhar) {
+      setStatusPublicacao('inativa');
+      setErroPublicacao(null);
+      return undefined;
+    }
+
+    const publicadorId = obterIdPublicador();
+    let cancelado = false;
+    let enviando = false;
+    let publicou = false;
+    let desligamentoEnviado = false;
+
+    const publicar = async () => {
+      if (cancelado || enviando) return;
+      const port = portRef.current;
+
+      // Não emitir mensagens vazias a partir de celulares e PCs remotos.
+      // Ao desconectar manualmente, publica UMA indicação sem peso.
+      if (!port && (!publicou || desligamentoEnviado)) {
+        if (!port) setStatusPublicacao((v) => v === 'inativa' ? v : 'inativa');
+        return;
+      }
+
+      const conectado = Boolean(port && port.readable
+        && statusSerialRef.current === 'conectado');
+      const leitura = ultimaLeituraRef.current;
+      const timestamp = leitura ? Date.parse(leitura.timestamp) : NaN;
+      const peso = Number(leitura?.peso);
+      const fresco = conectado && Number.isFinite(timestamp)
+        && Date.now() >= timestamp
+        && Date.now() - timestamp <= LEITURA_FRESCA_MS
+        && leitura?.peso != null && Number.isFinite(peso);
+
+      enviando = true;
+      try {
+        await api.balanca.publicarPeso({
+          publicador_id: publicadorId,
+          conectada: conectado,
+          peso_kg: fresco ? peso : null,
+        });
+        publicou = true;
+        desligamentoEnviado = !port;
+        if (!cancelado) {
+          setStatusPublicacao(!port
+            ? 'inativa'
+            : fresco ? 'transmitindo' : conectado ? 'sem_leitura' : 'reconectando');
+          setErroPublicacao(null);
+        }
+      } catch (error) {
+        if (!cancelado) {
+          setStatusPublicacao(error?.status === 409 ? 'outra_estacao' : 'erro');
+          setErroPublicacao(String(error?.message || error));
+        }
+      } finally {
+        enviando = false;
+      }
+    };
+
+    publicar();
+    const timer = setInterval(publicar, ENVIO_REMOTO_MS);
+    return () => {
+      cancelado = true;
+      clearInterval(timer);
+    };
+  }, [podeAcompanhar, user?.id]);
+
+  // Monitora somente a leitura da VPS. NÃO modifica o status da porta serial
+  // nem ultimaLeitura/lerPeso, preservando a captura exclusiva do PC físico.
+  useEffect(() => {
+    if (!podeAcompanhar) {
+      setLeituraRemota({
+        online: false, status: 'sem_sinal', peso_kg: null,
+        atualizado_em: null, idade_segundos: null,
+      });
+      return undefined;
+    }
+    let cancelado = false;
+    let consultando = false;
+    const consultar = async () => {
+      if (cancelado || consultando) return;
+      consultando = true;
+      try {
+        const resposta = await api.balanca.consultarPeso();
+        if (!cancelado) setLeituraRemota(resposta);
+      } catch {
+        if (!cancelado) setLeituraRemota((anterior) => ({
+          ...anterior, online: false, status: 'sem_sinal', peso_kg: null,
+        }));
+      } finally {
+        consultando = false;
+      }
+    };
+    consultar();
+    const timer = setInterval(consultar, CONSULTA_REMOTA_MS);
+    return () => {
+      cancelado = true;
+      clearInterval(timer);
+    };
+  }, [podeAcompanhar, user?.id]);
+
   const value = {
+    leituraRemota,
+    statusPublicacao,
+    erroPublicacao,
     suportado,
     diagnostico,
     ultimoDadoEm,
