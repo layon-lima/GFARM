@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -140,6 +141,8 @@ export default function TicketsWorkspace({
   const [segundaRegistradaEm, setSegundaRegistradaEm] = useState('');
   const [transportadoraFechamento, setTransportadoraFechamento] = useState('');
   const [buscaAbertos, setBuscaAbertos] = useState('');
+  const [pesquisaAberta, setPesquisaAberta] = useState(false);
+  const [ticketPreviewId, setTicketPreviewId] = useState('');
   const [saving, setSaving] = useState(false);
   const [excluirTicket, setExcluirTicket] = useState(null);
   const [autoAtivo, setAutoAtivo] = useState(() => {
@@ -175,6 +178,10 @@ export default function TicketsWorkspace({
   const ticketAtivo =
     (ticketLocal?.id === ticketAtivoId ? ticketLocal : null) ||
     tickets.find((ticket) => ticket.id === ticketAtivoId);
+  const ticketPreview = ticketPreviewId
+    ? tickets.find((ticket) => ticket.id === ticketPreviewId)
+      || (ticketLocal?.id === ticketPreviewId ? ticketLocal : null)
+    : null;
 
   const ticketConsulta = tickets.find((ticket) => ticket.id === ticketConsultaId) || ticketAtivo;
   const consultaSeparada = Boolean(ticketConsultaId && ticketConsultaId !== ticketAtivo?.id);
@@ -384,6 +391,7 @@ export default function TicketsWorkspace({
   );
 
   function resetNovoTicket() {
+    setTicketPreviewId('');
     setTicketAtivoId('');
     setTicketConsultaId('');
     setTicketLocal(null);
@@ -396,12 +404,19 @@ export default function TicketsWorkspace({
   }
 
   function selecionarTicket(ticket) {
-    // Tickets fechados são apenas visualizados no duplo clique.
-    if (ticket?.status === 'aberto') continuarPesagem(ticket);
+    if (!ticket || saving || autoCapturando || autoPopupRef.current) return;
+    // Primeiro clique: fecha a Pesquisa e exibe consulta no RESUMO.
+    // Não muda o ticket de operação nem inicia a leitura automática.
+    setTicketPreviewId(ticket.id);
+    setTicketConsultaId(ticket.id);
+    setPesquisaAberta(false);
   }
 
   function continuarPesagem(ticket) {
-    if (!ticket || ticket.status !== 'aberto') return;
+    if (!ticket || ticket.status !== 'aberto' || saving || autoCapturando) return;
+    // Segundo clique: confirmado no resumo; só então carrega o formulário.
+    setTicketPreviewId('');
+    setPesquisaAberta(false);
     setTicketLocal(null);
     setTicketAtivoId(ticket.id);
     setTicketConsultaId(ticket.id);
@@ -896,6 +911,9 @@ export default function TicketsWorkspace({
   }
 
   async function capturarPeso(pesoAutomatico = null) {
+    // Nunca gravar peso enquanto a Pesquisa ou consulta prévia está aberta:
+    // o operador ainda não confirmou qual ticket irá continuar.
+    if (pesquisaAberta || ticketPreviewId) return false;
     if (saving || lendo || ticketFechado || etapaCaptura === 0) return false;
     if (!pesoAutomatico && autoPopupRef.current) return false;
 
@@ -1273,7 +1291,13 @@ export default function TicketsWorkspace({
     let segundos = null;
     let candidato = null;
 
-    if (autoCapturando) {
+    if (pesquisaAberta) {
+      estado = 'pesquisa_aberta';
+      detalhe = 'Pesquisa aberta. Captura automática pausada enquanto a lista está visível.';
+    } else if (ticketPreviewId) {
+      estado = 'consulta_ticket';
+      detalhe = 'Ticket selecionado para consulta. Confirme Continuar pesagem no Resumo para liberar o formulário.';
+    } else if (autoCapturando) {
       estado = 'registrando';
       detalhe = 'PC está enviando a confirmação do peso para o sistema.';
       candidato = autoPopup?.peso ?? null;
@@ -1367,7 +1391,7 @@ export default function TicketsWorkspace({
     ticketFechado, primeiraPesagem, ticketAtivo?.numero, form.tipo,
     form.motorista, form.placa, form.produto_id, form.transportadora_id,
     pedidoSel, transportadoraVendaPronta, saving, lendo, pesoAtual,
-    etapaSelecionada, diagnosticoSerial,
+    etapaSelecionada, diagnosticoSerial, pesquisaAberta, ticketPreviewId,
   ]);
 
   function limparContagemAutomatica() {
@@ -1585,7 +1609,8 @@ export default function TicketsWorkspace({
       }
       if (autoRetentativaSegundos !== 0) setAutoRetentativaSegundos(0);
 
-      const podeIniciar = autoAtivo && !estado.aguardandoZerar
+      const podeIniciar = autoAtivo && !pesquisaAberta && !ticketPreviewId
+        && !estado.aguardandoZerar
         && autoDadosProntos
         && etapaSelecionada === 0 && (etapaCaptura === 1 || etapaCaptura === 2)
         && !ticketFechado && !saving && !lendo && !pesoAtual.trim()
@@ -1656,6 +1681,7 @@ export default function TicketsWorkspace({
     etapaSelecionada, etapaCaptura, ticketFechado, primeiraPesagem,
     saving, lendo, pesoAtual, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
     ultimaLeitura?.estavelDesde, autoRetentativaAte, autoRetentativaSegundos,
+    pesquisaAberta, ticketPreviewId,
   ]);
 
   const pedidoOptions = pedidosAbertos
