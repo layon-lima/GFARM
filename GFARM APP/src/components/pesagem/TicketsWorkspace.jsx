@@ -2250,12 +2250,20 @@ export default function TicketsWorkspace({
                 ['Status', resumoTicket?.status === 'fechado'
                   ? 'Fechado' : resumoTicket ? 'Aberto' : 'Novo'],
                 ['Tipo', tipoLabel(resumoTicket?.tipo || tipoAtual)],
-                ['Motorista', resumoTicket?.motorista || form.motorista || '—'],
-                ['Placa', formatPlaca(resumoTicket?.placa || form.placa) || '—'],
-                ['Transportadora', resumoTransportadora?.nome || resumoTicket?.transportadora_nome || transportadoraAtual?.nome || '—'],
-                ['Cliente / Fornecedor', resumoCliente?.nome || resumoTicket?.cliente_nome || clienteAtual?.nome || '—'],
-                ['Produto', resumoProduto?.nome || resumoTicket?.produto_nome || produtoAtual?.nome || '—'],
-                ['Origem / Destino', `${resumoTicket?.origem || form.origem || '—'} / ${resumoTicket?.destino || form.destino || '—'}`],
+                ['Motorista', resumoTicket ? resumoTicket.motorista || '—' : form.motorista || '—'],
+                ['Placa', formatPlaca(resumoTicket ? resumoTicket.placa : form.placa) || '—'],
+                ['Transportadora', resumoTicket
+                  ? resumoTransportadora?.nome || resumoTicket.transportadora_nome || '—'
+                  : transportadoraAtual?.nome || '—'],
+                ['Cliente / Fornecedor', resumoTicket
+                  ? resumoCliente?.nome || resumoTicket.cliente_nome || '—'
+                  : clienteAtual?.nome || '—'],
+                ['Produto', resumoTicket
+                  ? resumoProduto?.nome || resumoTicket.produto_nome || '—'
+                  : produtoAtual?.nome || '—'],
+                ['Origem / Destino', resumoTicket
+                  ? `${resumoTicket.origem || '—'} / ${resumoTicket.destino || '—'}`
+                  : `${form.origem || '—'} / ${form.destino || '—'}`],
               ].map(([label, value]) => (
                 <div key={label} className="grid min-w-0 grid-cols-[105px_minmax(0,1fr)] gap-2">
                   <span className="text-muted-foreground">{label}</span>
