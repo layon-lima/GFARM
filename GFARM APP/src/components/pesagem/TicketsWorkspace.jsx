@@ -2213,86 +2213,143 @@ export default function TicketsWorkspace({
           </Card>
 
 
-        <Card className="flex h-full min-w-0 flex-col rounded-xl border shadow-none">
-          <div className="border-b bg-muted/15 px-3 py-3">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <FileText className="h-4 w-4 text-primary" />
-              Resumo do Ticket
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              {'Resumo exclusivo do ticket em preenchimento ou pesagem.'}
+        <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border shadow-none">
+          <div className="shrink-0 border-b bg-muted/15 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <FileText className="h-4 w-4 text-primary" />
+                Resumo do Ticket
+              </h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 font-bold"
+                onClick={() => setPesquisaAberta(true)}
+                disabled={saving || autoCapturando || !!autoPopup}
+                aria-label="PESQUISA"
+              >
+                <Search className="h-4 w-4" /> PESQUISA
+              </Button>
+            </div>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {ticketPreview
+                ? 'Ticket selecionado. Confira o resumo antes de continuar.'
+                : 'Resumo do ticket atual e acesso à pesquisa.'}
             </p>
           </div>
-          <div className="flex flex-1 flex-col gap-3 p-3">
-            <div className="space-y-2 rounded-lg bg-muted/20 p-3 text-xs">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3">
+            {ticketPreview && (
+              <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
+                1º clique realizado: ticket em consulta. Para carregar no formulário, use o botão abaixo.
+              </div>
+            )}
+            <div className="space-y-1.5 rounded-lg bg-muted/20 p-2.5 text-xs">
               {[
-                ['Ticket', ticketAtivo?.status === 'aberto' ? ticketAtivo.numero : 'Novo ticket'],
-                ['Tipo', tipoLabel(ticketAtivo?.tipo || tipoAtual)],
-                ['Motorista', (ticketAtivo?.status === 'aberto' ? ticketAtivo.motorista : null) || form.motorista || '—'],
-                ['Placa', formatPlaca((ticketAtivo?.status === 'aberto' ? ticketAtivo.placa : null) || form.placa) || '—'],
-                ['Transportadora', (transportadoras.find((t) => t.id === ticketAtivo?.transportadora_id)?.nome || ticketAtivo?.transportadora_nome || transportadoraAtual?.nome || '—')],
-                ['Cliente / Fornecedor', (pessoas.find((p) => p.id === ticketAtivo?.cliente_id)?.nome || ticketAtivo?.cliente_nome || clienteAtual?.nome || '—')],
-                ['Produto', (produtos.find((p) => p.id === ticketAtivo?.produto_id)?.nome || ticketAtivo?.produto_nome || produtoAtual?.nome || '—')],
-                ['Origem / Destino', `${ticketAtivo?.origem || form.origem || '—'} / ${ticketAtivo?.destino || form.destino || '—'}`],
+                ['Ticket', resumoTicket?.numero || 'Novo ticket'],
+                ['Status', resumoTicket?.status === 'fechado'
+                  ? 'Fechado' : resumoTicket ? 'Aberto' : 'Novo'],
+                ['Tipo', tipoLabel(resumoTicket?.tipo || tipoAtual)],
+                ['Motorista', resumoTicket?.motorista || form.motorista || '—'],
+                ['Placa', formatPlaca(resumoTicket?.placa || form.placa) || '—'],
+                ['Transportadora', resumoTransportadora?.nome || resumoTicket?.transportadora_nome || transportadoraAtual?.nome || '—'],
+                ['Cliente / Fornecedor', resumoCliente?.nome || resumoTicket?.cliente_nome || clienteAtual?.nome || '—'],
+                ['Produto', resumoProduto?.nome || resumoTicket?.produto_nome || produtoAtual?.nome || '—'],
+                ['Origem / Destino', `${resumoTicket?.origem || form.origem || '—'} / ${resumoTicket?.destino || form.destino || '—'}`],
               ].map(([label, value]) => (
-                <div key={label} className="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
+                <div key={label} className="grid min-w-0 grid-cols-[105px_minmax(0,1fr)] gap-2">
                   <span className="text-muted-foreground">{label}</span>
                   <span className="min-w-0 break-words font-medium">{value}</span>
                 </div>
               ))}
             </div>
 
-            <div className="space-y-2 rounded-lg border p-3 text-xs">
+            <div className="space-y-2 rounded-lg border p-2.5 text-xs">
               <div className="flex items-center justify-between gap-2">
                 <span>1ª Pesagem</span>
                 <span className="font-semibold">
-                  {ticketAtivo ? formatKg(primeiraPesagem) : '—'}
+                  {resumoTicket ? formatKg(resumoPrimeira) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {ticketAtivo ? 'Registrada' : 'Aguardando captura'}
+                {resumoTicket ? 'Registrada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2">
                 <span>2ª Pesagem</span>
                 <span className="font-semibold">
-                  {segundaExibida > 0 ? formatKg(segundaExibida) : '—'}
+                  {resumoSegunda > 0 ? formatKg(resumoSegunda) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {segundaExibida > 0 ? 'Registrada' : 'Aguardando captura'}
+                {resumoSegunda > 0 ? 'Capturada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
                 <span>Peso Líquido</span>
-                <span className="text-base text-primary">{segundaExibida > 0 ? formatKg(liquidoExibido) : '—'}</span>
+                <span className="text-base text-primary">
+                  {resumoSegunda > 0 ? formatKg(resumoLiquido) : '—'}
+                </span>
               </div>
             </div>
 
-            {ticketAtivo?.tipo === 'venda' && pedidoSel && !pedidoSel.sem_limite &&
-              liquido > (Number(pedidoSel.saldo_kg) || 0) && (
-                <p className="text-xs font-semibold text-destructive">
-                  Peso líquido acima do saldo disponível do pedido.
-                </p>
-              )}
-
-            {ticketAtivo?.status === 'aberto' && ((Number(ticketAtivo.peso_tara) || 0) > 0 || (Number(ticketAtivo.peso_bruto) || 0) > 0) && (
-              <Button type="button" variant="outline" className="mt-auto h-9 w-full gap-2" onClick={() => imprimirTicket(ticketAtivo)}>
-                <Printer className="h-4 w-4" /> Imprimir Ticket
-              </Button>
+            {ticketPreview ? (
+              <>
+                {ticketPreview.status === 'aberto' ? (
+                  <Button
+                    type="button"
+                    className="mt-auto h-10 w-full gap-2"
+                    disabled={saving || autoCapturando}
+                    onClick={() => continuarPesagem(ticketPreview)}
+                  >
+                    <Play className="h-4 w-4" /> Continuar pesagem
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    className="mt-auto h-10 w-full gap-2"
+                    variant="outline"
+                    onClick={() => imprimirTicket(ticketPreview, true)}
+                  >
+                    <FileText className="h-4 w-4" /> Visualizar ticket fechado
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                {ticketAtivo?.tipo === 'venda' && pedidoSel && !pedidoSel.sem_limite &&
+                  liquido > (Number(pedidoSel.saldo_kg) || 0) && (
+                    <p className="text-xs font-semibold text-destructive">
+                      Peso líquido acima do saldo disponível do pedido.
+                    </p>
+                  )}
+                {ticketAtivo?.status === 'aberto' &&
+                  ((Number(ticketAtivo.peso_tara) || 0) > 0 || (Number(ticketAtivo.peso_bruto) || 0) > 0) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-auto h-9 w-full gap-2"
+                    onClick={() => imprimirTicket(ticketAtivo)}
+                  >
+                    <Printer className="h-4 w-4" /> Imprimir Ticket
+                  </Button>
+                )}
+                {ticketAtivo?.status === 'aberto' && (
+                  <Button
+                    type="button"
+                    className="h-10 w-full gap-2"
+                    disabled={saving || ticketFechado || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
+                    onClick={fecharTicketAtual}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    {saving ? 'Processando...' : 'Fechar e Salvar Ticket'}
+                  </Button>
+                )}
+              </>
             )}
-            {ticketAtivo?.status === 'aberto' && <Button
-              type="button"
-              className="h-10 w-full gap-2"
-              disabled={saving || ticketFechado || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
-              onClick={fecharTicketAtual}
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {saving ? 'Processando...' : 'Fechar e Salvar Ticket'}
-            </Button>}
           </div>
         </Card>
 
-        <Card className="flex h-full min-w-0 flex-col rounded-xl border shadow-none">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
+        <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border shadow-none">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Weight className="h-4 w-4 text-primary" />
               Pesagem
@@ -2324,7 +2381,7 @@ export default function TicketsWorkspace({
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col gap-2.5 p-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3">
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
               <p className="mb-1 text-xs text-muted-foreground">
                 {mostrandoRemoto ? 'Peso em tempo real pela VPS — SOMENTE CONSULTA' : 'Peso em tempo real'}
