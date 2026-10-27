@@ -1723,11 +1723,31 @@ export default function TicketsWorkspace({
 
   const TipoIcon = tipoIcon;
 
+  // A pesquisa permite visualizar o Resumo sem trocar o ticket em operação.
+  const resumoTicket = ticketPreview || ticketAtivo;
+  const resumoPedido = pedidos.find((p) => p.id === resumoTicket?.pedido_id);
+  const resumoCliente = pessoas.find((p) => p.id === (resumoTicket?.cliente_id || resumoPedido?.cliente_id));
+  const resumoProduto = produtos.find((p) => p.id === (resumoTicket?.produto_id || resumoPedido?.produto_id));
+  const resumoTransportadora = transportadoras.find((t) => t.id === resumoTicket?.transportadora_id);
+  const resumoPrimeira = resumoTicket
+    ? (Number(resumoTicket.peso_tara) || Number(resumoTicket.peso_bruto) || 0) : 0;
+  const resumoSegunda = ticketPreview
+    ? (ticketPreview.status === 'fechado'
+      ? ((Number(ticketPreview.peso_tara) || 0) === resumoPrimeira
+        ? Number(ticketPreview.peso_bruto) || 0 : Number(ticketPreview.peso_tara) || 0)
+      : ticketPreview.id === ticketAtivo?.id ? segundaPesagem : 0)
+    : segundaExibida;
+  const resumoLiquido = ticketPreview
+    ? (ticketPreview.status === 'fechado'
+      ? Number(ticketPreview.peso_liquido) || 0
+      : ticketPreview.id === ticketAtivo?.id ? liquido : 0)
+    : liquidoExibido;
+
   return (
-    <div className="space-y-3">
-      <div className="grid min-w-0 items-stretch gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(270px,0.85fr)]">
-          <Card className="flex h-full min-w-0 flex-col rounded-xl border shadow-none">
-            <div className="border-b bg-muted/15 px-4 py-3">
+    <div className="flex min-h-0 flex-col gap-2 lg:h-full lg:overflow-hidden">
+      <div className="grid min-h-0 min-w-0 flex-1 items-stretch gap-3 lg:grid-rows-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(270px,0.85fr)]">
+          <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border shadow-none">
+            <div className="shrink-0 border-b bg-muted/15 px-3 py-2">
               <div className="flex items-center gap-2">
                 <TipoIcon className="h-4 w-4 text-primary" />
                 <div>
@@ -1735,15 +1755,44 @@ export default function TicketsWorkspace({
                     Dados do Ticket
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    {ticketAtivo
-                      ? 'Ticket em aberto pronto para a 2ª pesagem.'
-                      : 'Preencha os dados antes de capturar e confirmar o peso.'}
+                    {ticketPreview
+                      ? 'Ticket selecionado para consulta. Continue pelo Resumo.'
+                      : ticketAtivo
+                        ? 'Ticket em aberto pronto para a 2ª pesagem.'
+                        : 'Preencha os dados antes de capturar e confirmar o peso.'}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3 p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {ticketPreview ? (
+                <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/15 p-4 text-center">
+                  <FileText className="h-9 w-9 text-primary" />
+                  <h3 className="text-base font-bold">{ticketPreview.numero}</h3>
+                  <p className="max-w-xs text-sm text-muted-foreground">
+                    O formulário foi recolhido. Confira este ticket no Resumo.
+                    Para carregá-lo, clique em <strong>Continuar pesagem</strong> no Resumo.
+                  </p>
+                  {ticketPreview.status === 'fechado' && (
+                    <p className="text-xs font-semibold text-amber-700">
+                      Este ticket já está fechado e só pode ser consultado.
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setTicketPreviewId('');
+                      setTicketConsultaId(ticketAtivo?.id || '');
+                    }}
+                  >
+                    Voltar ao formulário
+                  </Button>
+                </div>
+              ) : (
+              <div className="space-y-3">
             <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center">
               <div className="sm:min-w-[95px]">
                 <p className="text-sm font-semibold">Tipo de ticket</p>
@@ -2158,6 +2207,8 @@ export default function TicketsWorkspace({
                 </div>
               </div>
               </fieldset>
+              </div>
+              )}
             </div>
           </Card>
 
