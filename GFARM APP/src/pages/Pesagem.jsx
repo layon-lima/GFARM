@@ -42,7 +42,7 @@ export default function Pesagem() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [tab, setTab] = useState('preparacao');
+  const [tab, setTab] = useState('tickets');
   const [pedidoParaTicket, setPedidoParaTicket] = useState('');
 
   /*
@@ -101,8 +101,8 @@ export default function Pesagem() {
   }
 
   return (
-    <div className="w-full min-w-0 space-y-3 p-3 lg:px-4 xl:px-5">
-      <header className="flex items-center justify-between gap-2">
+    <div className="w-full min-w-0 space-y-2 p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-2 lg:space-y-0 lg:overflow-hidden lg:px-3">
+      <header className="flex shrink-0 items-center justify-between gap-2">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
             <Scale className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
@@ -111,8 +111,8 @@ export default function Pesagem() {
         </div>
       </header>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full justify-start overflow-x-auto">
+      <Tabs value={tab} onValueChange={setTab} className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+        <TabsList className="w-full shrink-0 justify-start overflow-x-auto">
           <TabsTrigger value="preparacao" className="gap-1.5">
             <Contact className="h-4 w-4" />
             Pré-cadastro
@@ -140,7 +140,7 @@ export default function Pesagem() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="preparacao" className="mt-3">
+        <TabsContent value="preparacao" className="mt-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <span>
               <strong>Captura automática inativa nesta aba.</strong> Para ler e capturar o peso da Toledo automaticamente, mantenha a aba Tickets aberta no PC da balança.
@@ -155,7 +155,7 @@ export default function Pesagem() {
           />
         </TabsContent>
 
-        <TabsContent value="tickets" className="mt-4">
+        <TabsContent value="tickets" className="mt-2 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
           {coreLoading ? (
             <InlineLoader label="Carregando dados da pesagem..." />
           ) : (
@@ -175,7 +175,7 @@ export default function Pesagem() {
           )}
         </TabsContent>
 
-        <TabsContent value="pedidos" className="mt-2">
+        <TabsContent value="pedidos" className="mt-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {coreLoading || financeLoading ? (
             <InlineLoader label="Carregando pedidos de venda..." />
           ) : (
@@ -193,7 +193,7 @@ export default function Pesagem() {
           )}
         </TabsContent>
 
-        <TabsContent value="pagamentos" className="mt-2">
+        <TabsContent value="pagamentos" className="mt-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {coreLoading || financeLoading ? (
             <InlineLoader label="Carregando pagamentos..." />
           ) : (
