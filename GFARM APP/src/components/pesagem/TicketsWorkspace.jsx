@@ -2238,7 +2238,8 @@ export default function TicketsWorkspace({
                 : 'Resumo do ticket atual e acesso à pesquisa.'}
             </p>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 p-3">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
             {ticketPreview && (
               <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
                 1º clique realizado: ticket em consulta. Para carregar no formulário, use o botão abaixo.
@@ -2290,7 +2291,9 @@ export default function TicketsWorkspace({
                 </span>
               </div>
             </div>
+            </div>
 
+            <div className="shrink-0 space-y-2 border-t pt-2">
             {ticketPreview ? (
               <>
                 {ticketPreview.status === 'aberto' ? (
@@ -2345,6 +2348,7 @@ export default function TicketsWorkspace({
                 )}
               </>
             )}
+            </div>
           </div>
         </Card>
 
