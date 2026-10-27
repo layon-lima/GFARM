@@ -227,7 +227,11 @@ export default function Layout() {
         <span className="font-bold">GFARM</span>
       </header>
 
-      <main className="erp-compact-workspace min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-none scrollbar-thin">
+      <main className={`erp-compact-workspace min-h-0 flex-1 overflow-x-hidden overscroll-y-none scrollbar-thin ${
+        location.pathname === '/pesagem'
+          ? 'overflow-y-auto lg:overflow-y-hidden'
+          : 'overflow-y-auto'
+      }`}>
         {user && !canAccess ? (
           <div className="flex h-full items-center justify-center py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-800" />
