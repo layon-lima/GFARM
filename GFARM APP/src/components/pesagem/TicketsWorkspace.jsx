@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeftRight,
   CheckCircle2,
-  CircleDot,
   FileText,
   LockKeyhole,
   Package,
