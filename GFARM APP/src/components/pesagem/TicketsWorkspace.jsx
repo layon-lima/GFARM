@@ -2587,49 +2587,59 @@ export default function TicketsWorkspace({
         </Card>
 
       </div>
-          <Card className="overflow-hidden rounded-2xl border shadow-none">
-            <div className="flex flex-col gap-2 border-b bg-muted/15 px-4 py-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-sm font-semibold">
-                  <CircleDot className="h-4 w-4 text-amber-500" />
-                  Tickets de Pesagem
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Selecione um ticket aberto para continuar a pesagem.
-                </p>
-              </div>
-
-              <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
-                  <select
-                    aria-label="Filtrar tickets por status"
-                    value={filtroStatus}
-                    onChange={(event) => setFiltroStatus(event.target.value)}
-                    className="h-9 rounded-md border bg-background px-2 text-xs"
-                  >
-                    <option value="todos">Todos os status</option>
-                    <option value="aberto">Abertos</option>
-                    <option value="fechado">Fechados</option>
-                  </select>
-                <div className="relative w-full md:w-72">
+      <Sheet open={pesquisaAberta} onOpenChange={setPesquisaAberta}>
+        <SheetContent
+          side="bottom"
+          className="flex h-[78dvh] max-h-[calc(100dvh-6px)] w-full flex-col gap-0 overflow-hidden rounded-t-xl border-t border-slate-300 bg-background p-0 shadow-2xl"
+        >
+          <div className="shrink-0 border-b bg-slate-50 px-4 py-3 pr-14">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-2 text-base">
+                <Search className="h-4 w-4 text-primary" /> PESQUISA DE TICKETS
+              </SheetTitle>
+              <SheetDescription className="text-xs">
+                Escolha um ticket com um clique: a Pesquisa fecha e o Resumo mostra os dados.
+                Para retomar a pesagem, confirme no Resumo.
+              </SheetDescription>
+            </SheetHeader>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">{abertosFiltrados.length}</span>
+              tickets encontrados
+            </div>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+              <select
+                aria-label="Filtrar tickets por status"
+                value={filtroStatus}
+                onChange={(event) => setFiltroStatus(event.target.value)}
+                className="h-9 rounded-md border bg-background px-2 text-xs"
+              >
+                <option value="todos">Todos os status</option>
+                <option value="aberto">Abertos</option>
+                <option value="fechado">Fechados</option>
+              </select>
+              <div className="relative w-full sm:w-80">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={buscaAbertos}
-                  onChange={(e) => setBuscaAbertos(e.target.value)}
-                  placeholder="Buscar ticket, motorista, placa, cliente..."
+                  onChange={(event) => setBuscaAbertos(event.target.value)}
+                  placeholder="Ticket, motorista, placa, cliente, produto..."
+                  aria-label="Pesquisar tickets"
                   className="h-9 pl-9"
                 />
-                </div>
               </div>
             </div>
+          </div>
 
             {abertosFiltrados.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
+              <div className="flex min-h-0 flex-1 items-center justify-center p-10 text-center text-sm text-muted-foreground">
                 Nenhum ticket encontrado.
               </div>
             ) : (
-              <div className="overflow-auto">
-                <table className="min-w-[1060px] w-full text-xs">
-                  <thead className="bg-muted/35">
+              <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+                <table className="w-full min-w-[1260px] border-collapse text-[12px] leading-tight [&_th]:border [&_th]:border-slate-300 [&_td]:border [&_td]:border-slate-200">
+                  <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800">
                     <tr>
                       <th className="px-3 py-2.5 text-left">Ticket</th>
                       <th className="px-3 py-2.5 text-left">Tipo</th>
@@ -2664,17 +2674,24 @@ export default function TicketsWorkspace({
                         (Number(ticket.peso_tara) || 0) ||
                         (Number(ticket.peso_bruto) || 0);
 
-                      const selected = ticket.status === 'aberto' && ticket.id === ticketAtivo?.id;
+                      const selected = ticket.id === ticketPreviewId || ticket.id === ticketAtivo?.id;
 
                       return (
                         <tr
                           key={ticket.id}
                           onClick={() => selecionarTicket(ticket)}
-                          onDoubleClick={() => { selecionarTicket(ticket); imprimirTicket(ticket, true); }}
-                          className={`border-t transition-colors ${
-                            selected
-                              ? 'bg-primary/5'
-                              : 'hover:bg-muted/30 cursor-pointer'
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return;
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              selecionarTicket(ticket);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          title="Clique para consultar este ticket no Resumo"
+                          className={`cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
+                            selected ? 'bg-sky-100' : 'odd:bg-white even:bg-slate-50 hover:bg-sky-50'
                           }`}
                         >
                           <td className="px-3 py-2.5 font-mono font-semibold">
@@ -2723,15 +2740,17 @@ export default function TicketsWorkspace({
                                 <Printer className="h-3.5 w-3.5" />
                               </Button>
                             )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              title="Excluir ticket aberto"
-                              onClick={() => setExcluirTicket(ticket)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {ticket.status === 'aberto' && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                title="Excluir ticket aberto"
+                                onClick={() => setExcluirTicket(ticket)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -2740,7 +2759,12 @@ export default function TicketsWorkspace({
                 </table>
               </div>
             )}
-          </Card>
+
+          <div className="shrink-0 border-t bg-slate-50 px-3 py-2 text-[11px] text-muted-foreground">
+            Selecione uma linha para consultar. Cabeçalho fixo; role apenas dentro da tabela.
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <ConfirmacaoPesagemAutomatica
         captura={autoPopup}
