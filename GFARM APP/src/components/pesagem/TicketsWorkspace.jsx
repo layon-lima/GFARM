@@ -117,6 +117,7 @@ export default function TicketsWorkspace({
   const anteriorTicketRef = useRef(inicial.ticketAtivoId);
   const preservarSegundaAoCriarRef = useRef('');
   const autoPopupRef = useRef(null);
+  const salvamentoRef = useRef(false);
   const confirmarAutoRef = useRef(null);
   const autoRef = useRef({
     peso: null,
@@ -151,7 +152,10 @@ export default function TicketsWorkspace({
   const [confirmarNovoTicket, setConfirmarNovoTicket] = useState(false);
   const [etapaSelecionada, setEtapaSelecionada] = useState(0);
   const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [primeiraPendente, setPrimeiraPendente] = useState(inicial.primeiraPendente || 0);
+  const [primeiraPendenteEm, setPrimeiraPendenteEm] = useState(inicial.primeiraPendenteEm || '');
   const [segundaPesagem, setSegundaPesagem] = useState(inicial.segundaPesagem);
+  const [salvoParaImpressao, setSalvoParaImpressao] = useState(null);
   const [segundaRegistradaEm, setSegundaRegistradaEm] = useState(inicial.segundaRegistradaEm);
   const [transportadoraFechamento, setTransportadoraFechamento] = useState(inicial.transportadoraFechamento);
   const [buscaAbertos, setBuscaAbertos] = useState('');
@@ -192,6 +196,8 @@ export default function TicketsWorkspace({
     setForm({ ...EMPTY_FORM, ...restaurado.form });
     setTicketAtivoId(restaurado.ticketAtivoId);
     setTicketConsultaId(restaurado.ticketConsultaId);
+    setPrimeiraPendente(restaurado.primeiraPendente || 0);
+    setPrimeiraPendenteEm(restaurado.primeiraPendenteEm || '');
     setSegundaPesagem(restaurado.segundaPesagem);
     setSegundaRegistradaEm(restaurado.segundaRegistradaEm);
     setTransportadoraFechamento(restaurado.transportadoraFechamento);
@@ -204,19 +210,19 @@ export default function TicketsWorkspace({
   useEffect(() => {
     if (!chaveRascunho || chaveRascunho !== chaveHidratada) return;
     salvarRascunhoPesagem(user, {
-      form, ticketAtivoId, ticketConsultaId, segundaPesagem,
-      segundaRegistradaEm, transportadoraFechamento, pesoDigitado1,
+      form, ticketAtivoId, ticketConsultaId, primeiraPendente, primeiraPendenteEm,
+      segundaPesagem, segundaRegistradaEm, transportadoraFechamento, pesoDigitado1,
       pesoDigitado2, etapaManual,
     });
   }, [
     chaveRascunho, chaveHidratada, user?.id, user?.username,
-    form, ticketAtivoId, ticketConsultaId, segundaPesagem,
-    segundaRegistradaEm, transportadoraFechamento,
+    form, ticketAtivoId, ticketConsultaId, primeiraPendente, primeiraPendenteEm,
+    segundaPesagem, segundaRegistradaEm, transportadoraFechamento,
     pesoDigitado1, pesoDigitado2, etapaManual,
   ]);
 
   const rascunhoTemDados = existeRascunhoPesagem({
-    form, ticketAtivoId, segundaPesagem, pesoDigitado1, pesoDigitado2,
+    form, ticketAtivoId, primeiraPendente, segundaPesagem, pesoDigitado1, pesoDigitado2,
   });
   const digitacaoPendente = Boolean(
     pesoDigitado1.trim() || pesoDigitado2.trim() || etapaManual !== 0
@@ -317,6 +323,7 @@ export default function TicketsWorkspace({
   }, [ticketAtivo?.id]);
 
   const primeiraPesagem = useMemo(() => {
+    if (primeiraPendente > 0) return primeiraPendente;
     if (!ticketAtivo) return 0;
 
     const tara = Number(ticketAtivo.peso_tara) || 0;
@@ -325,7 +332,7 @@ export default function TicketsWorkspace({
     if (tara > 0) return tara;
     if (bruto > 0) return bruto;
     return 0;
-  }, [ticketAtivo]);
+  }, [ticketAtivo, primeiraPendente]);
 
   const ticketFechado = ticketAtivo?.status === 'fechado';
   const segundaExibida = ticketFechado
@@ -343,11 +350,9 @@ export default function TicketsWorkspace({
     (Number(ticketAtivo.peso_tara) || 0) === 0;
 
   const liquido = useMemo(() => {
-    if (!ticketAtivo || !(segundaPesagem > 0)) return 0;
-    return isInverted
-      ? calcLiquido(ticketAtivo.peso_bruto || 0, segundaPesagem)
-      : calcLiquido(segundaPesagem, ticketAtivo.peso_tara || 0);
-  }, [ticketAtivo, segundaPesagem, isInverted]);
+    if (!(primeiraPesagem > 0) || !(segundaPesagem > 0)) return 0;
+    return calcLiquido(segundaPesagem, primeiraPesagem);
+  }, [primeiraPesagem, segundaPesagem]);
 
   const liquidoExibido = ticketFechado
     ? Number(ticketAtivo?.peso_liquido) || 0
@@ -356,7 +361,8 @@ export default function TicketsWorkspace({
 
   // Automaticamente 1ª → 2ª; após a segunda, clique no campo
   // correspondente para refazer uma leitura incorreta.
-  const etapaCaptura = etapaCapturaPesagem({
+  const capturaPendente = primeiraPendente > 0 || (!!ticketAtivo && segundaPesagem > 0);
+  const etapaCaptura = primeiraPendente > 0 ? 0 : etapaCapturaPesagem({
     ticketAberto: !!ticketAtivo,
     segundaRegistrada: segundaPesagem > 0,
     etapaSelecionada,
@@ -474,6 +480,8 @@ export default function TicketsWorkspace({
     setTicketConsultaId('');
     setTicketLocal(null);
     setForm(EMPTY_FORM);
+    setPrimeiraPendente(0);
+    setPrimeiraPendenteEm('');
     setPesoDigitado1('');
     setPesoDigitado2('');
     setEtapaManual(0);
@@ -483,6 +491,13 @@ export default function TicketsWorkspace({
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
     setTransportadoraFechamento('');
+  }
+
+  function concluirTicketSalvo(imprimir) {
+    if (!salvoParaImpressao) return;
+    if (imprimir) imprimirTicket(salvoParaImpressao);
+    setSalvoParaImpressao(null);
+    resetNovoTicket();
   }
 
   function solicitarNovoTicket() {
@@ -985,8 +1000,8 @@ export default function TicketsWorkspace({
     setSegundaRegistradaEm(capturadoEm || new Date().toISOString());
 
     toast({
-      title: '2ª pesagem registrada',
-      description: formatKg(pesoConfirmado),
+      title: 'Peso capturado',
+      description: 'Confira o Resumo e clique em Salvar.',
     });
     return true;
   }
@@ -1119,80 +1134,32 @@ export default function TicketsWorkspace({
         return false;
       }
 
-      if (etapaDestino === 1 && ticketAtivo) {
-        // Confere o estado atualizado no servidor antes de refazer a 1ª,
-        // para não modificar ticket fechado em outra estação.
-        const servidor = await api.entities.TicketPesagem.get(ticketAtivo.id);
-        if (!recapturaPrimeiraValida({
-          statusTicket: servidor.status,
+      if (etapaDestino === 1) {
+        if (ticketAtivo && !recapturaPrimeiraValida({
+          statusTicket: ticketAtivo.status,
           primeiraNova: pesoLido,
           segundaRegistrada: segundaPesagem > 0,
           segundaPeso: segundaPesagem,
         })) {
-          toast({
-            variant: 'destructive',
-            title: 'Não foi possível refazer a 1ª pesagem',
-            description: servidor.status !== 'aberto'
-              ? 'Este ticket já foi fechado.'
-              : 'A primeira e a segunda pesagem devem ser diferentes.',
-          });
-          return;
+          toast({ variant: 'destructive', title: 'Peso inválido para este ticket.' });
+          return false;
         }
-
-        // O registro original permanece, com alteração auditável do peso
-        // no mesmo ticket em aberto, sem gerar nova movimentação de estoque.
-        const campoPeso = isInverted ? 'peso_bruto' : 'peso_tara';
-        const atualizado = await api.entities.TicketPesagem.update(
-          ticketAtivo.id,
-          { [campoPeso]: pesoLido }
-        );
-        setTicketLocal({ ...servidor, ...atualizado, [campoPeso]: pesoLido });
+        // Capturar apenas prepara: o ticket só é alterado quando Salvar for clicado.
+        setPrimeiraPendente(pesoLido);
+        setPrimeiraPendenteEm(capturadoEm);
         setEtapaSelecionada(0);
         setEtapaManual(0);
         setPesoDigitado1('');
-        toast({
-          title: '1ª pesagem atualizada',
-          description: formatKg(pesoLido),
-        });
-        try { await onReload?.(); }
-        catch (erroRefresh) {
-          console.warn('[Pesagem] Peso atualizado, mas a lista não recarregou:', erroRefresh);
-        }
         autoRef.current.aguardandoZerar = true;
         setAutoAguardandoZerar(true);
         registrarEventoMonitor({
-          tipo: 'primeira_gravada',
-          descricao: `1ª pesagem corrigida e salva no servidor (${automatico ? 'auto' : 'manual'}).`,
-          etapa: 1,
-          peso_kg: pesoLido,
-          registro: 'servidor',
+          tipo: 'primeira_capturada',
+          descricao: 'Peso capturado no PC; aguardando Salvar no Resumo.',
+          etapa: 1, peso_kg: pesoLido, registro: 'pc_aguarda_salvar',
           ticket: String(ticketAtivo?.numero || ''),
         });
+        toast({ title: 'Peso capturado', description: 'Confira o Resumo e clique em Salvar.' });
         return true;
-      }
-
-      if (etapaDestino === 1) {
-        const criado = await registrarPrimeiraPesagem(
-          pesoLido,
-          capturadoEm
-        );
-        if (criado) {
-          setEtapaSelecionada(0);
-          setEtapaManual(0);
-          setPesoDigitado1('');
-          autoRef.current.aguardandoZerar = true;
-          setAutoAguardandoZerar(true);
-          registrarEventoMonitor({
-            tipo: 'primeira_gravada',
-            descricao: `1ª pesagem gravada no servidor (${automatico ? 'auto' : 'manual'}).`,
-            etapa: 1,
-            peso_kg: pesoLido,
-            registro: 'servidor',
-            ticket: String(criado?.numero || ''),
-          });
-          return true;
-        }
-        return false;
       }
 
       if (
@@ -1206,7 +1173,7 @@ export default function TicketsWorkspace({
         setAutoAguardandoZerar(true);
         registrarEventoMonitor({
           tipo: 'segunda_capturada',
-          descricao: `2ª pesagem confirmada no PC (${automatico ? 'auto' : 'manual'}). Aguardando fechamento do ticket.`,
+          descricao: `2ª pesagem capturada no PC (${automatico ? 'auto' : 'manual'}). Aguardando Salvar.`,
           etapa: 2,
           peso_kg: pesoLido,
           registro: 'pc_aguarda_fechamento',
@@ -1227,8 +1194,8 @@ export default function TicketsWorkspace({
     }
   }
 
-  async function fecharTicketAtual() {
-    if (!ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)) {
+  async function fecharTicketAtual(ticketParaFechar = ticketAtivo, liquidoFechamento = liquido, invertido = isInverted) {
+    if (!ticketParaFechar || !(segundaPesagem > 0) || !(liquidoFechamento > 0)) {
       return;
     }
 
@@ -1238,14 +1205,14 @@ export default function TicketsWorkspace({
       let pedidoVenda = null;
       let transportadoraId = transportadoraIdAtual;
 
-      if (ticketAtivo.tipo === 'venda') {
-        if (!ticketAtivo.pedido_id) {
+      if (ticketParaFechar.tipo === 'venda') {
+        if (!ticketParaFechar.pedido_id) {
           throw new Error(
             'Venda sem pedido vinculado. Regularize o pedido antes de fechar.'
           );
         }
 
-        pedidoVenda = await obterPedidoAtualizado(ticketAtivo.pedido_id);
+        pedidoVenda = await obterPedidoAtualizado(ticketParaFechar.pedido_id);
 
         if (!pedidoVenda) {
           throw new Error(
@@ -1279,10 +1246,10 @@ export default function TicketsWorkspace({
 
         if (
           !pedidoVenda.sem_limite &&
-          liquido > (Number(pedidoVenda.saldo_kg) || 0)
+          liquidoFechamento > (Number(pedidoVenda.saldo_kg) || 0)
         ) {
           throw new Error(
-            `O peso líquido de ${formatKg(liquido)} excede o saldo do pedido de ${formatKg(pedidoVenda.saldo_kg || 0)}.`
+            `O peso líquido de ${formatKg(liquidoFechamento)} excede o saldo do pedido de ${formatKg(pedidoVenda.saldo_kg || 0)}.`
           );
         }
       }
@@ -1294,15 +1261,15 @@ export default function TicketsWorkspace({
         transportadoras.find((p) => p.id === id)?.nome || '—';
 
       const { ticket: fechado, baixaError } = await fecharTicket({
-        ticket: ticketAtivo,
+        ticket: ticketParaFechar,
         pesoBruto: segundaPesagem,
-        isInverted,
-        liquido,
+        isInverted: invertido,
+        liquidoFechamento,
         correcaoPesoKg: 0,
-        isVenda: ticketAtivo.tipo === 'venda',
-        pedidoId: ticketAtivo.pedido_id || '',
+        isVenda: ticketParaFechar.tipo === 'venda',
+        pedidoId: ticketParaFechar.pedido_id || '',
         transportadoraId,
-        observacao: ticketAtivo.observacao || '',
+        observacao: ticketParaFechar.observacao || '',
         pedidoSel: pedidoVenda,
         clienteNome,
         transpNome,
@@ -1317,7 +1284,7 @@ export default function TicketsWorkspace({
           Math.round(
             (
               (Number(pedidoVenda.saldo_kg) || 0) -
-              liquido
+              liquidoFechamento
             ) * 1000
           ) / 1000;
 
@@ -1345,7 +1312,7 @@ export default function TicketsWorkspace({
       } else {
         toast({
           title: 'Ticket fechado',
-          description: `${fechado.numero} • Líquido ${formatKg(liquido)}`,
+          description: `${fechado.numero} • Líquido ${formatKg(liquidoFechamento)}`,
         });
       }
 
@@ -1355,10 +1322,12 @@ export default function TicketsWorkspace({
         etapa: 2,
         peso_kg: segundaPesagem,
         registro: 'servidor',
-        ticket: String(fechado?.numero || ticketAtivo?.numero || ''),
+        ticket: String(fechado?.numero || ticketParaFechar?.numero || ''),
       });
-      resetNovoTicket();
-      await onReload?.();
+      setSalvoParaImpressao(fechado);
+      try { await onReload?.(); }
+      catch (error) { console.warn('[Pesagem] Ticket salvo, recarga pendente:', error); }
+      return fechado;
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -1367,6 +1336,63 @@ export default function TicketsWorkspace({
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Capturar prepara o peso; Salvar é a única ação que persiste a captura.
+  async function salvarPesagemAtual() {
+    if (salvamentoRef.current || saving || autoCapturando || salvoParaImpressao
+      || autoPopupRef.current || ticketPreviewId) return;
+    if (!(primeiraPendente > 0) && !(ticketAtivo && segundaPesagem > 0)) return;
+    salvamentoRef.current = true;
+    try {
+      if (primeiraPendente > 0 && !ticketAtivo) {
+        const created = await registrarPrimeiraPesagem(primeiraPendente, primeiraPendenteEm);
+        if (!created) return;
+        // A primeira já existe no banco: não a duplicar se o fechamento falhar.
+        setPrimeiraPendente(0);
+        setPrimeiraPendenteEm('');
+        if (segundaPesagem > 0) {
+          await fecharTicketAtual(created, calcLiquido(segundaPesagem, primeiraPendente), false);
+        } else {
+          setSalvoParaImpressao(created);
+        }
+        return;
+      }
+
+      if (primeiraPendente > 0 && ticketAtivo) {
+        setSaving(true);
+        try {
+          const servidor = await api.entities.TicketPesagem.get(ticketAtivo.id);
+          if (!recapturaPrimeiraValida({
+            statusTicket: servidor.status,
+            primeiraNova: primeiraPendente,
+            segundaRegistrada: segundaPesagem > 0,
+            segundaPeso: segundaPesagem,
+          })) throw new Error('Ticket fechado ou pesagens incompatíveis.');
+          const campo = isInverted ? 'peso_bruto' : 'peso_tara';
+          const atualizado = await api.entities.TicketPesagem.update(ticketAtivo.id, { [campo]: primeiraPendente });
+          const salvo = { ...servidor, ...atualizado, [campo]: primeiraPendente };
+          setTicketLocal(salvo);
+          setPrimeiraPendente(0);
+          setPrimeiraPendenteEm('');
+          if (segundaPesagem > 0) {
+            await fecharTicketAtual(salvo, calcLiquido(segundaPesagem, primeiraPendente), isInverted);
+          } else {
+            setSalvoParaImpressao(salvo);
+          }
+          try { await onReload?.(); }
+          catch (error) { console.warn('[Pesagem] Peso salvo, recarga pendente:', error); }
+        } catch (error) {
+          toast({ variant: 'destructive', title: 'Erro ao salvar', description: String(error?.message || error) });
+        } finally {
+          setSaving(false);
+        }
+        return;
+      }
+      if (ticketAtivo && segundaPesagem > 0) await fecharTicketAtual();
+    } finally {
+      salvamentoRef.current = false;
     }
   }
 
@@ -1453,7 +1479,13 @@ export default function TicketsWorkspace({
     let segundos = null;
     let candidato = null;
 
-    if (pesquisaAberta) {
+    if (salvoParaImpressao) {
+      estado = 'aguardando_impressao';
+      detalhe = 'Ticket salvo. Escolha imprimir ou não imprimir.';
+    } else if (capturaPendente) {
+      estado = 'aguardando_salvar';
+      detalhe = 'Peso capturado. Clique em Salvar no Resumo.';
+    } else if (pesquisaAberta) {
       estado = 'pesquisa_aberta';
       detalhe = 'Pesquisa aberta. Captura automática pausada enquanto a lista está visível.';
     } else if (ticketPreviewId) {
@@ -1549,6 +1581,7 @@ export default function TicketsWorkspace({
     form.motorista, form.placa, form.produto_id, form.transportadora_id,
     pedidoSel, transportadoraVendaPronta, saving, lendo, digitacaoPendente,
     etapaSelecionada, diagnosticoSerial, pesquisaAberta, ticketPreviewId,
+    capturaPendente, salvoParaImpressao,
   ]);
 
   function limparContagemAutomatica() {
@@ -1767,6 +1800,7 @@ export default function TicketsWorkspace({
       if (autoRetentativaSegundos !== 0) setAutoRetentativaSegundos(0);
 
       const podeIniciar = autoAtivo && !pesquisaAberta && !ticketPreviewId
+        && !capturaPendente && !salvoParaImpressao
         && !(segundaPesagem > 0 && !ticketAtivo)
         && !estado.aguardandoZerar
         && autoDadosProntos
@@ -1840,6 +1874,7 @@ export default function TicketsWorkspace({
     saving, lendo, digitacaoPendente, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
     ultimaLeitura?.estavelDesde, autoRetentativaAte, autoRetentativaSegundos,
     pesquisaAberta, ticketPreviewId, segundaPesagem, ticketAtivo?.id,
+    capturaPendente, salvoParaImpressao,
   ]);
 
   const pedidoOptions = pedidosAbertos
@@ -1895,9 +1930,10 @@ export default function TicketsWorkspace({
       : '';
     const valor = editando ? textoDigitado : textoDigitado || textoRegistrado;
     const entradaBloqueada = saving || lendo || ticketFechado || !tipoAtual
-      || !!ticketPreviewId || pesquisaAberta || !!autoPopup;
+      || !!ticketPreviewId || pesquisaAberta || !!autoPopup || !!salvoParaImpressao;
     const status = registrado > 0
-      ? (primeiro ? 'Registrada' : ticketAtivo ? 'Capturada' : 'Preparada')
+      ? (primeiro ? primeiraPendente > 0 ? 'Capturada' : 'Registrada'
+        : ticketAtivo ? 'Capturada' : 'Preparada')
       : textoDigitado.trim() ? 'Aguardando confirmação' : 'Aguardando';
 
     return (
@@ -1979,8 +2015,9 @@ export default function TicketsWorkspace({
   const resumoCliente = pessoas.find((p) => p.id === (resumoTicket?.cliente_id || resumoPedido?.cliente_id));
   const resumoProduto = produtos.find((p) => p.id === (resumoTicket?.produto_id || resumoPedido?.produto_id));
   const resumoTransportadora = transportadoras.find((t) => t.id === resumoTicket?.transportadora_id);
-  const resumoPrimeira = resumoTicket
-    ? (Number(resumoTicket.peso_tara) || Number(resumoTicket.peso_bruto) || 0) : 0;
+  const resumoPrimeira = ticketPreview
+    ? (Number(ticketPreview.peso_tara) || Number(ticketPreview.peso_bruto) || 0)
+    : primeiraPesagem;
   const resumoSegunda = ticketPreview
     ? (ticketPreview.status === 'fechado'
       ? ((Number(ticketPreview.peso_tara) || 0) === resumoPrimeira
@@ -2541,11 +2578,13 @@ export default function TicketsWorkspace({
               <div className="flex items-center justify-between gap-2">
                 <span>1ª Pesagem</span>
                 <span className="font-semibold">
-                  {resumoTicket ? formatKg(resumoPrimeira) : '—'}
+                  {resumoPrimeira > 0 ? formatKg(resumoPrimeira) : '—'}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {resumoTicket ? 'Registrada' : 'Aguardando captura'}
+                {primeiraPendente > 0 && !ticketPreview
+                  ? 'Capturada — aguardando Salvar'
+                  : resumoTicket ? 'Registrada' : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2">
                 <span>2ª Pesagem</span>
@@ -2555,7 +2594,7 @@ export default function TicketsWorkspace({
               </div>
               <p className="text-[11px] text-muted-foreground">
                 {resumoSegunda > 0
-                  ? (!resumoTicket ? 'Preparada' : 'Capturada')
+                  ? (!resumoTicket && !primeiraPendente ? 'Preparada' : 'Capturada — aguardando Salvar')
                   : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
@@ -2599,26 +2638,11 @@ export default function TicketsWorkspace({
                       Peso líquido acima do saldo disponível do pedido.
                     </p>
                   )}
-                {ticketAtivo?.status === 'aberto' &&
-                  ((Number(ticketAtivo.peso_tara) || 0) > 0 || (Number(ticketAtivo.peso_bruto) || 0) > 0) && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-auto h-9 w-full gap-2"
-                    onClick={() => imprimirTicket(ticketAtivo)}
-                  >
-                    <Printer className="h-4 w-4" /> Imprimir Ticket
-                  </Button>
-                )}
-                {ticketAtivo?.status === 'aberto' && (
-                  <Button
-                    type="button"
-                    className="h-10 w-full gap-2"
-                    disabled={saving || ticketFechado || !ticketAtivo || !(segundaPesagem > 0) || !(liquido > 0)}
-                    onClick={fecharTicketAtual}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    {saving ? 'Processando...' : 'Fechar e Salvar Ticket'}
+                {(primeiraPendente > 0 || (ticketAtivo?.status === 'aberto' && segundaPesagem > 0)) && (
+                  <Button type="button" className="h-11 w-full gap-2 text-base font-semibold"
+                    disabled={saving || autoCapturando || !!salvoParaImpressao || !!autoPopup}
+                    onClick={salvarPesagemAtual}>
+                    <CheckCircle2 className="h-4 w-4" /> {saving ? 'Salvando...' : 'Salvar'}
                   </Button>
                 )}
               </>
@@ -2687,7 +2711,7 @@ export default function TicketsWorkspace({
               <div className="flex w-full items-center justify-between gap-2">
                 <span className="text-xs font-semibold lg:text-sm">Peso Líquido</span>
                 <span className="text-3xl font-bold tabular-nums text-primary 2xl:text-4xl">
-                  {segundaPesagem > 0 && ticketAtivo
+                  {segundaPesagem > 0 && primeiraPesagem > 0
                     ? formatKg(liquido)
                     : '—'}
                 </span>
@@ -2697,17 +2721,13 @@ export default function TicketsWorkspace({
             <Button
               type="button"
               className="mt-auto h-12 w-full bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 lg:mt-0 lg:h-14 lg:text-[15px]"
-              disabled={saving || lendo || ticketFechado || !tipoAtual || (etapaManual || etapaCaptura) === 0 || pesquisaAberta || !!ticketPreviewId || !!autoPopup}
+              disabled={saving || lendo || ticketFechado || !tipoAtual || (etapaManual || etapaCaptura) === 0 || pesquisaAberta || !!ticketPreviewId || !!autoPopup || !!salvoParaImpressao}
               onClick={confirmarPesoSelecionado}
             >
               <Play className="mr-2 h-4 w-4" />
               {saving || lendo
                 ? 'Aguarde...'
-                : podeDigitar && etapaManual
-                  ? `Confirmar ${etapaManual}ª Pesagem`
-                  : etapaCaptura === 0
-                    ? 'Selecione uma pesagem'
-                    : `Capturar ${etapaCaptura}ª Pesagem`}
+                : 'Capturar Peso'}
             </Button>
 
           </div>
@@ -2892,6 +2912,26 @@ export default function TicketsWorkspace({
           </div>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={!!salvoParaImpressao} onOpenChange={() => {}}>
+        <AlertDialogContent onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ticket salvo. Deseja imprimir?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {salvoParaImpressao
+                ? `${salvoParaImpressao.numero} — ${salvoParaImpressao.status === 'fechado' ? 'Fechado' : 'Aguardando 2ª pesagem'}.`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button type="button" variant="outline" onClick={() => concluirTicketSalvo(false)}>Não imprimir</Button>
+            <Button type="button" onClick={() => concluirTicketSalvo(true)}>
+              <Printer className="mr-2 h-4 w-4" /> Imprimir
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ConfirmacaoPesagemAutomatica
         captura={autoPopup}
