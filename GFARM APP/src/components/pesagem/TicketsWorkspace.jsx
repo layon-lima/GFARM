@@ -2717,7 +2717,7 @@ export default function TicketsWorkspace({
       <Sheet open={pesquisaAberta} onOpenChange={setPesquisaAberta}>
         <SheetContent
           side="bottom"
-          className="flex h-[78dvh] max-h-[calc(100dvh-6px)] w-full flex-col gap-0 overflow-hidden rounded-t-xl border-t border-slate-300 bg-background p-0 shadow-2xl"
+          className="flex h-[100dvh] max-h-[100dvh] w-full flex-col gap-0 overflow-hidden rounded-none border-t border-slate-300 bg-background p-0 shadow-2xl"
         >
           <div className="shrink-0 border-b bg-slate-50 px-4 py-3 pr-14">
             <SheetHeader>
