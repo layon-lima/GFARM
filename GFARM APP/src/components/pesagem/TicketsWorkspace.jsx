@@ -519,6 +519,7 @@ export default function TicketsWorkspace({
     setPesoDigitado1('');
     setPesoDigitado2('');
     setEtapaManual(0);
+    setTransportadoraFechamento(ticket.transportadora_id || '');
     anteriorTicketRef.current = ticket.id;
     setEtapaSelecionada(0);
     setSegundaPesagem(0);
