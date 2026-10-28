@@ -1036,6 +1036,10 @@ export default function TicketsWorkspace({
         return;
       }
       const anterior = etapa === 1 ? primeiraPesagem : segundaPesagem;
+      if (anterior > 0 && Math.abs(anterior - valor) < 0.0001) {
+        cancelarDigitacao(etapa);
+        return;
+      }
       if (anterior > 0 && Math.abs(anterior - valor) >= 0.0001) {
         setConfirmarCorrecao({ etapa, anterior, valor });
         return;
