@@ -1480,7 +1480,7 @@ export default function TicketsWorkspace({
     } else if (document.visibilityState !== 'visible') {
       estado = 'aba_oculta';
       detalhe = 'A aba do GFARM precisa estar visível no PC para a captura automática.';
-    } else if (saving || lendo || pesoAtual.trim()) {
+    } else if (saving || lendo || digitacaoPendente) {
       estado = 'ocupada';
       detalhe = 'Captura automática pausada: existe uma operação ou peso manual em andamento.';
     } else if (peso < AUTO_PESO_MINIMO_KG) {
@@ -1525,7 +1525,7 @@ export default function TicketsWorkspace({
     ultimaLeitura?.peso, ultimaLeitura?.timestamp, autoSemLeitura, etapaCaptura,
     ticketFechado, primeiraPesagem, ticketAtivo?.numero, form.tipo,
     form.motorista, form.placa, form.produto_id, form.transportadora_id,
-    pedidoSel, transportadoraVendaPronta, saving, lendo, pesoAtual,
+    pedidoSel, transportadoraVendaPronta, saving, lendo, digitacaoPendente,
     etapaSelecionada, diagnosticoSerial, pesquisaAberta, ticketPreviewId,
   ]);
 
@@ -1748,7 +1748,7 @@ export default function TicketsWorkspace({
         && !estado.aguardandoZerar
         && autoDadosProntos
         && etapaSelecionada === 0 && (etapaCaptura === 1 || etapaCaptura === 2)
-        && !ticketFechado && !saving && !lendo && !pesoAtual.trim()
+        && !ticketFechado && !saving && !lendo && !digitacaoPendente
         && document.visibilityState === 'visible' && leituraRecente
         && Number.isFinite(Date.parse(inicioEstavelNaBalanca))
         && peso >= AUTO_PESO_MINIMO_KG
@@ -1814,7 +1814,7 @@ export default function TicketsWorkspace({
   }, [
     autoAtivo, autoDadosProntos, autoContexto, balancaConectada,
     etapaSelecionada, etapaCaptura, ticketFechado, primeiraPesagem,
-    saving, lendo, pesoAtual, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
+    saving, lendo, digitacaoPendente, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
     ultimaLeitura?.estavelDesde, autoRetentativaAte, autoRetentativaSegundos,
     pesquisaAberta, ticketPreviewId,
   ]);
@@ -2077,12 +2077,12 @@ export default function TicketsWorkspace({
                     className={ticketAtivo ? 'bg-muted/30' : ''}
                   />
 
-                  {!ticketAtivo && taraSugerida && (
+                  {!ticketAtivo && taraSugerida && podeDigitar && (
                     <button
                       type="button"
                       className="text-xs text-primary hover:underline"
                       onClick={() =>
-                        setPesoAtual(formatQtd(taraSugerida))
+                        (setPesoDigitado1(formatInputQtd(taraSugerida)), setEtapaManual(1))
                       }
                     >
                       Usar última tara conhecida: {formatKg(taraSugerida)}
@@ -2546,103 +2546,6 @@ export default function TicketsWorkspace({
               <p className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-[11px] text-sky-800">
                 Este peso vem do computador da balança. Não é usado para capturar nem registrar tickets neste PC.
               </p>
-            )}
-
-            <div
-              role="status"
-              aria-live="polite"
-              className={`rounded-lg border px-3 py-2.5 text-xs ${
-                ['sem_serial', 'sem_leitura', 'cadastro_incompleto', 'aba_oculta'].includes(statusAutoLocal.estado)
-                  ? 'border-amber-200 bg-amber-50 text-amber-900'
-                  : ['popup_aberto', 'registrando', 'estabilizando'].includes(statusAutoLocal.estado)
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                    : 'border-border bg-muted/20'
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <strong className="text-[12px]">DIAGNÓSTICO DA CAPTURA NO PC</strong>
-                <span className="font-semibold">
-                  {autoAtivo ? 'Auto ligada · 2 s' : 'Auto desligada'}
-                </span>
-              </div>
-              <p className="mt-1 font-medium">{statusAutoLocal.detalhe}</p>
-              {statusAutoLocal.segundos != null && (
-                <p className="mt-1 font-bold tabular-nums">
-                  Contagem: {statusAutoLocal.segundos} s
-                  {statusAutoLocal.peso_candidato != null
-                    ? ` · Peso: ${formatKg(statusAutoLocal.peso_candidato)}` : ''}
-                </p>
-              )}
-              {!balancaConectada && diagnosticoSerial && (
-                <p className="mt-1 text-[11px]">
-                  Serial: {diagnosticoSerial}
-                </p>
-              )}
-              {balancaConectada && statusAutoLocal.estado === 'sem_leitura' && diagnosticoSerial && (
-                <p className="mt-1 text-[11px]">Diagnóstico Toledo: {diagnosticoSerial}</p>
-              )}
-              {['erro', 'outra_estacao'].includes(statusPublicacao) && (
-                <p className="mt-1 text-[11px]">
-                  Monitor remoto: {statusPublicacao === 'outra_estacao'
-                    ? 'outra estação está transmitindo'
-                    : erroPublicacao || 'não está conseguindo publicar na VPS'}
-                </p>
-              )}
-            </div>
-
-            {autoAtivo && (
-              <p className="px-1 text-[11px] text-muted-foreground" role="status">
-                {autoCapturando
-                  ? 'Confirmando e registrando o peso capturado...'
-                  : autoPopup?.fase === 'confirmar'
-                    ? `Peso identificado: ${formatKg(autoPopup.peso)}. Confirmação automática em ${autoPopupSegundos} s, se ninguém cancelar.`
-                    : autoPopup?.fase === 'opcoes'
-                      ? 'Peso cancelado. Escolha Pesar novamente ou Cancelar automação no popup.'
-                      : autoRetentativaSegundos > 0
-                        ? `Nova tentativa em ${autoRetentativaSegundos} s; depois serão necessários 2 s de peso estável.`
-                        : autoAguardandoZerar
-                          ? 'Pesagem registrada. Aguarde o peso cair abaixo de 40 kg antes de uma nova captura automática.'
-                          : !balancaConectada
-                            ? 'Automação parada: balança serial desconectada ou reconectando.'
-                            : !autoDadosProntos
-                              ? 'Captura automática aguardando preenchimento do ticket.'
-                              : etapaCaptura === 0
-                                ? 'Pesagens registradas. Feche o ticket para concluir.'
-                                : autoSemLeitura
-                                  ? 'Sem leitura recente válida da Toledo. Verifique a conexão serial: não é oscilação, faltam dados.'
-                                  : etapaCaptura === 2 && Number(ultimaLeitura?.peso) === primeiraPesagem
-                                    ? 'A 2ª pesagem exige um peso diferente da 1ª. Aguardando nova leitura.'
-                                    : autoRestante !== null
-                                      ? `${autoOscilou ? 'Peso oscilou; contagem reiniciada. ' : ''}Buscando estabilidade: ${autoRestante} s restantes.`
-                                      : 'Aguardando peso de 40 kg ou mais, sem variação durante 2 s.'}
-              </p>
-            )}
-
-            {podeDigitar && (
-              <div className="rounded-lg border border-dashed border-primary/30 bg-muted/10 px-3 py-2.5">
-                <label htmlFor="peso-manual-pesagem" className="mb-1.5 block text-xs font-semibold">
-                  Peso manual (ADM)
-                </label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="peso-manual-pesagem"
-                    ref={pesoInputRef}
-                    aria-label="Peso manual em quilogramas"
-                    inputMode="decimal"
-                    type="text"
-                    autoComplete="off"
-                    value={pesoAtual}
-                    onChange={(event) => setPesoAtual(event.target.value)}
-                    placeholder="Informe o peso em kg"
-                    disabled={saving || lendo || ticketFechado || !tipoAtual}
-                    className="h-10 min-w-0 flex-1 bg-background text-right text-lg font-semibold tabular-nums"
-                  />
-                  <span className="text-xs text-muted-foreground">kg</span>
-                </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Opcional. Quando preenchido, o peso digitado será registrado no lugar da leitura da balança.
-                </p>
-              </div>
             )}
 
             <button
