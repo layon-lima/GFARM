@@ -1903,11 +1903,11 @@ export default function TicketsWorkspace({
     return (
       <div
         key={etapa}
-        className={`w-full rounded-lg border p-3 ${
+        className={`flex w-full flex-col justify-center rounded-lg border p-3 lg:min-h-[104px] lg:px-4 lg:py-4 ${
           ativo ? 'border-primary bg-primary/5' : 'border-border bg-muted/20'
         }`}
       >
-        <div className="flex items-center justify-between gap-2 text-xs">
+        <div className="flex items-center justify-between gap-2 text-xs lg:text-[13px]">
           <span className="font-semibold">{etapa}ª Pesagem</span>
           <span className={registrado > 0 ? 'text-emerald-700' : 'text-muted-foreground'}>
             {status}
@@ -1943,7 +1943,7 @@ export default function TicketsWorkspace({
                   event.currentTarget.blur();
                 }
               }}
-              className="h-11 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-right text-2xl font-bold tabular-nums outline-none focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-11 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-right text-2xl font-bold tabular-nums lg:h-12 lg:text-[28px] outline-none focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <span className="text-sm text-muted-foreground">kg</span>
             {editando && (
@@ -1963,7 +1963,7 @@ export default function TicketsWorkspace({
             onClick={() => selecionarEtapa(etapa)}
             disabled={entradaBloqueada || (!primeiro && !ticketAtivo)}
             aria-pressed={etapaCaptura === etapa}
-            className="mt-1 w-full text-right text-3xl font-bold tabular-nums disabled:opacity-70"
+            className="mt-1 w-full text-right text-3xl font-bold tabular-nums lg:mt-2 disabled:opacity-70"
             title="Selecionar pesagem para capturar pela balança"
           >
             {registrado > 0 ? formatKg(registrado) : '—'}
@@ -2015,7 +2015,7 @@ export default function TicketsWorkspace({
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 lg:p-4">
               {ticketPreview ? (
                 <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/15 p-4 text-center">
                   <FileText className="h-9 w-9 text-primary" />
@@ -2042,8 +2042,8 @@ export default function TicketsWorkspace({
                   </Button>
                 </div>
               ) : (
-              <div className="space-y-3">
-            <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center">
+              <div className="flex min-h-full flex-col gap-3">
+            <div className="flex shrink-0 flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center lg:gap-3">
               <div className="sm:min-w-[95px]">
                 <p className="text-sm font-semibold">Tipo de ticket</p>
               </div>
@@ -2053,7 +2053,7 @@ export default function TicketsWorkspace({
                   value={tipoAtual || ''}
                   onChange={(e) => trocarTipo(e.target.value)}
                   disabled={!!ticketAtivo}
-                  className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm font-medium disabled:cursor-not-allowed disabled:bg-muted/40"
+                  className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm font-medium lg:h-11 lg:text-[15px] disabled:cursor-not-allowed disabled:bg-muted/40"
                 >
                   <option value="">Selecione o tipo...</option>
                   {TIPOS.map((tipo) => (
@@ -2101,7 +2101,7 @@ export default function TicketsWorkspace({
             </div>
               <fieldset
                 disabled={!tipoAtual}
-                className="min-w-0 space-y-3 disabled:opacity-55"
+                className="flex min-w-0 flex-1 flex-col gap-3 disabled:opacity-55 lg:[&_input]:h-10 lg:[&_button[data-state]]:h-10 lg:[&_label]:text-[13px]"
                 aria-label="Dados do ticket: escolha o tipo antes de preencher"
               >
               {isVenda && (
@@ -2151,7 +2151,7 @@ export default function TicketsWorkspace({
                 </div>
               )}
 
-              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-2">
+              <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 xl:grid-cols-2 lg:flex-1 lg:content-evenly">
                 <div className="space-y-1.5">
                   <Label>Motorista *</Label>
 
@@ -2449,10 +2449,10 @@ export default function TicketsWorkspace({
                   </>
                 )}
 
-                <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
+                <div className="space-y-1.5 md:col-span-2 xl:col-span-3 lg:space-y-2">
                   <Label>Observação</Label>
                   <Textarea
-                    rows={2}
+                    rows={3}
                     value={
                       ticketAtivo
                         ? (ticketAtivo.observacao || '')
@@ -2502,14 +2502,14 @@ export default function TicketsWorkspace({
                 : 'Resumo do ticket atual e acesso à pesquisa.'}
             </p>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 p-3">
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 lg:p-4">
+            <div className="flex min-h-0 flex-1 flex-col justify-around gap-3 overflow-y-auto">
             {ticketPreview && (
               <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
                 1º clique realizado: ticket em consulta. Para carregar no formulário, use o botão abaixo.
               </div>
             )}
-            <div className="space-y-1.5 rounded-lg bg-muted/20 p-2.5 text-xs">
+            <div className="space-y-1.5 rounded-lg bg-muted/20 p-2.5 text-xs lg:space-y-2 lg:p-3 lg:text-[13px]">
               {[
                 ['Ticket', resumoTicket?.numero || 'Novo ticket'],
                 ['Status', resumoTicket?.status === 'fechado'
@@ -2530,14 +2530,14 @@ export default function TicketsWorkspace({
                   ? `${resumoTicket.origem || '—'} / ${resumoTicket.destino || '—'}`
                   : `${form.origem || '—'} / ${form.destino || '—'}`],
               ].map(([label, value]) => (
-                <div key={label} className="grid min-w-0 grid-cols-[105px_minmax(0,1fr)] gap-2">
+                <div key={label} className="grid min-w-0 grid-cols-[105px_minmax(0,1fr)] gap-2 lg:grid-cols-[116px_minmax(0,1fr)] lg:gap-3">
                   <span className="text-muted-foreground">{label}</span>
                   <span className="min-w-0 break-words font-medium">{value}</span>
                 </div>
               ))}
             </div>
 
-            <div className="space-y-2 rounded-lg border p-2.5 text-xs">
+            <div className="space-y-2 rounded-lg border p-2.5 text-xs lg:space-y-3 lg:p-3 lg:text-[13px]">
               <div className="flex items-center justify-between gap-2">
                 <span>1ª Pesagem</span>
                 <span className="font-semibold">
@@ -2560,7 +2560,7 @@ export default function TicketsWorkspace({
               </p>
               <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
                 <span>Peso Líquido</span>
-                <span className="text-base text-primary">
+                <span className="text-lg text-primary tabular-nums">
                   {resumoPrimeira > 0 && resumoSegunda > 0 && resumoLiquido > 0
                     ? formatKg(resumoLiquido) : '—'}
                 </span>
@@ -2660,9 +2660,9 @@ export default function TicketsWorkspace({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3">
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <p className="mb-1 text-xs text-muted-foreground">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3 lg:justify-between lg:gap-4 lg:p-4">
+            <div className="flex flex-col justify-center rounded-lg border border-primary/20 bg-primary/5 p-3 lg:min-h-[104px] lg:px-4 lg:py-4">
+              <p className="mb-1 text-xs text-muted-foreground lg:mb-1.5 lg:text-[13px]">
                 {mostrandoRemoto ? 'Peso em tempo real pela VPS — SOMENTE CONSULTA' : 'Peso em tempo real'}
               </p>
               <div className="flex items-center gap-2">
@@ -2683,9 +2683,9 @@ export default function TicketsWorkspace({
             {renderizarQuadroPeso(1)}
             {renderizarQuadroPeso(2)}
 
-            <div className="rounded-lg border bg-muted/25 px-3 py-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold">Peso Líquido</span>
+            <div className="flex items-center rounded-lg border bg-muted/25 px-3 py-2.5 lg:min-h-[86px] lg:px-4 lg:py-4">
+              <div className="flex w-full items-center justify-between gap-2">
+                <span className="text-xs font-semibold lg:text-sm">Peso Líquido</span>
                 <span className="text-3xl font-bold tabular-nums text-primary 2xl:text-4xl">
                   {segundaPesagem > 0 && ticketAtivo
                     ? formatKg(liquido)
@@ -2696,7 +2696,7 @@ export default function TicketsWorkspace({
 
             <Button
               type="button"
-              className="mt-auto h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+              className="mt-auto h-12 w-full bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 lg:mt-0 lg:h-14 lg:text-[15px]"
               disabled={saving || lendo || ticketFechado || !tipoAtual || (etapaManual || etapaCaptura) === 0 || pesquisaAberta || !!ticketPreviewId || !!autoPopup}
               onClick={confirmarPesoSelecionado}
             >
