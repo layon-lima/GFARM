@@ -452,11 +452,21 @@ export default function TicketsWorkspace({
     setTicketConsultaId('');
     setTicketLocal(null);
     setForm(EMPTY_FORM);
-    setPesoAtual('');
+    setPesoDigitado1('');
+    setPesoDigitado2('');
+    setEtapaManual(0);
+    anteriorTicketRef.current = '';
+    preservarSegundaAoCriarRef.current = '';
     setEtapaSelecionada(0);
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
     setTransportadoraFechamento('');
+  }
+
+  function solicitarNovoTicket() {
+    if (saving || autoCapturando || autoPopupRef.current) return;
+    if (rascunhoTemDados) setConfirmarNovoTicket(true);
+    else resetNovoTicket();
   }
 
   function selecionarTicket(ticket) {
@@ -476,7 +486,10 @@ export default function TicketsWorkspace({
     setTicketLocal(null);
     setTicketAtivoId(ticket.id);
     setTicketConsultaId(ticket.id);
-    setPesoAtual('');
+    setPesoDigitado1('');
+    setPesoDigitado2('');
+    setEtapaManual(0);
+    anteriorTicketRef.current = ticket.id;
     setEtapaSelecionada(0);
     setSegundaPesagem(0);
     setSegundaRegistradaEm('');
@@ -624,7 +637,6 @@ export default function TicketsWorkspace({
     if (ticketAtivo) return;
 
     setForm((prev) => atualizarTipoTicket(prev, value));
-    setPesoAtual('');
     setEtapaSelecionada(0);
   }
 
@@ -711,7 +723,7 @@ export default function TicketsWorkspace({
           : '',
     });
 
-    setPesoAtual('');
+    setEtapaManual(0);
     onInitialPedidoConsumed?.();
   }, [initialPedidoId, ticketAtivo?.id, pedidos]);
 
@@ -891,11 +903,11 @@ export default function TicketsWorkspace({
         observacao: form.observacao.trim(),
       });
 
+      preservarSegundaAoCriarRef.current = created.id;
       setTicketLocal(created);
       setTicketAtivoId(created.id);
       setTicketConsultaId(created.id);
       setTransportadoraFechamento(created.transportadora_id || '');
-      setPesoAtual('');
 
       toast({
         title: '1ª pesagem registrada',
@@ -937,7 +949,7 @@ export default function TicketsWorkspace({
       return false;
     }
 
-    if (Math.abs(pesoConfirmado - primeiraPesagem) < 0.0001) {
+    if (primeiraPesagem > 0 && Math.abs(pesoConfirmado - primeiraPesagem) < 0.0001) {
       toast({
         variant: 'destructive',
         title: 'Pesagens iguais',
