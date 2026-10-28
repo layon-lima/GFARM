@@ -10,6 +10,8 @@ export const RASCUNHO_VAZIO = Object.freeze({
   form: {},
   ticketAtivoId: '',
   ticketConsultaId: '',
+  primeiraPendente: 0,
+  primeiraPendenteEm: '',
   segundaPesagem: 0,
   segundaRegistradaEm: '',
   transportadoraFechamento: '',
@@ -40,6 +42,9 @@ export function lerRascunhoPesagem(usuario) {
       ])),
       ticketAtivoId: String(dados.ticketAtivoId || ''),
       ticketConsultaId: String(dados.ticketConsultaId || ''),
+      primeiraPendente: Number.isFinite(Number(dados.primeiraPendente))
+        ? Math.max(0, Number(dados.primeiraPendente)) : 0,
+      primeiraPendenteEm: String(dados.primeiraPendenteEm || ''),
       segundaPesagem: Number.isFinite(Number(dados.segundaPesagem))
         ? Math.max(0, Number(dados.segundaPesagem)) : 0,
       segundaRegistradaEm: String(dados.segundaRegistradaEm || ''),
@@ -58,6 +63,7 @@ export function existeRascunhoPesagem(rascunho) {
   const f = rascunho?.form || {};
   return CAMPOS.some((c) => String(f[c] || '').trim())
     || Boolean(rascunho?.ticketAtivoId)
+    || Number(rascunho?.primeiraPendente) > 0
     || Number(rascunho?.segundaPesagem) > 0
     || Boolean(String(rascunho?.pesoDigitado1 || '').trim())
     || Boolean(String(rascunho?.pesoDigitado2 || '').trim());
