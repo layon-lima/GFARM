@@ -1021,14 +1021,16 @@ export default function TicketsWorkspace({
     capturarPeso(null, etapa);
   }
 
-  async function capturarPeso(pesoAutomatico = null) {
-    // Nunca gravar peso enquanto a Pesquisa ou consulta prévia está aberta:
-    // o operador ainda não confirmou qual ticket irá continuar.
+  async function capturarPeso(pesoAutomatico = null, etapaForcada = null) {
     if (pesquisaAberta || ticketPreviewId) return false;
-    if (saving || lendo || ticketFechado || etapaCaptura === 0) return false;
-    if (!pesoAutomatico && autoPopupRef.current) return false;
-
     const automatico = pesoAutomatico && typeof pesoAutomatico === 'object';
+    const etapaDestino = automatico
+      ? pesoAutomatico.etapa
+      : etapaForcada || (podeDigitar && etapaManual) || etapaCaptura;
+    if (saving || lendo || ticketFechado || ![1, 2].includes(etapaDestino)) return false;
+    if (!automatico && autoPopupRef.current) return false;
+    const textoManual = !automatico && podeDigitar
+      ? (etapaDestino === 1 ? pesoDigitado1 : pesoDigitado2).trim() : '';
     if (automatico) {
       const idade = Date.now() - Date.parse(ultimaLeitura?.timestamp || '');
       // O peso foi validado ao abrir o popup e fica CONGELADO durante
@@ -1045,14 +1047,12 @@ export default function TicketsWorkspace({
         || pesoAutomatico.contexto !== autoContexto
         || pesoAutomatico.etapa !== etapaCaptura
         || pesoAutomatico.peso < AUTO_PESO_MINIMO_KG
-        || pesoAtual.trim()) return false;
+        || digitacaoPendente) return false;
     }
 
     setSaving(true);
     try {
-      const manual = !automatico && podeDigitar && pesoAtual.trim()
-        ? parseQtd(pesoAtual)
-        : null;
+      const manual = textoManual ? parseQtd(textoManual) : null;
       const valor = automatico
         ? pesoAutomatico.peso
         : (manual ?? (balancaConectada ? await lerPeso() : null));
@@ -1070,8 +1070,29 @@ export default function TicketsWorkspace({
 
       const pesoLido = Number(valor);
       const capturadoEm = new Date().toISOString();
+      if (etapaDestino === 1 && segundaPesagem > 0
+        && Math.abs(pesoLido - segundaPesagem) < 0.0001) {
+        toast({ variant: 'destructive', title: 'Pesagens iguais', description: 'A 1ª e a 2ª pesagens devem ser diferentes.' });
+        return false;
+      }
 
-      if (etapaCaptura === 1 && ticketAtivo) {
+      if (etapaDestino === 2 && !ticketAtivo && manual !== null && podeDigitar) {
+        // A 2ª pode ser informada antes da 1ª. Só fica no rascunho local.
+        // Não criamos ticket no servidor até receber a 1ª pesagem.
+        setSegundaPesagem(pesoLido);
+        setSegundaRegistradaEm(capturadoEm);
+        setPesoDigitado2('');
+        setEtapaManual(0);
+        setEtapaSelecionada(0);
+        toast({ title: '2ª pesagem preparada', description: 'O peso será utilizado após a 1ª pesagem.' });
+        return true;
+      }
+      if (etapaDestino === 2 && !ticketAtivo) {
+        toast({ variant: 'destructive', title: 'Digite a 2ª pesagem no próprio campo para prepará-la.' });
+        return false;
+      }
+
+      if (etapaDestino === 1 && ticketAtivo) {
         // Confere o estado atualizado no servidor antes de refazer a 1ª,
         // para não modificar ticket fechado em outra estação.
         const servidor = await api.entities.TicketPesagem.get(ticketAtivo.id);
@@ -1100,7 +1121,8 @@ export default function TicketsWorkspace({
         );
         setTicketLocal({ ...servidor, ...atualizado, [campoPeso]: pesoLido });
         setEtapaSelecionada(0);
-        setPesoAtual('');
+        setEtapaManual(0);
+        setPesoDigitado1('');
         toast({
           title: '1ª pesagem atualizada',
           description: formatKg(pesoLido),
@@ -1122,14 +1144,15 @@ export default function TicketsWorkspace({
         return true;
       }
 
-      if (etapaCaptura === 1) {
+      if (etapaDestino === 1) {
         const criado = await registrarPrimeiraPesagem(
           pesoLido,
           capturadoEm
         );
         if (criado) {
           setEtapaSelecionada(0);
-          setPesoAtual('');
+          setEtapaManual(0);
+          setPesoDigitado1('');
           autoRef.current.aguardandoZerar = true;
           setAutoAguardandoZerar(true);
           registrarEventoMonitor({
@@ -1146,11 +1169,12 @@ export default function TicketsWorkspace({
       }
 
       if (
-        etapaCaptura === 2 &&
+        etapaDestino === 2 &&
         registrarSegundaPesagem(pesoLido, capturadoEm)
       ) {
         setEtapaSelecionada(0);
-        setPesoAtual('');
+        setEtapaManual(0);
+        setPesoDigitado2('');
         autoRef.current.aguardandoZerar = true;
         setAutoAguardandoZerar(true);
         registrarEventoMonitor({
