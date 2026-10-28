@@ -1210,6 +1210,15 @@ export default function TicketsWorkspace({
     setSaving(true);
 
     try {
+      const ticketServidor = await api.entities.TicketPesagem.get(ticketParaFechar.id);
+      if (ticketServidor.status === 'fechado') {
+        toast({ title: 'Ticket já estava fechado', description: 'Nenhuma nova baixa de estoque foi executada.' });
+        setSalvoParaImpressao(ticketServidor);
+        try { await onReload?.(); } catch {}
+        return ticketServidor;
+      }
+      if (ticketServidor.status !== 'aberto') throw new Error('Este ticket não está aberto para fechamento.');
+
       let pedidoVenda = null;
       let transportadoraId = transportadoraIdAtual;
 
@@ -1350,7 +1359,7 @@ export default function TicketsWorkspace({
   // Capturar prepara o peso; Salvar é a única ação que persiste a captura.
   async function salvarPesagemAtual() {
     if (salvamentoRef.current || saving || autoCapturando || salvoParaImpressao
-      || autoPopupRef.current || ticketPreviewId) return;
+      || autoPopupRef.current || ticketPreviewId || digitacaoPendente) return;
     if (!(primeiraPendente > 0) && !(ticketAtivo && segundaPesagem > 0)) return;
     salvamentoRef.current = true;
     try {
@@ -2648,7 +2657,7 @@ export default function TicketsWorkspace({
                   )}
                 {(primeiraPendente > 0 || (ticketAtivo?.status === 'aberto' && segundaPesagem > 0)) && (
                   <Button type="button" className="h-11 w-full gap-2 text-base font-semibold"
-                    disabled={saving || autoCapturando || !!salvoParaImpressao || !!autoPopup}
+                    disabled={saving || autoCapturando || !!salvoParaImpressao || !!autoPopup || digitacaoPendente}
                     onClick={salvarPesagemAtual}>
                     <CheckCircle2 className="h-4 w-4" /> {saving ? 'Salvando...' : 'Salvar'}
                   </Button>
