@@ -1184,7 +1184,7 @@ export default function TicketsWorkspace({
           descricao: `2ª pesagem capturada no PC (${automatico ? 'auto' : 'manual'}). Aguardando Salvar.`,
           etapa: 2,
           peso_kg: pesoLido,
-          registro: 'pc_aguarda_fechamento',
+          registro: 'pc_aguarda_salvar',
           ticket: String(ticketAtivo?.numero || ''),
         });
         return true;
@@ -1621,7 +1621,7 @@ export default function TicketsWorkspace({
     setAutoCapturando(true);
     registrarEventoMonitor({
       tipo: 'confirmacao_iniciada',
-      descricao: 'PC iniciou gravação do peso mostrado no popup.',
+      descricao: 'PC iniciou captura do peso; aguarda Salvar no Resumo.',
       etapa: captura.etapa,
       peso_kg: captura.peso,
       ticket: String(ticketAtivo?.numero || ''),
@@ -1637,7 +1637,7 @@ export default function TicketsWorkspace({
       } else {
         registrarEventoMonitor({
           tipo: 'falha_captura',
-          descricao: 'Popup confirmou, mas o PC não registrou o peso. Verifique o ticket e a serial.',
+          descricao: 'Popup confirmou, mas o PC não capturou o peso. Verifique o ticket e a serial.',
           etapa: captura.etapa,
           peso_kg: captura.peso,
           ticket: String(ticketAtivo?.numero || ''),
