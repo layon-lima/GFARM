@@ -2203,9 +2203,12 @@ export default function TicketsWorkspace({
                     <button
                       type="button"
                       className="text-xs text-primary hover:underline"
-                      onClick={() =>
-                        (setPesoDigitado1(formatInputQtd(taraSugerida)), setEtapaManual(1))
-                      }
+                      onClick={() => {
+                        setPesoDigitado1(formatInputQtd(taraSugerida));
+                        setEtapaManual(1);
+                        setEtapaSelecionada(0);
+                        primeiraInputRef.current?.focus();
+                      }}
                     >
                       Usar última tara conhecida: {formatKg(taraSugerida)}
                     </button>
@@ -2547,12 +2550,15 @@ export default function TicketsWorkspace({
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {resumoSegunda > 0 ? 'Capturada' : 'Aguardando captura'}
+                {resumoSegunda > 0
+                  ? (!resumoTicket ? 'Preparada' : 'Capturada')
+                  : 'Aguardando captura'}
               </p>
               <div className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
                 <span>Peso Líquido</span>
                 <span className="text-base text-primary">
-                  {resumoSegunda > 0 ? formatKg(resumoLiquido) : '—'}
+                  {resumoPrimeira > 0 && resumoSegunda > 0 && resumoLiquido > 0
+                    ? formatKg(resumoLiquido) : '—'}
                 </span>
               </div>
             </div>
