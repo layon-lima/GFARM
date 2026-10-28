@@ -1445,6 +1445,9 @@ export default function TicketsWorkspace({
       estado = 'peso_cancelado';
       detalhe = 'Peso cancelado. PC aguardando Pesar novamente ou Cancelar automação.';
       candidato = autoPopup.peso;
+    } else if (segundaPesagem > 0 && !ticketAtivo) {
+      estado = 'segunda_antecipada';
+      detalhe = '2ª pesagem preparada. Aguarde a 1ª pesagem para completar o ticket.';
     } else if (!autoAtivo) {
       estado = 'manual';
       detalhe = 'Captura automática desligada no PC: somente pesagem manual.';
@@ -1745,6 +1748,7 @@ export default function TicketsWorkspace({
       if (autoRetentativaSegundos !== 0) setAutoRetentativaSegundos(0);
 
       const podeIniciar = autoAtivo && !pesquisaAberta && !ticketPreviewId
+        && !(segundaPesagem > 0 && !ticketAtivo)
         && !estado.aguardandoZerar
         && autoDadosProntos
         && etapaSelecionada === 0 && (etapaCaptura === 1 || etapaCaptura === 2)
@@ -1816,7 +1820,7 @@ export default function TicketsWorkspace({
     etapaSelecionada, etapaCaptura, ticketFechado, primeiraPesagem,
     saving, lendo, digitacaoPendente, ultimaLeitura?.peso, ultimaLeitura?.timestamp,
     ultimaLeitura?.estavelDesde, autoRetentativaAte, autoRetentativaSegundos,
-    pesquisaAberta, ticketPreviewId,
+    pesquisaAberta, ticketPreviewId, segundaPesagem, ticketAtivo?.id,
   ]);
 
   const pedidoOptions = pedidosAbertos
@@ -2058,11 +2062,22 @@ export default function TicketsWorkspace({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={resetNovoTicket}
+                    onClick={solicitarNovoTicket}
                   >
                     Novo ticket
                   </Button>
                 </div>
+              )}
+              {!ticketAtivo && rascunhoTemDados && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={solicitarNovoTicket}
+                  disabled={saving || autoCapturando}
+                >
+                  Novo ticket
+                </Button>
               )}
             </div>
               <fieldset
@@ -2862,6 +2877,58 @@ export default function TicketsWorkspace({
         onPesarNovamente={pesarNovamenteAutomatico}
         onEncerrar={encerrarCapturaAutomatica}
       />
+
+      <AlertDialog
+        open={!!confirmarCorrecao}
+        onOpenChange={(aberto) => { if (!aberto) setConfirmarCorrecao(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar alteração de peso?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmarCorrecao
+                ? `Alterar a ${confirmarCorrecao.etapa}ª pesagem de ${formatKg(confirmarCorrecao.anterior)} para ${formatKg(confirmarCorrecao.valor)}?`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={saving}
+              onClick={() => {
+                const etapa = confirmarCorrecao?.etapa;
+                setConfirmarCorrecao(null);
+                if (etapa) capturarPeso(null, etapa);
+              }}
+            >
+              Confirmar alteração
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmarNovoTicket} onOpenChange={setConfirmarNovoTicket}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Iniciar novo ticket?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O preenchimento atual e os pesos preparados serão descartados neste navegador.
+              Tickets já salvos no sistema não serão excluídos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuar preenchendo</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                resetNovoTicket();
+                setConfirmarNovoTicket(false);
+              }}
+            >
+              Descartar rascunho e iniciar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={!!excluirTicket}
