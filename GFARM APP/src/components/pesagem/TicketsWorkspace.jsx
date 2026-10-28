@@ -1858,6 +1858,98 @@ export default function TicketsWorkspace({
 
   const TipoIcon = tipoIcon;
 
+  function renderizarQuadroPeso(etapa) {
+    const primeiro = etapa === 1;
+    const registrado = primeiro ? primeiraPesagem : segundaPesagem;
+    const textoDigitado = primeiro ? pesoDigitado1 : pesoDigitado2;
+    const editando = etapaManual === etapa;
+    const ativo = etapaCaptura === etapa || editando;
+    const entradaRef = primeiro ? primeiraInputRef : segundaInputRef;
+    const textoRegistrado = registrado > 0
+      ? Number(registrado).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2, maximumFractionDigits: 3, useGrouping: false,
+      })
+      : '';
+    const valor = editando ? textoDigitado : textoDigitado || textoRegistrado;
+    const entradaBloqueada = saving || lendo || ticketFechado || !tipoAtual
+      || !!ticketPreviewId || pesquisaAberta || !!autoPopup;
+    const status = registrado > 0
+      ? (primeiro ? 'Registrada' : ticketAtivo ? 'Capturada' : 'Preparada')
+      : textoDigitado.trim() ? 'Aguardando confirmação' : 'Aguardando';
+
+    return (
+      <div
+        key={etapa}
+        className={`w-full rounded-lg border p-3 ${
+          ativo ? 'border-primary bg-primary/5' : 'border-border bg-muted/20'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="font-semibold">{etapa}ª Pesagem</span>
+          <span className={registrado > 0 ? 'text-emerald-700' : 'text-muted-foreground'}>
+            {status}
+          </span>
+        </div>
+        {podeDigitar ? (
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              ref={entradaRef}
+              aria-label={`Peso da ${etapa}ª pesagem em quilogramas`}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="—"
+              value={valor}
+              disabled={entradaBloqueada}
+              onFocus={(event) => {
+                editarPesoNoCampo(etapa);
+                event.currentTarget.select();
+              }}
+              onChange={(event) => {
+                setEtapaManual(etapa);
+                if (primeiro) setPesoDigitado1(event.target.value);
+                else setPesoDigitado2(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  cancelarDigitacao(etapa);
+                  event.currentTarget.blur();
+                }
+              }}
+              className="h-11 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-right text-2xl font-bold tabular-nums outline-none focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+            <span className="text-sm text-muted-foreground">kg</span>
+            {editando && (
+              <button
+                type="button"
+                className="shrink-0 rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                aria-label={`Cancelar edição da ${etapa}ª pesagem`}
+                onClick={() => cancelarDigitacao(etapa)}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => selecionarEtapa(etapa)}
+            disabled={entradaBloqueada || (!primeiro && !ticketAtivo)}
+            aria-pressed={etapaCaptura === etapa}
+            className="mt-1 w-full text-right text-3xl font-bold tabular-nums disabled:opacity-70"
+            title="Selecionar pesagem para capturar pela balança"
+          >
+            {registrado > 0 ? formatKg(registrado) : '—'}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // A pesquisa permite visualizar o Resumo sem trocar o ticket em operação.
   const resumoTicket = ticketPreview || ticketAtivo;
   const resumoPedido = pedidos.find((p) => p.id === resumoTicket?.pedido_id);
@@ -2548,61 +2640,8 @@ export default function TicketsWorkspace({
               </p>
             )}
 
-            <button
-              type="button"
-              onClick={() => selecionarEtapa(1)}
-              disabled={saving || lendo || !tipoAtual}
-              aria-pressed={etapaCaptura === 1}
-              title="Selecionar primeira pesagem para capturar novamente"
-              className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 ${
-                etapaCaptura === 1
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border bg-muted/20 hover:border-primary/50'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-semibold">1ª Pesagem</span>
-                <span className={ticketAtivo ? 'text-emerald-700' : 'text-muted-foreground'}>
-                  {ticketAtivo ? 'Registrada' : 'Aguardando'}
-                </span>
-              </div>
-              <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
-                {ticketAtivo ? formatKg(primeiraPesagem) : '—'}
-              </div>
-              {ticketAtivo && (
-                <span className="block text-right text-[11px] text-muted-foreground">
-                  Clique para refazer
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => selecionarEtapa(2)}
-              disabled={saving || lendo || ticketFechado || !ticketAtivo}
-              aria-pressed={etapaCaptura === 2}
-              title="Selecionar segunda pesagem para capturar novamente"
-              className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 ${
-                etapaCaptura === 2
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border bg-muted/20 hover:border-primary/50'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-semibold">2ª Pesagem</span>
-                <span className={segundaPesagem > 0 ? 'text-emerald-700' : 'text-muted-foreground'}>
-                  {segundaPesagem > 0 ? 'Registrada' : 'Aguardando'}
-                </span>
-              </div>
-              <div className="mt-1 text-right text-3xl font-bold tabular-nums 2xl:text-4xl">
-                {segundaPesagem > 0 ? formatKg(segundaPesagem) : '—'}
-              </div>
-              {segundaPesagem > 0 && (
-                <span className="block text-right text-[11px] text-muted-foreground">
-                  Clique para refazer
-                </span>
-              )}
-            </button>
+            {renderizarQuadroPeso(1)}
+            {renderizarQuadroPeso(2)}
 
             <div className="rounded-lg border bg-muted/25 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
@@ -2618,21 +2657,19 @@ export default function TicketsWorkspace({
             <Button
               type="button"
               className="mt-auto h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={saving || lendo || ticketFechado || !tipoAtual || etapaCaptura === 0}
-              onClick={() => capturarPeso()}
+              disabled={saving || lendo || ticketFechado || !tipoAtual || (etapaManual || etapaCaptura) === 0 || pesquisaAberta || !!ticketPreviewId || !!autoPopup}
+              onClick={confirmarPesoSelecionado}
             >
               <Play className="mr-2 h-4 w-4" />
               {saving || lendo
                 ? 'Aguarde...'
-                : etapaCaptura === 0
-                  ? 'Selecione a pesagem para refazer'
-                  : `${podeDigitar && pesoAtual.trim() ? 'Registrar peso digitado' : 'Capturar'} ${etapaCaptura}ª Pesagem`}
+                : podeDigitar && etapaManual
+                  ? `Confirmar ${etapaManual}ª Pesagem`
+                  : etapaCaptura === 0
+                    ? 'Selecione uma pesagem'
+                    : `Capturar ${etapaCaptura}ª Pesagem`}
             </Button>
-            <p className="text-center text-[11px] text-muted-foreground">
-              {podeDigitar
-                ? 'Captura o peso da balança; se informar um peso manual, registra o valor digitado.'
-                : 'Um clique registra o peso. Para corrigir, selecione a pesagem acima.'}
-            </p>
+
           </div>
         </Card>
 
