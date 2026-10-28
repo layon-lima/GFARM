@@ -118,7 +118,10 @@ export default function CadastroRapidoPesagem({ onIrTickets, onReload, onCadastr
       }
       limparPessoa();
       await invalidateEntidade('Pessoa');
-      await onReload?.();
+      try { await onReload?.(); }
+      catch (erroLista) {
+        console.warn('[Pesagem] Pessoa cadastrada, mas a atualização da lista falhou:', erroLista);
+      }
       if (cadastrado?.id || cadastrado?.nome) {
         onCadastroConcluido?.({
           tipo: 'pessoa',
@@ -165,7 +168,10 @@ export default function CadastroRapidoPesagem({ onIrTickets, onReload, onCadastr
       toast({ title: 'Veículo salvo no cadastro oficial' });
       setVeiculoForm(VEICULO_INICIAL);
       await invalidateEntidade('Veiculo');
-      await onReload?.();
+      try { await onReload?.(); }
+      catch (erroLista) {
+        console.warn('[Pesagem] Veículo cadastrado, mas a atualização da lista falhou:', erroLista);
+      }
       onCadastroConcluido?.({
         tipo: 'veiculo',
         id: criado?.id || '',
