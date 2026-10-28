@@ -26,7 +26,7 @@ const PERFIS = [
 const PESSOA_INICIAL = { nome: '', documento: '', telefone: '', cnh: '' };
 const VEICULO_INICIAL = { placa: '', modelo: '', motorista_id: '', transportadora_id: '' };
 
-export default function CadastroRapidoPesagem({ onIrTickets, onReload }) {
+export default function CadastroRapidoPesagem({ onIrTickets, onReload, onCadastroConcluido }) {
   const { toast } = useToast();
   // Mesmas entidades, endpoints e permissões de Cadastros > Pessoas / Veículos.
   // Sem tabelas, cópias locais persistentes ou criação de ticket antes da balança.
@@ -84,10 +84,12 @@ export default function CadastroRapidoPesagem({ onIrTickets, onReload }) {
 
     setSalvandoPessoa(true);
     try {
+      let cadastrado = pessoaSelecionada;
       if (pessoaSelecionada) {
         if (!pessoaSelecionada[perfil]) {
           // PATCH apenas da flag escolhida: mantém todos os dados e demais perfis existentes.
-          await api.entities.Pessoa.update(pessoaSelecionada.id, { [perfil]: true });
+          const atualizado = await api.entities.Pessoa.update(pessoaSelecionada.id, { [perfil]: true });
+          cadastrado = { ...pessoaSelecionada, ...atualizado };
           toast({ title: 'Perfil habilitado no cadastro existente' });
         } else {
           toast({ title: 'Pessoa já cadastrada neste perfil' });
@@ -110,12 +112,21 @@ export default function CadastroRapidoPesagem({ onIrTickets, onReload }) {
           if (duplicados.length === 1) selecionarPessoa(duplicados[0]);
           return;
         }
-        await api.entities.Pessoa.create(camposNovoPerfil(perfil, pessoaForm));
+        const criado = await api.entities.Pessoa.create(camposNovoPerfil(perfil, pessoaForm));
+        cadastrado = { ...pessoaForm, ...criado };
         toast({ title: 'Pessoa salva no cadastro oficial' });
       }
       limparPessoa();
       await invalidateEntidade('Pessoa');
-      onReload?.();
+      await onReload?.();
+      if (cadastrado?.id || cadastrado?.nome) {
+        onCadastroConcluido?.({
+          tipo: 'pessoa',
+          perfil,
+          id: cadastrado?.id || '',
+          nome: cadastrado?.nome || pessoaForm.nome,
+        });
+      }
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -145,7 +156,7 @@ export default function CadastroRapidoPesagem({ onIrTickets, onReload }) {
         toast({ title: 'Placa já cadastrada', description: 'O veículo existente está disponível para a pesagem.' });
         return;
       }
-      await api.entities.Veiculo.create({
+      const criado = await api.entities.Veiculo.create({
         placa,
         modelo: veiculoForm.modelo.trim(),
         motorista_id: veiculoForm.motorista_id || '',
@@ -154,7 +165,12 @@ export default function CadastroRapidoPesagem({ onIrTickets, onReload }) {
       toast({ title: 'Veículo salvo no cadastro oficial' });
       setVeiculoForm(VEICULO_INICIAL);
       await invalidateEntidade('Veiculo');
-      onReload?.();
+      await onReload?.();
+      onCadastroConcluido?.({
+        tipo: 'veiculo',
+        id: criado?.id || '',
+        placa,
+      });
     } catch (err) {
       toast({
         variant: 'destructive',
