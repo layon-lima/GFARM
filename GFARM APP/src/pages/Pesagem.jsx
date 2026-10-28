@@ -44,6 +44,7 @@ export default function Pesagem() {
 
   const [tab, setTab] = useState('tickets');
   const [pedidoParaTicket, setPedidoParaTicket] = useState('');
+  const [ultimoCadastroRapido, setUltimoCadastroRapido] = useState(null);
 
   /*
    * A abertura da Pesagem carrega somente o núcleo usado por Tickets.
@@ -150,8 +151,9 @@ export default function Pesagem() {
             </button>
           </div>
           <CadastroRapidoPesagem
-            onIrTickets={() => setTab('tickets')}
+            onIrTickets={() => { reloadCore(); setTab('tickets'); }}
             onReload={reloadCore}
+            onCadastroConcluido={(novo) => setUltimoCadastroRapido(novo)}
           />
         </TabsContent>
 
@@ -171,6 +173,8 @@ export default function Pesagem() {
               onInitialPedidoConsumed={() =>
                 setPedidoParaTicket('')
               }
+              cadastroRecente={ultimoCadastroRapido}
+              onCadastroRecenteAplicado={() => setUltimoCadastroRapido(null)}
             />
           )}
         </TabsContent>
