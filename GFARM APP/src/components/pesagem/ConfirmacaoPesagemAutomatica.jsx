@@ -3,9 +3,8 @@ import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFoo
 import { Button } from '@/components/ui/button';
 
 
-// Primeiro congela o peso; o botão Confirmar registra imediatamente,
-// e o fim dos 10 segundos também confirma automaticamente.
-// Cancelar impede a gravação e oferece nova pesagem ou modo manual.
+// A confirmação automática captura somente o peso no formulário.
+// O registro definitivo ocorre depois, no botão Salvar do Resumo.
 export default function ConfirmacaoPesagemAutomatica({
   captura,
   segundos,
@@ -35,7 +34,7 @@ export default function ConfirmacaoPesagemAutomatica({
           </AlertDialogTitle>
           <AlertDialogDescription>
             {confirmando
-              ? `A Toledo identificou a ${captura.etapa}ª pesagem estável. Confirme, cancele ou aguarde: em 10 segundos este peso será registrado automaticamente.`
+              ? `A Toledo identificou a ${captura.etapa}ª pesagem estável. Confirme ou aguarde 10 segundos para capturar o peso. Depois, clique em Salvar no Resumo.`
               : (captura.motivo || 'A captura foi cancelada. Escolha como deseja continuar.')}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -50,7 +49,7 @@ export default function ConfirmacaoPesagemAutomatica({
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {confirmando
-              ? 'Peso congelado: confirmação automática ao fim da contagem, se ninguém cancelar.'
+              ? 'Peso congelado: será capturado automaticamente ao fim da contagem, sem salvar o ticket.'
               : 'Captura cancelada: este peso não foi registrado.'}
           </p>
         </div>
@@ -82,7 +81,7 @@ export default function ConfirmacaoPesagemAutomatica({
                 onClick={onConfirmar}
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                {salvando ? 'Registrando...' : 'Confirmar e registrar'}
+                {salvando ? 'Capturando...' : 'Capturar Peso'}
               </Button>
             </AlertDialogFooter>
           </>
