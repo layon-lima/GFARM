@@ -20,6 +20,7 @@ const NOME = {
   cadastro_incompleto: 'Cadastro do ticket incompleto',
   pesquisa_aberta: 'Pesquisa de tickets aberta no PC',
   consulta_ticket: 'Ticket selecionado: aguardando confirmação no Resumo',
+  segunda_antecipada: '2ª pesagem preparada, aguardando a 1ª',
   aguardando_ticket: 'Aguardando próximo ticket',
   recaptura_manual: 'Modo de recaptura manual selecionado',
   aguardando_zera: 'Aguardando esvaziar a balança',
