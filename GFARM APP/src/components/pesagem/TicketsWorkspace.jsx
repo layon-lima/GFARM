@@ -1264,7 +1264,7 @@ export default function TicketsWorkspace({
         ticket: ticketParaFechar,
         pesoBruto: segundaPesagem,
         isInverted: invertido,
-        liquidoFechamento,
+        liquido: liquidoFechamento,
         correcaoPesoKg: 0,
         isVenda: ticketParaFechar.tipo === 'venda',
         pedidoId: ticketParaFechar.pedido_id || '',
