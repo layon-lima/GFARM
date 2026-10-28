@@ -968,14 +968,57 @@ export default function TicketsWorkspace({
     return true;
   }
 
+  // Os dois campos são editáveis para usuários autorizados em qualquer
+  // ordem. O valor só é registrado após confirmar no botão inferior.
+  function editarPesoNoCampo(etapa) {
+    if (!podeDigitar || saving || lendo || ticketFechado || !tipoAtual
+      || pesquisaAberta || ticketPreviewId || autoPopupRef.current) return;
+    setEtapaManual(etapa);
+    setEtapaSelecionada(0);
+    const atual = etapa === 1 ? primeiraPesagem : segundaPesagem;
+    const valor = atual > 0
+      ? Number(atual).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2, maximumFractionDigits: 3, useGrouping: false,
+      })
+      : '';
+    if (etapa === 1) setPesoDigitado1((anterior) => anterior || valor);
+    else setPesoDigitado2((anterior) => anterior || valor);
+  }
+
+  function cancelarDigitacao(etapa) {
+    if (etapa === 1) setPesoDigitado1('');
+    else setPesoDigitado2('');
+    setEtapaManual(0);
+    setEtapaSelecionada(0);
+  }
+
   function selecionarEtapa(etapa) {
     if (saving || lendo || ticketFechado || !tipoAtual || autoPopupRef.current) return;
+    if (podeDigitar) {
+      editarPesoNoCampo(etapa);
+      (etapa === 1 ? primeiraInputRef : segundaInputRef).current?.focus();
+      return;
+    }
     if (etapa === 2 && !ticketAtivo) return;
     setEtapaSelecionada(etapa);
-    // Nunca reutilizar manualmente a leitura anterior numa nova captura.
-    setPesoAtual('');
-    // O ADM digita no campo de peso ao selecionar a 1ª ou 2ª pesagem.
-    if (podeDigitar) pesoInputRef.current?.focus();
+  }
+
+  function confirmarPesoSelecionado() {
+    const etapa = podeDigitar && etapaManual ? etapaManual : etapaCaptura;
+    const texto = etapa === 1 ? pesoDigitado1 : pesoDigitado2;
+    if (podeDigitar && etapaManual && texto.trim()) {
+      const valor = parseQtd(texto);
+      if (!(valor > 0) || !Number.isFinite(valor)) {
+        toast({ variant: 'destructive', title: 'Informe um peso válido, maior que zero.' });
+        return;
+      }
+      const anterior = etapa === 1 ? primeiraPesagem : segundaPesagem;
+      if (anterior > 0 && Math.abs(anterior - valor) >= 0.0001) {
+        setConfirmarCorrecao({ etapa, anterior, valor });
+        return;
+      }
+    }
+    capturarPeso(null, etapa);
   }
 
   async function capturarPeso(pesoAutomatico = null) {
