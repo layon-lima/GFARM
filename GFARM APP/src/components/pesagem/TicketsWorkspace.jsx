@@ -48,7 +48,7 @@ import {
   normalizePlaca,
   statusPorSaldo,
 } from '@/lib/pesagem';
-import { formatQtd, formatInputQtd, parseQtd } from '@/lib/format';
+import { formatInputQtd, parseQtd } from '@/lib/format';
 import { chaveRascunhoPesagem, existeRascunhoPesagem, lerRascunhoPesagem, salvarRascunhoPesagem } from '@/lib/pesagemRascunho';
 import { atualizarTipoTicket, etapaCapturaPesagem, recapturaPrimeiraValida } from '@/lib/pesagemCaptureFlow';
 
@@ -136,8 +136,6 @@ export default function TicketsWorkspace({
     lerPeso,
     lendo,
     diagnostico: diagnosticoSerial,
-    statusPublicacao,
-    erroPublicacao,
     atualizarEstadoMonitor,
     registrarEventoMonitor,
   } = useBalanca();
@@ -174,12 +172,6 @@ export default function TicketsWorkspace({
   const [autoRetentativaSegundos, setAutoRetentativaSegundos] = useState(0);
   const [autoOscilou, setAutoOscilou] = useState(false);
   const [autoSemLeitura, setAutoSemLeitura] = useState(false);
-  const [statusAutoLocal, setStatusAutoLocal] = useState({
-    estado: 'iniciando',
-    detalhe: 'Verificando se a automação está pronta.',
-    segundos: null,
-    peso_candidato: null,
-  });
 
   function alterarPopupAuto(proximo) {
     // Ref síncrono: evita dois cliques/confirmações causados pelo timer.
@@ -1543,15 +1535,7 @@ export default function TicketsWorkspace({
       ticket: numero.slice(0, 100),
     };
     atualizarEstadoMonitor(novoStatus);
-    // Exibir exatamente o mesmo diagnóstico também no PC, mesmo quando
-    // o envio à VPS falhar, para ninguém ficar sem sinal do que acontece.
-    setStatusAutoLocal((anterior) => (
-      anterior.estado === estado &&
-      anterior.detalhe === detalhe &&
-      anterior.segundos === segundos &&
-      anterior.peso_candidato === candidato
-        ? anterior : novoStatus
-    ));
+
   }, [
     atualizarEstadoMonitor, autoAtivo, autoCapturando, autoPopup,
     autoPopupSegundos, autoRetentativaSegundos, autoAguardandoZerar,
