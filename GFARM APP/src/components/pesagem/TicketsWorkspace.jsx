@@ -508,6 +508,10 @@ export default function TicketsWorkspace({
 
   function selecionarTicket(ticket) {
     if (!ticket || saving || autoCapturando || autoPopupRef.current) return;
+    if (capturaPendente) {
+      toast({ title: 'Peso aguardando salvamento', description: 'Clique em Salvar antes de consultar outro ticket.' });
+      return;
+    }
     // Primeiro clique: fecha a Pesquisa e exibe consulta no RESUMO.
     // Não muda o ticket de operação nem inicia a leitura automática.
     setTicketPreviewId(ticket.id);
@@ -517,6 +521,10 @@ export default function TicketsWorkspace({
 
   function continuarPesagem(ticket) {
     if (!ticket || ticket.status !== 'aberto' || saving || autoCapturando) return;
+    if (capturaPendente) {
+      toast({ title: 'Peso aguardando salvamento', description: 'Clique em Salvar antes de carregar outro ticket.' });
+      return;
+    }
     // Segundo clique: confirmado no resumo; só então carrega o formulário.
     setTicketPreviewId('');
     setPesquisaAberta(false);
