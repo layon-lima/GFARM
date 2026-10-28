@@ -99,6 +99,8 @@ export default function TicketsWorkspace({
   onReload,
   initialPedidoId = '',
   onInitialPedidoConsumed,
+  cadastroRecente = null,
+  onCadastroRecenteAplicado,
 }) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -227,6 +229,34 @@ export default function TicketsWorkspace({
   const digitacaoPendente = Boolean(
     pesoDigitado1.trim() || pesoDigitado2.trim() || etapaManual !== 0
   );
+
+  // O Pré-cadastro só completa campos ainda vazios: jamais substitui
+  // dados que já estavam preenchidos. O restante do rascunho é intacto.
+  useEffect(() => {
+    if (!cadastroRecente) return;
+    if (!ticketAtivoId) {
+      setForm((anterior) => {
+        if (!anterior.tipo) return anterior;
+        if (cadastroRecente.tipo === 'veiculo' && cadastroRecente.placa && !anterior.placa) {
+          return { ...anterior, placa: cadastroRecente.placa };
+        }
+        if (cadastroRecente.tipo !== 'pessoa') return anterior;
+        if (cadastroRecente.perfil === 'is_motorista' && !anterior.motorista && cadastroRecente.nome) {
+          return { ...anterior, motorista: cadastroRecente.nome };
+        }
+        if (cadastroRecente.perfil === 'is_transportadora' && anterior.tipo !== 'venda'
+          && !anterior.transportadora_id && cadastroRecente.id) {
+          return { ...anterior, transportadora_id: cadastroRecente.id };
+        }
+        if (cadastroRecente.perfil === 'is_fornecedor' && anterior.tipo === 'compra'
+          && !anterior.cliente_id && cadastroRecente.id) {
+          return { ...anterior, cliente_id: cadastroRecente.id };
+        }
+        return anterior;
+      });
+    }
+    onCadastroRecenteAplicado?.();
+  }, [cadastroRecente, ticketAtivoId, onCadastroRecenteAplicado]);
 
   const ticketAtivo =
     (ticketLocal?.id === ticketAtivoId ? ticketLocal : null) ||
