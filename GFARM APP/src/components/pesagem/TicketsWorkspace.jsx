@@ -48,7 +48,8 @@ import {
   normalizePlaca,
   statusPorSaldo,
 } from '@/lib/pesagem';
-import { formatQtd, parseQtd } from '@/lib/format';
+import { formatQtd, formatInputQtd, parseQtd } from '@/lib/format';
+import { chaveRascunhoPesagem, existeRascunhoPesagem, lerRascunhoPesagem, salvarRascunhoPesagem } from '@/lib/pesagemRascunho';
 import { atualizarTipoTicket, etapaCapturaPesagem, recapturaPrimeiraValida } from '@/lib/pesagemCaptureFlow';
 
 const EMPTY_FORM = {
@@ -102,7 +103,17 @@ export default function TicketsWorkspace({
   const { toast } = useToast();
   const { user } = useAuth();
   const podeDigitar = podeDigitarPeso(user);
-  const pesoInputRef = useRef(null);
+  const primeiraInputRef = useRef(null);
+  const segundaInputRef = useRef(null);
+  const rascunhoInicialRef = useRef(null);
+  if (rascunhoInicialRef.current === null) {
+    rascunhoInicialRef.current = lerRascunhoPesagem(user);
+  }
+  const inicial = rascunhoInicialRef.current;
+  const chaveRascunho = chaveRascunhoPesagem(user);
+  const [chaveHidratada, setChaveHidratada] = useState(chaveRascunho);
+  const anteriorTicketRef = useRef(inicial.ticketAtivoId);
+  const preservarSegundaAoCriarRef = useRef('');
   const autoPopupRef = useRef(null);
   const confirmarAutoRef = useRef(null);
   const autoRef = useRef({
@@ -129,16 +140,20 @@ export default function TicketsWorkspace({
     registrarEventoMonitor,
   } = useBalanca();
 
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [ticketAtivoId, setTicketAtivoId] = useState('');
-  const [ticketConsultaId, setTicketConsultaId] = useState('');
+  const [form, setForm] = useState(() => ({ ...EMPTY_FORM, ...inicial.form }));
+  const [ticketAtivoId, setTicketAtivoId] = useState(inicial.ticketAtivoId);
+  const [ticketConsultaId, setTicketConsultaId] = useState(inicial.ticketConsultaId);
   const [ticketLocal, setTicketLocal] = useState(null);
-  const [pesoAtual, setPesoAtual] = useState('');
+  const [pesoDigitado1, setPesoDigitado1] = useState(inicial.pesoDigitado1);
+  const [pesoDigitado2, setPesoDigitado2] = useState(inicial.pesoDigitado2);
+  const [etapaManual, setEtapaManual] = useState(inicial.etapaManual);
+  const [confirmarCorrecao, setConfirmarCorrecao] = useState(null);
+  const [confirmarNovoTicket, setConfirmarNovoTicket] = useState(false);
   const [etapaSelecionada, setEtapaSelecionada] = useState(0);
   const [filtroStatus, setFiltroStatus] = useState('todos');
-  const [segundaPesagem, setSegundaPesagem] = useState(0);
-  const [segundaRegistradaEm, setSegundaRegistradaEm] = useState('');
-  const [transportadoraFechamento, setTransportadoraFechamento] = useState('');
+  const [segundaPesagem, setSegundaPesagem] = useState(inicial.segundaPesagem);
+  const [segundaRegistradaEm, setSegundaRegistradaEm] = useState(inicial.segundaRegistradaEm);
+  const [transportadoraFechamento, setTransportadoraFechamento] = useState(inicial.transportadoraFechamento);
   const [buscaAbertos, setBuscaAbertos] = useState('');
   const [pesquisaAberta, setPesquisaAberta] = useState(false);
   const [ticketPreviewId, setTicketPreviewId] = useState('');
@@ -173,6 +188,45 @@ export default function TicketsWorkspace({
   useEffect(() => {
     try { localStorage.setItem(AUTO_PREF_KEY, String(autoAtivo)); } catch {}
   }, [autoAtivo]);
+
+  // Quando a sessão passa de "carregando" para usuário autenticado, hidratar
+  // antes de gravar. Isso impede sobrescrever o rascunho com formulário vazio.
+  useEffect(() => {
+    if (chaveRascunho === chaveHidratada) return;
+    const restaurado = lerRascunhoPesagem(user);
+    anteriorTicketRef.current = restaurado.ticketAtivoId;
+    setForm({ ...EMPTY_FORM, ...restaurado.form });
+    setTicketAtivoId(restaurado.ticketAtivoId);
+    setTicketConsultaId(restaurado.ticketConsultaId);
+    setSegundaPesagem(restaurado.segundaPesagem);
+    setSegundaRegistradaEm(restaurado.segundaRegistradaEm);
+    setTransportadoraFechamento(restaurado.transportadoraFechamento);
+    setPesoDigitado1(restaurado.pesoDigitado1);
+    setPesoDigitado2(restaurado.pesoDigitado2);
+    setEtapaManual(restaurado.etapaManual);
+    setChaveHidratada(chaveRascunho);
+  }, [chaveRascunho, chaveHidratada, user]);
+
+  useEffect(() => {
+    if (!chaveRascunho || chaveRascunho !== chaveHidratada) return;
+    salvarRascunhoPesagem(user, {
+      form, ticketAtivoId, ticketConsultaId, segundaPesagem,
+      segundaRegistradaEm, transportadoraFechamento, pesoDigitado1,
+      pesoDigitado2, etapaManual,
+    });
+  }, [
+    chaveRascunho, chaveHidratada, user?.id, user?.username,
+    form, ticketAtivoId, ticketConsultaId, segundaPesagem,
+    segundaRegistradaEm, transportadoraFechamento,
+    pesoDigitado1, pesoDigitado2, etapaManual,
+  ]);
+
+  const rascunhoTemDados = existeRascunhoPesagem({
+    form, ticketAtivoId, segundaPesagem, pesoDigitado1, pesoDigitado2,
+  });
+  const digitacaoPendente = Boolean(
+    pesoDigitado1.trim() || pesoDigitado2.trim() || etapaManual !== 0
+  );
 
   const ticketAtivo =
     (ticketLocal?.id === ticketAtivoId ? ticketLocal : null) ||
@@ -225,16 +279,19 @@ export default function TicketsWorkspace({
   }, [pedidoSel, transportadoras]);
 
   useEffect(() => {
-    if (!ticketAtivo) {
-      setTransportadoraFechamento('');
-      return;
-    }
-
+    const atualId = ticketAtivo?.id || '';
+    if (!atualId) return;
+    if (anteriorTicketRef.current === atualId) return;
+    const preservarPendente = preservarSegundaAoCriarRef.current === atualId;
+    anteriorTicketRef.current = atualId;
+    preservarSegundaAoCriarRef.current = '';
     setTransportadoraFechamento(ticketAtivo.transportadora_id || '');
-    setSegundaPesagem(0);
-    setSegundaRegistradaEm('');
-    setPesoAtual('');
+    if (!preservarPendente) {
+      setSegundaPesagem(0);
+      setSegundaRegistradaEm('');
+    }
     setEtapaSelecionada(0);
+    setEtapaManual(0);
   }, [ticketAtivo?.id]);
 
   const primeiraPesagem = useMemo(() => {
