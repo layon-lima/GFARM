@@ -5,6 +5,7 @@ import {
   FileText,
   LockKeyhole,
   Package,
+  Pencil,
   Play,
   Printer,
   Search,
@@ -33,6 +34,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import SearchSelect from '@/components/SearchSelect';
 import ConfirmacaoPesagemAutomatica from '@/components/pesagem/ConfirmacaoPesagemAutomatica';
+import EditarTicketDialog from '@/components/pesagem/EditarTicketDialog';
 import { useBalanca } from '@/lib/balancaContext';
 import { useAuth } from '@/lib/AuthContext';
 import { podeDigitarPeso } from '@/lib/permissions';
@@ -145,6 +147,7 @@ export default function TicketsWorkspace({
   const [ticketAtivoId, setTicketAtivoId] = useState(inicial.ticketAtivoId);
   const [ticketConsultaId, setTicketConsultaId] = useState(inicial.ticketConsultaId);
   const [ticketLocal, setTicketLocal] = useState(null);
+  const [ticketEdicao, setTicketEdicao] = useState(null);
   const [pesoDigitado1, setPesoDigitado1] = useState(inicial.pesoDigitado1);
   const [pesoDigitado2, setPesoDigitado2] = useState(inicial.pesoDigitado2);
   const [etapaManual, setEtapaManual] = useState(inicial.etapaManual);
@@ -260,8 +263,8 @@ export default function TicketsWorkspace({
     (ticketLocal?.id === ticketAtivoId ? ticketLocal : null) ||
     tickets.find((ticket) => ticket.id === ticketAtivoId);
   const ticketPreview = ticketPreviewId
-    ? tickets.find((ticket) => ticket.id === ticketPreviewId)
-      || (ticketLocal?.id === ticketPreviewId ? ticketLocal : null)
+    ? (ticketLocal?.id === ticketPreviewId ? ticketLocal : null)
+      || tickets.find((ticket) => ticket.id === ticketPreviewId)
     : null;
 
   const ticketConsulta = tickets.find((ticket) => ticket.id === ticketConsultaId) || ticketAtivo;
@@ -517,6 +520,24 @@ export default function TicketsWorkspace({
     setTicketPreviewId(ticket.id);
     setTicketConsultaId(ticket.id);
     setPesquisaAberta(false);
+  }
+
+  function editarTicketDoResumo() {
+    const ticket = ticketPreview || ticketAtivo;
+    if (!ticket || saving || autoCapturando || autoPopupRef.current
+      || salvoParaImpressao || capturaPendente || digitacaoPendente) return;
+    setTicketEdicao(ticket);
+  }
+
+  async function ticketEditadoSalvo(atualizado) {
+    setTicketEdicao(null);
+    setTicketLocal(atualizado);
+    setTicketPreviewId(atualizado.id);
+    setTicketConsultaId(atualizado.id);
+    try { await onReload?.(); }
+    catch (error) {
+      console.warn('[Pesagem] Ticket editado, mas a pesquisa ainda não atualizou:', error);
+    }
   }
 
   function continuarPesagem(ticket) {
@@ -938,10 +959,7 @@ export default function TicketsWorkspace({
             ? (pedidoVenda?.id || form.pedido_id)
             : '',
         origem: form.origem.trim(),
-        destino:
-          form.tipo === 'venda'
-            ? ''
-            : form.destino.trim(),
+        destino: form.destino.trim(),
         peso_tara: pesoConfirmado,
         peso_bruto: 0,
         peso_liquido: 0,
@@ -1935,7 +1953,11 @@ export default function TicketsWorkspace({
 
   function renderizarQuadroPeso(etapa) {
     const primeiro = etapa === 1;
-    const registrado = primeiro ? primeiraPesagem : segundaPesagem;
+    const registrado = consultaFechada
+      ? (primeiro
+        ? ((Number(ticketPreview.peso_tara) || 0) || (Number(ticketPreview.peso_bruto) || 0))
+        : ((Number(ticketPreview.peso_tara) || 0) > 0 ? Number(ticketPreview.peso_bruto) || 0 : Number(ticketPreview.peso_tara) || 0))
+      : primeiro ? primeiraPesagem : segundaPesagem;
     const textoDigitado = primeiro ? pesoDigitado1 : pesoDigitado2;
     const editando = etapaManual === etapa;
     const ativo = etapaCaptura === etapa || editando;
@@ -1945,11 +1967,11 @@ export default function TicketsWorkspace({
         minimumFractionDigits: 2, maximumFractionDigits: 3, useGrouping: false,
       })
       : '';
-    const valor = editando ? textoDigitado : textoDigitado || textoRegistrado;
+    const valor = consultaFechada ? textoRegistrado : editando ? textoDigitado : textoDigitado || textoRegistrado;
     const entradaBloqueada = saving || lendo || ticketFechado || !tipoAtual
       || !!ticketPreviewId || pesquisaAberta || !!autoPopup || !!salvoParaImpressao;
     const status = registrado > 0
-      ? (primeiro ? primeiraPendente > 0 ? 'Capturada' : 'Registrada'
+      ? (consultaFechada ? 'Concluída' : primeiro ? primeiraPendente > 0 ? 'Capturada' : 'Registrada'
         : ticketAtivo ? 'Capturada' : 'Preparada')
       : textoDigitado.trim() ? 'Aguardando confirmação' : 'Aguardando';
 
@@ -2028,6 +2050,7 @@ export default function TicketsWorkspace({
 
   // A pesquisa permite visualizar o Resumo sem trocar o ticket em operação.
   const resumoTicket = ticketPreview || ticketAtivo;
+  const consultaFechada = ticketPreview?.status === 'fechado';
   const resumoPedido = pedidos.find((p) => p.id === resumoTicket?.pedido_id);
   const resumoCliente = pessoas.find((p) => p.id === (resumoTicket?.cliente_id || resumoPedido?.cliente_id));
   const resumoProduto = produtos.find((p) => p.id === (resumoTicket?.produto_id || resumoPedido?.produto_id));
@@ -2070,7 +2093,56 @@ export default function TicketsWorkspace({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-3 lg:p-4">
-              {ticketPreview ? (
+              {consultaFechada ? (
+                <div className="flex min-h-full flex-col gap-3">
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                    <LockKeyhole className="mr-1.5 inline h-3.5 w-3.5" />
+                    Ticket {ticketPreview.numero} fechado — somente leitura. Use EDITAR no Resumo para fazer alterações.
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Tipo de ticket</Label>
+                    <Input value={tipoLabel(ticketPreview.tipo)} disabled />
+                  </div>
+                  <fieldset disabled className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6 lg:content-evenly lg:flex-1 [&_label]:text-[13px] [&_input]:h-10">
+                    <div className="min-w-0 space-y-1.5 lg:col-span-2">
+                      <Label>Motorista</Label>
+                      <Input value={ticketPreview.motorista || ''} disabled />
+                    </div>
+                    <div className="min-w-0 space-y-1.5 lg:col-span-2">
+                      <Label>Placa</Label>
+                      <Input value={formatPlaca(ticketPreview.placa)} disabled />
+                    </div>
+                    <div className="min-w-0 space-y-1.5 lg:col-span-2">
+                      <Label>Produto</Label>
+                      <Input value={resumoProduto?.nome || ticketPreview.produto_nome || ''} disabled />
+                    </div>
+                    <div className="min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-6">
+                      <Label>Transportadora</Label>
+                      <Input value={resumoTransportadora?.nome || ticketPreview.transportadora_nome || ''} disabled />
+                    </div>
+                    <div className="min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-6">
+                      <Label>{ticketPreview.tipo === 'compra' ? 'Fornecedor' : 'Cliente'}</Label>
+                      <Input value={resumoCliente?.nome || ticketPreview.cliente_nome || ''} disabled />
+                    </div>
+                    <div className="min-w-0 space-y-1.5 lg:col-span-3">
+                      <Label>Origem</Label>
+                      <Input value={ticketPreview.origem || ''} disabled />
+                    </div>
+                    <div className="min-w-0 space-y-1.5 lg:col-span-3">
+                      <Label>Destino</Label>
+                      <Input value={ticketPreview.destino || ''} disabled />
+                    </div>
+                    <div className="min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-6">
+                      <Label>Observação</Label>
+                      <Textarea rows={3} value={ticketPreview.observacao || ''} disabled className="resize-none" />
+                    </div>
+                  </fieldset>
+                  <Button type="button" variant="ghost" size="sm" className="self-start"
+                    onClick={() => { setTicketPreviewId(''); setTicketConsultaId(ticketAtivo?.id || ''); }}>
+                    Voltar ao formulário
+                  </Button>
+                </div>
+              ) : ticketPreview ? (
                 <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/15 p-4 text-center">
                   <FileText className="h-9 w-9 text-primary" />
                   <h3 className="text-base font-bold">{ticketPreview.numero}</h3>
@@ -2205,8 +2277,8 @@ export default function TicketsWorkspace({
                 </div>
               )}
 
-              <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2 xl:grid-cols-2 lg:flex-1 lg:content-evenly">
-                <div className="space-y-1.5">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-6 lg:flex-1 lg:content-evenly">
+                <div className="order-1 min-w-0 space-y-1.5 lg:col-span-2">
                   <Label>Motorista *</Label>
 
                   {ticketAtivo ? (
@@ -2238,7 +2310,7 @@ export default function TicketsWorkspace({
                   )}
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="order-2 min-w-0 space-y-1.5 lg:col-span-2">
                   <Label>Placa *</Label>
                   <Input
                     value={
@@ -2273,7 +2345,7 @@ export default function TicketsWorkspace({
                   )}
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="order-4 min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-6">
                   <Label>Transportadora{!isVenda ? ' *' : ''}</Label>
 
                   {ticketAtivo ? (
@@ -2337,7 +2409,7 @@ export default function TicketsWorkspace({
 
                 {isVenda ? (
                   <>
-                    <div className="space-y-1.5">
+                    <div className="order-5 min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-6">
                       <Label>Cliente</Label>
                       <Input
                         value={clienteAtual?.nome || '—'}
@@ -2346,7 +2418,7 @@ export default function TicketsWorkspace({
                       />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="order-3 min-w-0 space-y-1.5 lg:col-span-2">
                       <Label>Produto</Label>
                       <Input
                         value={produtoAtual?.nome || '—'}
@@ -2355,7 +2427,7 @@ export default function TicketsWorkspace({
                       />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="order-6 min-w-0 space-y-1.5 lg:col-span-3">
                       <Label>Origem</Label>
                       <Input
                         value={
@@ -2374,10 +2446,21 @@ export default function TicketsWorkspace({
                         className={ticketAtivo ? 'bg-muted/30' : ''}
                       />
                     </div>
+
+                    <div className="order-7 min-w-0 space-y-1.5 lg:col-span-3">
+                      <Label>Destino</Label>
+                      <Input
+                        value={ticketAtivo ? (ticketAtivo.destino || '') : form.destino}
+                        readOnly={!!ticketAtivo}
+                        onChange={(event) => setForm((prev) => ({ ...prev, destino: event.target.value }))}
+                        placeholder="Destino"
+                        className={ticketAtivo ? 'bg-muted/30' : ''}
+                      />
+                    </div>
                   </>
                 ) : (
                   <>
-                    <div className="space-y-1.5">
+                    <div className="order-5 min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-6">
                       <Label>
                         {tipoAtual === 'compra'
                           ? 'Fornecedor'
@@ -2418,7 +2501,7 @@ export default function TicketsWorkspace({
                       )}
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="order-3 min-w-0 space-y-1.5 lg:col-span-2">
                       <Label>Produto *</Label>
 
                       {ticketAtivo ? (
@@ -2451,7 +2534,7 @@ export default function TicketsWorkspace({
                       )}
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="order-6 min-w-0 space-y-1.5 lg:col-span-3">
                       <Label>Origem</Label>
                       <Input
                         value={
@@ -2475,7 +2558,7 @@ export default function TicketsWorkspace({
                       />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="order-7 min-w-0 space-y-1.5 lg:col-span-3">
                       <Label>Destino</Label>
                       <Input
                         value={
@@ -2503,7 +2586,7 @@ export default function TicketsWorkspace({
                   </>
                 )}
 
-                <div className="space-y-1.5 md:col-span-2 xl:col-span-3 lg:space-y-2">
+                <div className="order-8 min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-6 lg:space-y-2">
                   <Label>Observação</Label>
                   <Textarea
                     rows={3}
@@ -2538,17 +2621,26 @@ export default function TicketsWorkspace({
                 <FileText className="h-4 w-4 text-primary" />
                 Resumo do Ticket
               </h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 gap-1.5 font-bold"
-                onClick={() => setPesquisaAberta(true)}
-                disabled={saving || autoCapturando || !!autoPopup}
-                aria-label="PESQUISA"
-              >
-                <Search className="h-4 w-4" /> PESQUISA
-              </Button>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-2 font-bold"
+                  onClick={editarTicketDoResumo}
+                  disabled={!resumoTicket || saving || autoCapturando || !!autoPopup || !!salvoParaImpressao || capturaPendente || digitacaoPendente}
+                  aria-label="EDITAR">
+                  <Pencil className="h-3.5 w-3.5" /> EDITAR
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-2 font-bold"
+                  onClick={() => imprimirTicket(resumoTicket, true)}
+                  disabled={!resumoTicket || saving || autoCapturando || !!autoPopup || !!salvoParaImpressao}
+                  aria-label="IMPRIMIR">
+                  <Printer className="h-3.5 w-3.5" /> IMPRIMIR
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-2 font-bold"
+                  onClick={() => setPesquisaAberta(true)}
+                  disabled={saving || autoCapturando || !!autoPopup || !!salvoParaImpressao}
+                  aria-label="PESQUISA">
+                  <Search className="h-3.5 w-3.5" /> PESQUISA
+                </Button>
+              </div>
             </div>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               {ticketPreview
@@ -2558,9 +2650,9 @@ export default function TicketsWorkspace({
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 lg:p-4">
             <div className="flex min-h-0 flex-1 flex-col justify-around gap-3 overflow-y-auto">
-            {ticketPreview && (
+            {ticketPreview?.status === 'aberto' && (
               <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">
-                1º clique realizado: ticket em consulta. Para carregar no formulário, use o botão abaixo.
+                Ticket selecionado para consulta. Para carregar na operação, use Continuar pesagem abaixo.
               </div>
             )}
             <div className="space-y-1.5 rounded-lg bg-muted/20 p-2.5 text-xs lg:space-y-2 lg:p-3 lg:text-[13px]">
@@ -2728,8 +2820,10 @@ export default function TicketsWorkspace({
               <div className="flex w-full items-center justify-between gap-2">
                 <span className="text-xs font-semibold lg:text-sm">Peso Líquido</span>
                 <span className="text-3xl font-bold tabular-nums text-primary 2xl:text-4xl">
-                  {segundaPesagem > 0 && primeiraPesagem > 0
-                    ? formatKg(liquido)
+                  {consultaFechada
+                    ? formatKg(ticketPreview.peso_liquido || 0)
+                    : segundaPesagem > 0 && primeiraPesagem > 0
+                      ? formatKg(liquido)
                     : '—'}
                 </span>
               </div>
@@ -2929,6 +3023,16 @@ export default function TicketsWorkspace({
           </div>
         </SheetContent>
       </Sheet>
+
+      <EditarTicketDialog
+        ticket={ticketEdicao}
+        pedidos={pedidos}
+        pessoas={pessoas}
+        produtos={produtos}
+        transportadoras={transportadoras}
+        onClose={() => setTicketEdicao(null)}
+        onSaved={ticketEditadoSalvo}
+      />
 
       <AlertDialog open={!!salvoParaImpressao} onOpenChange={() => {}}>
         <AlertDialogContent onEscapeKeyDown={(event) => event.preventDefault()}
