@@ -1946,7 +1946,7 @@ export default function TicketsWorkspace({
         }));
 
   const tipoIcon =
-    TIPOS.find((item) => item.value === tipoAtual)?.icon ||
+    TIPOS.find((item) => item.value === (ticketPreview?.tipo || tipoAtual))?.icon ||
     FileText;
 
   const TipoIcon = tipoIcon;
@@ -2083,7 +2083,9 @@ export default function TicketsWorkspace({
                   </h2>
                   <p className="text-xs text-muted-foreground">
                     {ticketPreview
-                      ? 'Ticket selecionado para consulta. Continue pelo Resumo.'
+                      ? ticketPreview.status === 'fechado'
+                        ? 'Ticket fechado — consulta bloqueada para alterações diretas.'
+                        : 'Ticket selecionado para consulta. Continue pelo Resumo.'
                       : ticketAtivo
                         ? 'Ticket em aberto pronto para a 2ª pesagem.'
                         : 'Preencha os dados antes de capturar e confirmar o peso.'}
