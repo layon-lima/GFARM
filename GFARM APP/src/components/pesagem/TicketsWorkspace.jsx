@@ -1960,7 +1960,7 @@ export default function TicketsWorkspace({
       : primeiro ? primeiraPesagem : segundaPesagem;
     const textoDigitado = primeiro ? pesoDigitado1 : pesoDigitado2;
     const editando = etapaManual === etapa;
-    const ativo = etapaCaptura === etapa || editando;
+    const ativo = !consultaFechada && (etapaCaptura === etapa || editando);
     const entradaRef = primeiro ? primeiraInputRef : segundaInputRef;
     const textoRegistrado = registrado > 0
       ? Number(registrado).toLocaleString('pt-BR', {
