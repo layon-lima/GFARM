@@ -12,6 +12,8 @@ from app.api.entrada_saldo_mobile import (
     _validar_local,
     _validar_setor_usuario,
     aprovar,
+    editar_pendente,
+    EditarEntradaSaldoMobile,
 )
 from app.db.database import Base
 from app.models import (
@@ -307,6 +309,78 @@ class EntradaSaldoMobileTest(unittest.TestCase):
 
         self.assertTrue(exige)
         self.assertEqual(validada.id, "gav-1")
+
+
+    def test_edicao_pendente_nao_gera_saldo_e_preserva_foto(self):
+        db, admin = self._sessao_aprovacao()
+        dados = EditarEntradaSaldoMobile(
+            nome_produto="Produto teste",
+            quantidade=19.5,
+            setor_id="setor-1",
+            deposito_id="dep-1",
+            unidade="un",
+        )
+        with (
+            patch("app.api.entrada_saldo_mobile.movimentar_estoque") as motor,
+            patch("app.api.entrada_saldo_mobile.registrar_auditoria") as auditoria,
+        ):
+            resposta = editar_pendente(
+                "pend-1", dados, current_user=admin, db=db,
+            )
+
+        pendencia = db.get(EntradaSaldoMobilePendente, "pend-1")
+        self.assertEqual(pendencia.quantidade, 19.5)
+        self.assertEqual(pendencia.status, "PENDENTE")
+        self.assertIsNone(pendencia.documento_estoque_id)
+        self.assertEqual(
+            pendencia.foto_url,
+            "/uploads/11111111-1111-1111-1111-111111111111.jpg",
+        )
+        self.assertEqual(resposta["quantidade"], 19.5)
+        motor.assert_not_called()
+        auditoria.assert_called_once()
+        self.assertEqual(auditoria.call_args.kwargs["acao"], "editar")
+        db.close()
+
+    def test_nao_edita_solicitacao_ja_aprovada(self):
+        db, admin = self._sessao_aprovacao()
+        pendencia = db.get(EntradaSaldoMobilePendente, "pend-1")
+        pendencia.status = "APROVADO"
+        pendencia.documento_estoque_id = "doc-ja-existente"
+        db.commit()
+
+        with patch("app.api.entrada_saldo_mobile.movimentar_estoque") as motor:
+            with self.assertRaises(HTTPException) as erro:
+                editar_pendente(
+                    "pend-1",
+                    EditarEntradaSaldoMobile(**self._dados_aprovacao().model_dump()),
+                    current_user=admin,
+                    db=db,
+                )
+        self.assertEqual(erro.exception.status_code, 409)
+        self.assertEqual(db.get(EntradaSaldoMobilePendente, "pend-1").documento_estoque_id, "doc-ja-existente")
+        motor.assert_not_called()
+        db.close()
+
+    def test_edicao_deve_respeitar_relacao_setor_deposito(self):
+        db, admin = self._sessao_aprovacao()
+        db.add(Setor(id="setor-2", nome="Outro setor"))
+        db.commit()
+        dados = EditarEntradaSaldoMobile(
+            nome_produto="Produto teste",
+            quantidade=40,
+            setor_id="setor-2",
+            deposito_id="dep-1",
+            unidade="un",
+        )
+        with self.assertRaises(HTTPException) as erro:
+            editar_pendente("pend-1", dados, current_user=admin, db=db)
+        self.assertEqual(erro.exception.status_code, 400)
+        db.rollback()
+        pendencia = db.get(EntradaSaldoMobilePendente, "pend-1")
+        self.assertEqual(pendencia.status, "PENDENTE")
+        self.assertEqual(pendencia.quantidade, 12)
+        db.close()
 
 
 if __name__ == "__main__":
