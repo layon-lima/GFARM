@@ -15,18 +15,21 @@ import {
   Loader2,
   Search,
   Send,
+  ShieldCheck,
   XCircle,
 } from 'lucide-react';
 
 import { api } from '@/api/apiClient';
 import { entradaSaldoMobileApi } from '@/api/entradaSaldoMobileClient';
 import MobileProductPhoto from '@/components/mobile/MobileProductPhoto';
+import MobileEntradaSaldoRevisao from '@/components/mobile/MobileEntradaSaldoRevisao';
 import SearchSelect from '@/components/SearchSelect';
 import { Button } from '@/components/ui/button';
 import { Image } from '@/components/ui/image';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/AuthContext';
+import { hasPermission } from '@/lib/permissions';
 import { useEntidades } from '@/lib/useEntidades';
 import { setoresAcessiveis } from '@/lib/setoresAcesso';
 import { sortGavetas } from '@/lib/gavetas';
@@ -375,6 +378,8 @@ function SectorSelection({
   loading,
   onBack,
   onSelect,
+  podeRevisar = false,
+  onReview,
 }) {
   return (
     <div className="mobile-page pb-6">
@@ -397,6 +402,18 @@ function SectorSelection({
           </p>
         </div>
       </header>
+
+      {podeRevisar && (
+        <button type="button" onClick={onReview}
+          className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-left">
+          <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <strong className="block text-sm font-semibold">Revisar lançamentos manuais</strong>
+            <span className="block text-[11px] text-muted-foreground">Aprovar, recusar ou editar pendências</span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-primary" />
+        </button>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
@@ -455,9 +472,10 @@ export default function MobileEntradaSaldo() {
   const { setorId } = useParams();
   const { user } = useAuth();
 
-  const permitido =
-    user?.role === 'admin'
-    || user?.pode_entrada_manual_saldo_mobile === true;
+  const podeSolicitar = hasPermission(user, 'mobile.estoque.entrada_manual_saldo');
+  const podeRevisar = hasPermission(user, 'admin.entrada_saldo_mobile.revisar');
+  const permitido = podeSolicitar || podeRevisar;
+  const [revisaoAberta, setRevisaoAberta] = useState(false);
 
   const { data, loading } = useEntidades({
     Setor: {},
@@ -750,6 +768,28 @@ export default function MobileEntradaSaldo() {
     return <Navigate to="/" replace />;
   }
 
+  // A revisão é global aos setores, e fica acessível na mesma opção do mobile.
+  // Somente o backend pode autorizar e executar ações de revisão.
+  if (podeRevisar && (revisaoAberta || !podeSolicitar)) {
+    return (
+      <div className="mobile-page pb-6">
+        <header className="mb-3 flex items-center gap-3">
+          <button type="button" aria-label="Voltar" onClick={() => {
+            if (podeSolicitar) setRevisaoAberta(false);
+            else navigate('/');
+          }} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-background">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Entrada Manual</span>
+            <h1 className="text-lg font-bold">Revisar lançamentos</h1>
+          </div>
+        </header>
+        <MobileEntradaSaldoRevisao />
+      </div>
+    );
+  }
+
   if (!setorId || (!loading && !setorSelecionado)) {
     return (
       <SectorSelection
@@ -757,6 +797,8 @@ export default function MobileEntradaSaldo() {
         depositos={depositos}
         loading={loading}
         onBack={() => navigate('/')}
+        podeRevisar={podeRevisar}
+        onReview={() => setRevisaoAberta(true)}
         onSelect={(id) =>
           navigate(
             '/entrada-manual-saldo/' +
@@ -805,6 +847,14 @@ export default function MobileEntradaSaldo() {
           Trocar setor
         </button>
       </header>
+
+      {podeRevisar && (
+        <button type="button" onClick={() => setRevisaoAberta(true)}
+          className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm font-semibold text-primary">
+          <ShieldCheck className="h-4 w-4" />
+          Revisar lançamentos manuais
+        </button>
+      )}
 
       <form onSubmit={enviar} className="space-y-3">
         <section className="space-y-3 rounded-2xl border bg-card p-3.5">
