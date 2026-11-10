@@ -165,6 +165,11 @@ Regra permanente:
 - a contabilização final de ambos passa obrigatoriamente pelo motor oficial com `ENTRADA_SALDO_ADMIN`;
 - não criar saldo, quantidade ou produto com uma lógica paralela fora desse fluxo;
 - produto inexistente pode ser criado pela rotina oficial antes da contabilização, seguindo as mesmas regras do fluxo mobile.
+- Na própria opção **Entrada Manual de Saldo** do mobile, o Administrador Total e quem possui `admin.entrada_saldo_mobile.revisar` podem listar, editar, aprovar e recusar as solicitações de todos os setores; usuários comuns continuam apenas solicitando.
+- **Editar** só modifica os dados de uma solicitação `PENDENTE`, com validação de setor, depósito, gaveta, unidade e validade, e registro de auditoria; nunca altera saldo ou documento contábil.
+- **Recusar** exige justificativa e não contabiliza nem exclui histórico da solicitação.
+- **Aprovar** exige confirmação explícita e usa o endpoint oficial de revisão, que contabiliza com `processar_entrada_manual_saldo` e o motor `ENTRADA_SALDO_ADMIN`; solicitações já analisadas não podem ser reprocessadas.
+- A interface mobile e o PC compartilham a mesma fila, as mesmas permissões no backend e a mesma fonte de verdade; não criar motor paralelo para revisões pelo celular.
 
 ## 3.7 Permissões e Sub Administradores
 
