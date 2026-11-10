@@ -62,6 +62,12 @@ class RejeitarEntradaSaldoMobile(BaseModel):
     motivo: str = Field(min_length=2, max_length=2000)
 
 
+# Usa os mesmos campos e validações do pedido de aprovação, mas NÃO
+# movimenta o estoque: apenas corrige os dados de uma solicitação pendente.
+class EditarEntradaSaldoMobile(AprovarEntradaSaldoMobile):
+    pass
+
+
 def _nome_usuario(user: User) -> str:
     return user.display_name or user.username
 
@@ -452,6 +458,72 @@ def processar_entrada_manual_saldo(
         "documento_numero": documento_numero,
         "produto_criado": produto_criado,
     }
+
+
+@router.patch("/{item_id}")
+def editar_pendente(
+    item_id: str,
+    dados: EditarEntradaSaldoMobile,
+    current_user: User = Depends(dep_permissao("admin.entrada_saldo_mobile.revisar")),
+    db: Session = Depends(get_db),
+):
+    # Edição de solicitação é puramente cadastral; toda contabilização
+    # permanece EXCLUSIVAMENTE em aprovar() -> motor_estoque.
+    item = db.scalar(
+        select(EntradaSaldoMobilePendente)
+        .where(EntradaSaldoMobilePendente.id == item_id)
+        .with_for_update()
+    )
+    if item is None:
+        raise HTTPException(404, "Solicitação não encontrada.")
+    if item.status != "PENDENTE":
+        raise HTTPException(409, "Só é possível editar uma solicitação pendente.")
+
+    nome = dados.nome_produto.strip()
+    unidade = dados.unidade.strip().lower()
+    if not nome:
+        raise HTTPException(400, "Informe o nome do produto.")
+    if not unidade:
+        raise HTTPException(400, "Informe a unidade do produto.")
+
+    setor, _, _, _ = _validar_local(
+        db,
+        setor_id=dados.setor_id,
+        deposito_id=dados.deposito_id,
+        gaveta_id=dados.gaveta_id,
+    )
+    if setor.controla_validade and not dados.data_validade:
+        raise HTTPException(400, "Este setor exige uma data de validade.")
+
+    produto = _produto_por_nome(db, nome)
+    if produto is not None and produto.setor_id != dados.setor_id:
+        raise HTTPException(
+            409,
+            "O produto já existe em outro setor. Revise o cadastro antes de continuar.",
+        )
+
+    antes = _serializar(item)
+    item.nome_produto = nome
+    item.quantidade = float(dados.quantidade)
+    item.unidade = str(produto.unidade) if produto is not None else unidade
+    item.setor_id = dados.setor_id
+    item.deposito_id = dados.deposito_id
+    item.gaveta_id = str(dados.gaveta_id or "").strip() or None
+    item.data_validade = dados.data_validade
+
+    registrar_auditoria(
+        db,
+        usuario=current_user,
+        acao="editar",
+        entidade="EntradaSaldoMobilePendente",
+        registro_id=item.id,
+        antes=antes,
+        depois=_serializar(item),
+        detalhe="Solicitação mobile corrigida na revisão, ainda sem alterar saldo.",
+    )
+    db.commit()
+    db.refresh(item)
+    return _serializar(item)
 
 
 @router.post("/{item_id}/aprovar")
