@@ -614,7 +614,7 @@ export default function MobileEntradaSaldo() {
   );
 
   async function carregarRecentes() {
-    if (!permitido) return;
+    if (!podeSolicitar) return;
 
     setLoadingRecentes(true);
 
