@@ -44,6 +44,13 @@ export const entradaSaldoMobileApi = {
     return request('/entrada-saldo-mobile/contador');
   },
 
+  editar(id, dados) {
+    return request(`/entrada-saldo-mobile/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(dados),
+    });
+  },
+
   aprovar(id, dados) {
     return request(`/entrada-saldo-mobile/${encodeURIComponent(id)}/aprovar`, {
       method: 'POST',
