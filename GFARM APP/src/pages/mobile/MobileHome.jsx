@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEntidades } from '@/lib/useEntidades';
 import { filterProdutos } from '@/lib/estoqueFilters';
 import { mobilePageAllowed } from '@/lib/mobileAccess';
+import { hasPermission } from '@/lib/permissions';
 import { setoresAcessiveis } from '@/lib/setoresAcesso';
 
 const FILTROS_VAZIOS = {
@@ -104,13 +105,13 @@ export default function MobileHome() {
   );
 
   const entradaManualPermitida =
-    user?.role === 'admin'
-    || user?.pode_entrada_manual_saldo_mobile === true;
+    hasPermission(user, 'mobile.estoque.entrada_manual_saldo')
+    || hasPermission(user, 'admin.entrada_saldo_mobile.revisar');
 
   const atalhoEntradaManual = {
     key: 'entrada-manual-saldo',
     label: 'Entrada Manual de Saldo',
-    description: 'Escolher setor e lançar saldo',
+    description: 'Lançar saldo e revisar solicitações',
     path: '/entrada-manual-saldo',
     icon: PackagePlus,
     tone: 'emerald',
