@@ -149,7 +149,7 @@ export default function MobileEntradaSaldoRevisao() {
     if (!Number.isFinite(quantidade) || quantidade <= 0) {
       throw new Error('Informe uma quantidade maior que zero.');
     }
-    if (!setor || !deposito || deposito.setor_id !== setor.id) {
+    if (!setor || !deposito || (deposito.setor_id && deposito.setor_id !== setor.id)) {
       throw new Error('Selecione um setor e um depósito correspondente.');
     }
     if (gavetasLocal.length && !gavetasLocal.some((gaveta) => gaveta.id === dados.gaveta_id)) {
