@@ -41,7 +41,7 @@ TEMP_IMAGE_RE = re.compile(
 
 class CriarEntradaSaldoMobile(BaseModel):
     nome_produto: str = Field(min_length=1, max_length=255)
-    quantidade: float = Field(gt=0)
+    quantidade: float = Field(gt=0, allow_inf_nan=False)
     setor_id: str = Field(min_length=1, max_length=100)
     deposito_id: str = Field(min_length=1, max_length=100)
     gaveta_id: str | None = None
@@ -50,7 +50,7 @@ class CriarEntradaSaldoMobile(BaseModel):
 
 class AprovarEntradaSaldoMobile(BaseModel):
     nome_produto: str = Field(min_length=1, max_length=255)
-    quantidade: float = Field(gt=0)
+    quantidade: float = Field(gt=0, allow_inf_nan=False)
     setor_id: str = Field(min_length=1, max_length=100)
     deposito_id: str = Field(min_length=1, max_length=100)
     gaveta_id: str | None = None
@@ -501,6 +501,25 @@ def editar_pendente(
             409,
             "O produto já existe em outro setor. Revise o cadastro antes de continuar.",
         )
+
+    # Mantém a mesma proteção contra duplicidade que existe na solicitação
+    # original. Editar não pode criar dois pendentes iguais para o usuário.
+    duplicada = db.scalar(
+        select(EntradaSaldoMobilePendente)
+        .where(
+            EntradaSaldoMobilePendente.id != item_id,
+            EntradaSaldoMobilePendente.status == "PENDENTE",
+            EntradaSaldoMobilePendente.created_by_id == item.created_by_id,
+            func.lower(EntradaSaldoMobilePendente.nome_produto) == nome.lower(),
+            EntradaSaldoMobilePendente.deposito_id == dados.deposito_id,
+            EntradaSaldoMobilePendente.gaveta_id == (
+                str(dados.gaveta_id or "").strip() or None
+            ),
+        )
+        .limit(1)
+    )
+    if duplicada is not None:
+        raise HTTPException(409, "Já existe uma solicitação pendente igual neste local.")
 
     antes = _serializar(item)
     item.nome_produto = nome
