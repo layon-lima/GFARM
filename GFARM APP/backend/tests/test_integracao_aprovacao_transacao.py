@@ -42,8 +42,8 @@ class SessaoAprovacao:
         sql = str(statement)
         if "UPDATE integracao_recebimentos_pendentes" not in sql:
             raise AssertionError("SQL inesperado no teste: " + sql[:100])
-        self.estados.append("APROVADO" if "status='APROVADO'" in sql
-                           else "PENDENTE" if "status='PENDENTE'" in sql
+        self.estados.append("APROVADO" if "SET status='APROVADO'" in sql
+                           else "PENDENTE" if "SET status='PENDENTE'" in sql
                            else "PROCESSANDO")
         return SimpleNamespace(first=lambda: (1,))
 
