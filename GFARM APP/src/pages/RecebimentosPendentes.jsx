@@ -277,14 +277,14 @@ export default function RecebimentosPendentes() {
           <div>{d.quantidade} {d.unidade} · {money(unitarioFiscal)} / {d.unidade} · Total {money(d.valor_total)}</div>
           <div className={semCusto ? 'mt-1 text-xs font-medium text-amber-700' : 'mt-1 text-xs text-emerald-700'}>
             {semCusto
-              ? 'A nota chegou sem os valores fiscais. Recupere o custo com o XML original.'
+              ? 'A nota chegou sem os valores fiscais. Recupere pelo XML ou corrija o custo no campo abaixo.'
               : 'Custo unitário fiscal identificado — conversão para unidade-base automática na aprovação.'}
           </div>
           <div className="mt-1 break-all text-xs text-muted-foreground">Chave {d.chave_acesso || 'não informada'} · Código {d.codigo_produto || '—'} · CFOP {d.cfop || '—'} · NCM {d.ncm || '—'} · Validade {d.validade || '—'}</div>
         </div>
         {!fechado && semCusto ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50/60 px-3 py-2 text-xs">
-            <span>O custo não foi enviado pelo Controles. Anexe o XML original desta NF-e para recuperar os preços.</span>
+            <span>Os valores não vieram do Controles. Você pode recuperar pelo XML ou informar o custo unitário para aprovação.</span>
             <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-background px-2.5 py-1.5 font-semibold hover:bg-muted">
               <FileUp className="h-3.5 w-3.5" />
               {recuperando === item.origem_id ? 'Lendo XML...' : 'Recuperar custo pelo XML'}
