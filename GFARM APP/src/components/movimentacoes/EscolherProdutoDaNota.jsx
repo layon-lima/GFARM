@@ -16,7 +16,9 @@ export default function EscolherProdutoDaNota({
   const containerRef = useRef(null);
   const inputRef = useRef(null);
 
-  const texto = busca !== undefined ? busca : (selecionado?.nome || '');
+  // Começar com o nome da nota, mesmo quando ainda não existe vínculo:
+  // o operador vê o produto pesquisado e abre sugestões em um único clique.
+  const texto = busca !== undefined ? busca : (selecionado?.nome || String(dados.produto || ''));
   const opcoes = useMemo(
     () => sugerirProdutosDaNota(dados, produtos, texto, 12),
     [dados, produtos, texto],
@@ -75,7 +77,7 @@ export default function EscolherProdutoDaNota({
         className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-16 text-sm outline-none focus:ring-2 focus:ring-ring"
         placeholder={dados.produto ? 'Procurar ' + dados.produto + '...' : 'Nome ou código do produto'}
         value={texto}
-        onFocus={() => { setAberto(true); setAtivo(0); }}
+        onFocus={event => { setAberto(true); setAtivo(0); event.target.select(); }}
         onChange={event => {
           onSearch(event.target.value);
           setAtivo(0);
