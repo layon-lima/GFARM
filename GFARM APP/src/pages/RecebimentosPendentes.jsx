@@ -99,13 +99,15 @@ export default function RecebimentosPendentes() {
       const deposito = depositos.find(dep => dep.id === atual.deposito_id);
       const depositoId = deposito?.setor_id === produto.setor_id
         ? atual.deposito_id : (produto.deposito_id || '');
+      const gavetaId = [atual.gaveta_id, produto.gaveta_id].find(gavetaId =>
+        gavetaId && gavetas.some(gaveta => gaveta.id === gavetaId && gaveta.deposito_id === depositoId)
+      ) || '';
       return {
         ...prev,
         [id]: {
           ...atual, produto_id: produto.id,
           deposito_id: depositoId,
-          gaveta_id: depositoId && (atual.gaveta_id || produto.gaveta_id)
-            ? (atual.gaveta_id || produto.gaveta_id) : '',
+          gaveta_id: gavetaId,
         },
       };
     });
