@@ -42,7 +42,8 @@ function scoreTermos(alvo, candidato) {
   if (!alvo || !candidato) return 0;
   if (alvo === candidato) return 100;
   if (candidato.startsWith(alvo + ' ') || alvo.startsWith(candidato + ' ')) return 78;
-  if (alvo.length > 3 && candidato.includes(alvo)) return 66;
+  if (alvo.length >= 2 && candidato.startsWith(alvo)) return 76;
+  if (alvo.length >= 2 && candidato.includes(alvo)) return 58;
   const termosAlvo = alvo.split(' ').filter(t => t.length >= 3);
   const termosCandidato = new Set(candidato.split(' '));
   const intersecao = termosAlvo.filter(t => termosCandidato.has(t)).length;
