@@ -138,6 +138,23 @@ def receber(dados: Recebimento, x_integracao_token: str | None = Header(None),
     return {"origem_id": dados.origem_id, "status": "PENDENTE"}
 
 
+@router.delete("/{origem_id}")
+def cancelar_origem(origem_id: str, x_integracao_token: str | None = Header(None),
+                    db: Session = Depends(get_db)):
+    """Cancelar somente pendência ainda não contabilizada, antes da exclusão no Controles."""
+    _exigir_integracao(x_integracao_token)
+    result = db.execute(text("""
+        UPDATE integracao_recebimentos_pendentes
+           SET status='CANCELADO', atualizado_em=NOW(), revisado_em=NOW()
+         WHERE origem_id=:id AND status='PENDENTE' RETURNING id
+    """), {"id": origem_id}).first()
+    if result is None:
+        db.rollback()
+        raise HTTPException(409, "Recebimento não pode ser cancelado porque foi revisado ou está sendo processado.")
+    db.commit()
+    return {"status": "CANCELADO"}
+
+
 @router.get("/status/{origem_id}")
 def status_origem(origem_id: str, x_integracao_token: str | None = Header(None),
                   db: Session = Depends(get_db)):
