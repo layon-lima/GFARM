@@ -19,6 +19,7 @@ from app.db.database import engine, get_db
 from app.models import Produto, User
 from app.services.motor_estoque import EstoqueErro, movimentar_estoque
 from app.services.unidades_estoque import converter_quantidade_estoque
+from app.services.custo_nfe import DadosFiscaisIncompativeis, custo_unitario_na_base, extrair_custo_xml
 
 
 router = APIRouter(prefix="/api/integracoes/recebimentos", tags=["Recebimentos integrados"])
@@ -77,6 +78,10 @@ class Aprovar(BaseModel):
     fator_conversao: Decimal | None = Field(default=None, gt=0)
     custo_unitario_base: Decimal | None = Field(default=None, ge=0)
     validade: date | None = None
+
+
+class RecuperarCustoXml(BaseModel):
+    xml: str = Field(min_length=10, max_length=4_300_000)
 
 
 class Recusar(BaseModel):
@@ -208,6 +213,46 @@ def recusar(origem_id: str, dados: Recusar, user: User = Depends(get_current_use
     return {"status": "REJEITADO"}
 
 
+@router.post("/{origem_id}/recuperar-custo-xml")
+def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
+                       user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    """Recupera preço de pendências antigas diretamente do XML original.
+
+    Confere a chave da NF-e, o número, o item e a unidade. A atualização
+    afeta somente a pendência: nunca altera saldo nem aprova a entrada.
+    """
+    _exigir_revisor(user)
+    row = _row(db, origem_id)
+    if row is None:
+        raise HTTPException(404, "Recebimento não encontrado.")
+    if row["status"] != "PENDENTE":
+        raise HTTPException(409, "Somente recebimentos pendentes podem receber valores fiscais.")
+    try:
+        fiscal = extrair_custo_xml(dados.xml, row["dados"])
+    except DadosFiscaisIncompativeis as err:
+        raise HTTPException(422, str(err)) from err
+
+    payload = {**row["dados"], **fiscal}
+    atualizado = db.execute(text("""
+        UPDATE integracao_recebimentos_pendentes
+           SET dados=CAST(:dados AS JSONB), atualizado_em=NOW()
+         WHERE origem_id=:origem AND status='PENDENTE'
+         RETURNING id
+    """), {"origem": origem_id, "dados": json.dumps(payload, ensure_ascii=False)}).first()
+    if atualizado is None:
+        db.rollback()
+        raise HTTPException(409, "A pendência foi modificada durante a conferência.")
+    db.commit()
+    return {
+        "origem_id": origem_id,
+        "status": "PENDENTE",
+        "valor_unitario": fiscal["valor_unitario"],
+        "valor_total": fiscal["valor_total"],
+        "custo_origem": fiscal["custo_origem"],
+    }
+
+
 @router.post("/{origem_id}/aprovar")
 def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_user),
             db: Session = Depends(get_db)):
@@ -242,11 +287,16 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
     if fator <= 0:
         raise HTTPException(422, "Fator de conversão inválido.")
     if dados.custo_unitario_base is not None:
+        # Ajuste excepcional e explícito do administrador.
         custo = dados.custo_unitario_base
-    elif payload.get("valor_unitario") is not None:
-        custo = Decimal(str(payload["valor_unitario"])) / fator
     else:
-        raise HTTPException(422, "Informe o custo unitário do produto na unidade-base.")
+        try:
+            # Primeiro usa o total da NF-e; se não existir, usa vUnCom.
+            # A conversão é feita sobre a quantidade ORIGINAL da nota,
+            # sem distorção caso o administrador ajuste a entrada.
+            custo = custo_unitario_na_base(payload, fator)
+        except DadosFiscaisIncompativeis as err:
+            raise HTTPException(422, str(err)) from err
     validade = dados.validade.isoformat() if dados.validade else (payload.get("validade") or None)
     # Transição antes da chamada ao motor; impede aprovação/recusa concorrente.
     claimed = db.execute(text("""
