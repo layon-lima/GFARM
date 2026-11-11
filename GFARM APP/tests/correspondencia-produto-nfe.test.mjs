@@ -49,6 +49,11 @@ test('campo pesquisável encontra nomes já com 2 letras e códigos parciais', (
   assert.equal(porRef[0]?.produto.id,'z1');
 });
 
+test('entre variantes idênticas, somente a unidade compatível é selecionada', () => {
+  const variantes=[...produtos, {...produtos[0], id:'vkg', unidade:'kg', setor_id:'s2'}];
+  assert.equal(encontrarProdutoExatoDaNota(nota('Viance','L'), variantes)?.id,'v1');
+});
+
 test('unidade incompatível impede vínculo automático mesmo com nome idêntico', () => {
   assert.equal(encontrarProdutoExatoDaNota(nota('Viance','kg'), produtos), null);
   assert.equal(encontrarProdutoExatoDaNota(nota('Viance','L'), produtos)?.id,'v1');
