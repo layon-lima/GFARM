@@ -25,7 +25,11 @@ async function request(path, method = 'GET', payload, signal) {
     const detalhe = typeof data.detail === 'string' ? data.detail
       : Array.isArray(data.detail) ? data.detail.map(x => x.msg).filter(Boolean).join('; ')
       : typeof data.message === 'string' ? data.message : '';
-    throw new Error(detalhe || ('Erro HTTP ' + response.status + ' ao consultar recebimentos no GFARM.'));
+    const acao = path.endsWith('/aprovar') ? 'aprovar a entrada' :
+      path.endsWith('/recusar') ? 'recusar a entrada' :
+      path.includes('/recuperar-custo-xml') ? 'recuperar o custo da NF-e' :
+      'consultar recebimentos';
+    throw new Error(detalhe || ('Erro HTTP ' + response.status + ' ao ' + acao + ' no GFARM.'));
   }
   return data;
 }
