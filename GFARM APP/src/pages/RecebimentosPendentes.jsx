@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, FileUp, PackagePlus, RefreshCcw, XCircle } from 'lucide-react';
+import { Check, ChevronLeft, FileUp, RefreshCcw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 import NovoProdutoDaNota from '@/components/movimentacoes/NovoProdutoDaNota';
+import EscolherProdutoDaNota from '@/components/movimentacoes/EscolherProdutoDaNota';
+import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
 
 const API = import.meta.env.VITE_API_URL || '/api';
@@ -63,7 +65,71 @@ export default function RecebimentosPendentes() {
   const [recuperando, setRecuperando] = useState('');
   const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
 
-  const produtosOrdenados = useMemo(() => [...produtos].sort((a, b) => txt(a.nome).localeCompare(txt(b.nome), 'pt-BR')), [produtos]);
+  // A fila pode chegar ANTES do cache de Produtos. Vincular quando ambos
+  // estiverem carregados, sem sobrescrever escolhas/correções feitas pelo usuário.
+  useEffect(() => {
+    if (!produtos.length || !itens.length) return;
+    setEdicoes(anterior => {
+      let alterado = false;
+      const seguinte = { ...anterior };
+      for (const item of itens) {
+        if (item.status !== 'PENDENTE') continue;
+        const atual = anterior[item.origem_id] || {};
+        if (atual.produto_id || atual.vinculo_manual) continue;
+        const encontrado = encontrarProdutoExatoDaNota(item.dados, produtos);
+        if (!encontrado) continue;
+        const destinoAnterior = depositos.find(dep => dep.id === atual.deposito_id);
+        const depositoId = destinoAnterior?.setor_id === encontrado.setor_id
+          ? atual.deposito_id
+          : depositos.some(dep => dep.id === encontrado.deposito_id && dep.setor_id === encontrado.setor_id)
+            ? encontrado.deposito_id : '';
+        const gavetaId = [atual.gaveta_id, encontrado.gaveta_id].find(id =>
+          id && gavetas.some(g => g.id === id && g.deposito_id === depositoId)
+        ) || '';
+        seguinte[item.origem_id] = {
+          ...atual, produto_id: encontrado.id, deposito_id: depositoId,
+          gaveta_id: gavetaId, identificacao: 'automatico',
+          custo_unitario_base: '', custo_alterado: false,
+        };
+        alterado = true;
+      }
+      return alterado ? seguinte : anterior;
+    });
+  }, [produtos, itens, depositos, gavetas]);
+
+  function selecionarProduto(id, produto, identificacao = 'manual') {
+    setBuscas(anterior => ({ ...anterior, [id]: produto.nome }));
+    setEdicoes(anterior => {
+      const atual = anterior[id] || {};
+      const depositoAnterior = depositos.find(dep => dep.id === atual.deposito_id);
+      const depositoId = depositoAnterior?.setor_id === produto.setor_id
+        ? atual.deposito_id
+        : depositos.some(dep => dep.id === produto.deposito_id && dep.setor_id === produto.setor_id)
+          ? produto.deposito_id : '';
+      const gavetaId = [atual.gaveta_id, produto.gaveta_id].find(id =>
+        id && gavetas.some(g => g.id === id && g.deposito_id === depositoId)
+      ) || '';
+      return {
+        ...anterior,
+        [id]: { ...atual, produto_id: produto.id,
+          deposito_id: depositoId, gaveta_id: gavetaId,
+          identificacao, vinculo_manual: true,
+          custo_unitario_base: '', custo_alterado: false },
+      };
+    });
+  }
+
+  function pesquisarProduto(id, valor) {
+    setBuscas(anterior => ({ ...anterior, [id]: valor }));
+    setEdicoes(anterior => ({
+      ...anterior,
+      [id]: {
+        ...anterior[id], produto_id: '', deposito_id: '', gaveta_id: '',
+        identificacao: '', vinculo_manual: true,
+        custo_unitario_base: '', custo_alterado: false,
+      },
+    }));
+  }
 
   async function carregar(signal) {
     if (!permitido) return;
@@ -97,31 +163,14 @@ export default function RecebimentosPendentes() {
   }, [status, permitido]);
 
   async function selecionarProdutoCriado(produto, { novo } = {}) {
-    setProdutosCriados(prev => [...prev.filter(item => item.id !== produto.id), produto]);
-    setBuscas(prev => ({ ...prev, [criandoProdutoDe.origem_id]: produto.nome }));
-    setEdicoes(prev => {
-      const id = criandoProdutoDe.origem_id;
-      const atual = prev[id] || {};
-      const deposito = depositos.find(dep => dep.id === atual.deposito_id);
-      const depositoId = deposito?.setor_id === produto.setor_id
-        ? atual.deposito_id : (produto.deposito_id || '');
-      const gavetaId = [atual.gaveta_id, produto.gaveta_id].find(gavetaId =>
-        gavetaId && gavetas.some(gaveta => gaveta.id === gavetaId && gaveta.deposito_id === depositoId)
-      ) || '';
-      return {
-        ...prev,
-        [id]: {
-          ...atual, produto_id: produto.id,
-          deposito_id: depositoId,
-          gaveta_id: gavetaId,
-          custo_unitario_base: '', custo_alterado: false,
-        },
-      };
-    });
+    const id = criandoProdutoDe.origem_id;
+    setProdutosCriados(anterior => [
+      ...anterior.filter(p => p.id !== produto.id),
+      produto,
+    ]);
+    selecionarProduto(id, produto, novo ? 'criado' : 'manual');
     setCriandoProdutoDe(null);
-    if (!novo) {
-      toast({ title: 'Produto existente selecionado', description: produto.nome });
-    }
+    if (!novo) toast({ title: 'Produto existente selecionado', description: produto.nome });
   }
 
   function alterar(id, campo, valor) {
@@ -256,8 +305,6 @@ export default function RecebimentosPendentes() {
       const produto = produtos.find(p => p.id === e.produto_id);
       const optsDepositos = depositos.filter(dep => !produto?.setor_id || dep.setor_id === produto.setor_id);
       const optsGavetas = gavetas.filter(gav => gav.deposito_id === e.deposito_id);
-      const filtro = txt(buscas[item.origem_id]).toLowerCase();
-      const encontrados = produtosOrdenados.filter(p => (txt(p.nome) + ' ' + txt(p.codigo)).toLowerCase().includes(filtro)).slice(0, 100);
       const fechado = item.status === 'APROVADO' || item.status === 'REJEITADO';
       const semCusto = d.valor_unitario == null && d.valor_total == null;
       const unitarioFiscal = precoFiscalNaUnidadeBase(d);
@@ -305,24 +352,19 @@ export default function RecebimentosPendentes() {
           </div>
         ) : null}
         {fechado ? <p className="text-sm text-muted-foreground">{item.documento_estoque_id ? 'Documento do estoque: ' + item.documento_estoque_id : item.motivo_recusa}</p> : <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
-          <label className="space-y-1 text-xs">Buscar produto do GFARM
-            <Input placeholder="Nome ou código" value={buscas[item.origem_id] || ''} onChange={ev => setBuscas(p => ({ ...p, [item.origem_id]: ev.target.value }))} />
-            <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={e.produto_id || ''} onChange={ev => alterar(item.origem_id, 'produto_id', ev.target.value)}>
-              <option value="">Selecione o produto</option>
-              {encontrados.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.unidade})</option>)}
-            </select>
-            {!e.produto_id && podeCadastrar ? (
-              <button type="button" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-                onClick={() => setCriandoProdutoDe(item)}>
-                <PackagePlus className="h-3.5 w-3.5" /> Não encontrou? Cadastrar usando a NF-e
-              </button>
-            ) : null}
-            {!e.produto_id && !podeCadastrar ? (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Produto não encontrado? Solicite o cadastro a quem tem acesso a Cadastros.
-              </p>
-            ) : null}
-          </label>
+          <EscolherProdutoDaNota
+            dados={{ ...d, origem_id: item.origem_id }}
+            produtos={produtos}
+            setores={setores}
+            selecionado={produto || null}
+            busca={buscas[item.origem_id]}
+            identificacao={e.identificacao}
+            onSearch={valor => pesquisarProduto(item.origem_id, valor)}
+            onSelect={selecionado => selecionarProduto(item.origem_id, selecionado)}
+            onClear={() => pesquisarProduto(item.origem_id, '')}
+            onCreate={() => setCriandoProdutoDe(item)}
+            podeCadastrar={podeCadastrar}
+          />
           <label className="space-y-1 text-xs">Depósito de destino
             <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={e.deposito_id || ''} onChange={ev => alterar(item.origem_id, 'deposito_id', ev.target.value)}>
               <option value="">Selecione depósito</option>
