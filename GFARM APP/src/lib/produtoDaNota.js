@@ -1,5 +1,5 @@
 import { proximoCodigoInterno } from './produtoCodigo.js';
-import { precisaConversaoCustom } from './units.js';
+import { convertQty, normalizarUnidade } from './units.js';
 
 /**
  * Dados do cadastro mestre, usando exclusivamente informações confirmadas.
@@ -27,10 +27,19 @@ export function montarProdutoDaNota(dados, form, produtos, depositos, gavetas) {
     throw new Error('Gaveta não pertence ao depósito escolhido.');
   }
 
-  const conversao = precisaConversaoCustom(dados.unidade, unidade);
-  const fator = Number(String(form.fator_conversao || '').replace(',', '.'));
-  if (conversao && !(Number.isFinite(fator) && fator > 0)) {
-    throw new Error(`Informe quantas unidades ${unidade} equivalem a 1 ${dados.unidade}.`);
+  // O motor do GFARM exige igualdade literal da unidade-base OU
+  // unidade_alt + fator. Mesmo os sinônimos LT / L, T / ton precisam ficar
+  // configurados, senão a aprovação falha.
+  const unidadeNfe = String(dados.unidade || '').trim();
+  const unidadeIgual = unidadeNfe.toUpperCase() === unidade.toUpperCase();
+  const unidadeCanonica = normalizarUnidade(unidadeNfe);
+  const fatorAutomatico = unidadeCanonica ? convertQty(1, unidadeCanonica, unidade) : null;
+  const fatorInformado = Number(String(form.fator_conversao || '').replace(',', '.'));
+  const fator = unidadeIgual ? 0 :
+    (fatorAutomatico !== null && Number.isFinite(fatorAutomatico) && fatorAutomatico > 0)
+      ? fatorAutomatico : fatorInformado;
+  if (!unidadeIgual && !(Number.isFinite(fator) && fator > 0)) {
+    throw new Error(`Informe quantas unidades ${unidade} equivalem a 1 ${unidadeNfe}.`);
   }
 
   return {
@@ -41,8 +50,8 @@ export function montarProdutoDaNota(dados, form, produtos, depositos, gavetas) {
     deposito_id: deposito || null,
     gaveta_id: gaveta || null,
     unidade,
-    unidade_alt: conversao ? String(dados.unidade).trim() : null,
-    fator_conversao: conversao ? fator : 0,
+    unidade_alt: unidadeIgual ? null : unidadeNfe,
+    fator_conversao: unidadeIgual ? 0 : fator,
     estoque_minimo: 0,
     custo_unitario: 0,
     venda: false,
