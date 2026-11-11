@@ -127,13 +127,17 @@ def receber(dados: Recebimento, x_integracao_token: str | None = Header(None),
         if atual["dados"] != payload:
             raise HTTPException(409, "O recebimento já foi revisado e não admite alteração.")
         return {"origem_id": dados.origem_id, "status": atual["status"]}
-    db.execute(text("""
+    updated = db.execute(text("""
         INSERT INTO integracao_recebimentos_pendentes (origem_id, dados)
         VALUES (:id, CAST(:dados AS JSONB))
         ON CONFLICT (origem_id) DO UPDATE
         SET dados = EXCLUDED.dados, atualizado_em = NOW()
         WHERE integracao_recebimentos_pendentes.status = 'PENDENTE'
-    """), {"id": dados.origem_id, "dados": json.dumps(payload, ensure_ascii=False)})
+        RETURNING origem_id
+    """), {"id": dados.origem_id, "dados": json.dumps(payload, ensure_ascii=False)}).first()
+    if updated is None:
+        db.rollback()
+        raise HTTPException(409, "Recebimento em revisão no GFARM; não é possível atualizar.")
     db.commit()
     return {"origem_id": dados.origem_id, "status": "PENDENTE"}
 
