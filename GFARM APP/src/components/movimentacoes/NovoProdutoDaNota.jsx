@@ -10,7 +10,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { invalidateEntidade } from '@/lib/useEntidades';
-import { proximoCodigoInterno } from '@/lib/produtoCodigo';
+import { montarProdutoDaNota } from '@/lib/produtoDaNota';
 import { normalizarUnidade, precisaConversaoCustom, UNIDADES } from '@/lib/units';
 
 const normalizar = (valor) => String(valor || '').trim().normalize('NFKD')
@@ -81,11 +81,11 @@ export default function NovoProdutoDaNota({
     try {
       // Consulta o cadastro real antes de criar; não use só os primeiros 100 resultados do seletor.
       const existentes = await api.entities.Produto.list();
+      // Código de fornecedor não é identificador global: o mesmo pode ser usado
+      // por emitentes diferentes. Só reaproveitar um produto quando o nome e
+      // setor correspondem exatamente.
       const duplicado = (Array.isArray(existentes) ? existentes : produtos).find(prod =>
-        prod.setor_id === form.setor_id && (
-          normalizar(prod.nome) === normalizar(nome)
-          || (referencia && normalizar(prod.codigo_referencia) === normalizar(referencia))
-        )
+        prod.setor_id === form.setor_id && normalizar(prod.nome) === normalizar(nome)
       );
       if (duplicado) {
         toast({
@@ -96,20 +96,10 @@ export default function NovoProdutoDaNota({
         return;
       }
 
-      const criado = await api.entities.Produto.create({
-        codigo: proximoCodigoInterno(Array.isArray(existentes) ? existentes : produtos),
-        nome, codigo_referencia: referencia || null,
-        setor_id: form.setor_id,
-        deposito_id: form.deposito_id || null,
-        gaveta_id: form.gaveta_id || null,
-        unidade: form.unidade,
-        unidade_alt: exigeConversao ? String(dados.unidade).trim() : null,
-        fator_conversao: exigeConversao ? fator : 0,
-        estoque_minimo: 0,
-        custo_unitario: 0,
-        venda: false,
-        // Não enviar quantidade: só o motor pode alterar saldo.
-      });
+      const payload = montarProdutoDaNota(
+        dados, form, Array.isArray(existentes) ? existentes : produtos, depositos, gavetas
+      );
+      const criado = await api.entities.Produto.create(payload);
       await invalidateEntidade('Produto');
       await onCreated(criado, { novo: true });
       toast({
