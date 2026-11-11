@@ -16,6 +16,7 @@ import ResponsiveDashboard from '@/pages/ResponsiveDashboard';
 import SetorDetail from '@/pages/SetorDetail';
 import Cadastros from '@/pages/Cadastros';
 import Movimentacoes from '@/pages/Movimentacoes';
+import RecebimentosPendentes from '@/pages/RecebimentosPendentes';
 import Abastecimento from '@/pages/Abastecimento';
 import Pesagem from '@/pages/Pesagem';
 import Aplicacao from '@/pages/Aplicacao';
@@ -147,6 +148,7 @@ const AuthenticatedApp = () => {
         <Route path="/cadastros" element={<Cadastros />} />
         <Route path="/usuarios/:userId/permissoes" element={<UsuarioPermissoes />} />
         <Route path="/movimentacoes" element={<Movimentacoes />} />
+        <Route path="/recebimentos-pendentes" element={<RecebimentosPendentes />} />
         <Route path="/abastecimento" element={<Abastecimento />} />
         <Route path="/pesagem" element={<Pesagem />} />
         <Route path="/aplicacao" element={<Aplicacao />} />
