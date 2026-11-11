@@ -175,13 +175,19 @@ def status_origem(origem_id: str, x_integracao_token: str | None = Header(None),
 def listar(status: Literal["PENDENTE", "PROCESSANDO", "APROVADO", "REJEITADO"] | None = None,
            user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     _exigir_revisor(user)
-    rows = db.execute(text("""
+    # O PostgreSQL, com psycopg, pode receber o mesmo bind Python como dois
+    # parâmetros distintos. (:status IS NULL OR status = :status) deixa o
+    # primeiro sem tipo inferível e causa "could not determine data type of
+    # parameter $1". Aplicar o filtro somente quando há status evita isso.
+    filtro = "WHERE status = :status" if status is not None else ""
+    parametros = {"status": status} if status is not None else {}
+    rows = db.execute(text(f"""
         SELECT id, origem_id, dados, status, motivo_recusa, documento_estoque_id,
                criado_em, atualizado_em, revisado_em
         FROM integracao_recebimentos_pendentes
-        WHERE (:status IS NULL OR status = :status)
+        {filtro}
         ORDER BY criado_em DESC LIMIT 300
-    """), {"status": status}).mappings().all()
+    """), parametros).mappings().all()
     return [_serial(row) for row in rows]
 
 
