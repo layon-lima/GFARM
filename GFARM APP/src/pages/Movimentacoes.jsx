@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ArrowDownToLine,
   ArrowRightLeft,
@@ -943,6 +944,9 @@ export default function Movimentacoes() {
 
             <p className="mt-0.5 text-sm text-muted-foreground">
               Registre entradas, saídas, transferências e estornos de produtos no seu estoque.
+            </p>
+            {podeEntradaManualSaldo ? <Link to="/recebimentos-pendentes" className="mt-2 inline-flex items-center rounded-lg border bg-background px-3 py-2 text-sm font-medium hover:bg-muted">Recebimentos pendentes do Meus Controles</Link> : null}
+            <p className="hidden">
             </p>
           </header>
 
