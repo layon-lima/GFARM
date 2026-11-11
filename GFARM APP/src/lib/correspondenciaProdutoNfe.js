@@ -90,7 +90,7 @@ export function encontrarProdutoExatoDaNota(dados, produtos) {
   const nome = normalizarNomeProduto(dados?.produto);
   if (!nome) return null;
   const encontrados = (Array.isArray(produtos) ? produtos : [])
-    .filter(produto => normalizarNomeProduto(produto.nome) === nome);
-  if (encontrados.length !== 1) return null;
-  return unidadeCompatível(dados, encontrados[0]) ? encontrados[0] : null;
+    .filter(produto => normalizarNomeProduto(produto.nome) === nome &&
+      unidadeCompatível(dados, produto));
+  return encontrados.length === 1 ? encontrados[0] : null;
 }
