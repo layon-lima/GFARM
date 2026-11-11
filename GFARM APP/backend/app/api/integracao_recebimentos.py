@@ -282,6 +282,11 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
 def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_user),
             db: Session = Depends(get_db)):
     _exigir_revisor(user)
+    # O COMMIT do claim abaixo expira os objetos ORM (expire_on_commit=True).
+    # Consultar user.id DEPOIS do commit dispara um SELECT implícito, abrindo
+    # outra transação antes de movimentar_estoque() chamar db.begin().
+    # Capturar o identificador antes do commit evita InvalidRequestError/HTTP 500.
+    usuario_id = str(user.id)
     row = _row(db, origem_id)
     if row is None:
         raise HTTPException(404, "Recebimento não encontrado.")
@@ -356,7 +361,7 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
     try:
         db.rollback()  # motor abre sua própria transação
         documento = movimentar_estoque(
-            db, tipo_movimento="ENTRADA_COMPRA", usuario_id=user.id,
+            db, tipo_movimento="ENTRADA_COMPRA", usuario_id=usuario_id,
             itens=[item], origem_modulo="controles_recebimentos",
             documento_origem_id=origem_id,
             referencia_externa=payload.get("chave_acesso") or payload["numero_nota"],
