@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, RefreshCcw, XCircle } from 'lucide-react';
+import { Check, ChevronLeft, PackagePlus, RefreshCcw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { useEntidades, invalidateEstoque } from '@/lib/useEntidades';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/permissions';
+import NovoProdutoDaNota from '@/components/movimentacoes/NovoProdutoDaNota';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 async function request(path, method = 'GET', payload, signal) {
@@ -34,8 +35,17 @@ export default function RecebimentosPendentes() {
   const { user } = useAuth();
   const { toast } = useToast();
   const permitido = hasPermission(user, 'admin.estoque.entrada_manual');
+  // Segue a mesma permissão da tela de cadastros: revisar estoque não concede,
+  // por si só, autorização para criar produtos mestres.
+  const podeCadastrar = hasPermission(user, 'page.cadastros');
   const { data } = useEntidades({ Produto: {}, Deposito: {}, Gaveta: {}, Setor: {} });
-  const produtos = data.Produto || [];
+  const [produtosCriados, setProdutosCriados] = useState([]);
+  const produtos = useMemo(() => {
+    const atuais = data.Produto || [];
+    const ids = new Set(atuais.map(produto => produto.id));
+    return [...atuais, ...produtosCriados.filter(produto => !ids.has(produto.id))];
+  }, [data.Produto, produtosCriados]);
+  const setores = data.Setor || [];
   const depositos = data.Deposito || [];
   const gavetas = data.Gaveta || [];
   const [itens, setItens] = useState([]);
@@ -45,6 +55,7 @@ export default function RecebimentosPendentes() {
   const [status, setStatus] = useState('PENDENTE');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState('');
+  const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
 
   const produtosOrdenados = useMemo(() => [...produtos].sort((a, b) => txt(a.nome).localeCompare(txt(b.nome), 'pt-BR')), [produtos]);
 
@@ -78,6 +89,31 @@ export default function RecebimentosPendentes() {
     carregar(controller.signal);
     return () => controller.abort();
   }, [status, permitido]);
+
+  async function selecionarProdutoCriado(produto, { novo } = {}) {
+    setProdutosCriados(prev => [...prev.filter(item => item.id !== produto.id), produto]);
+    setBuscas(prev => ({ ...prev, [criandoProdutoDe.origem_id]: produto.nome }));
+    setEdicoes(prev => {
+      const id = criandoProdutoDe.origem_id;
+      const atual = prev[id] || {};
+      const deposito = depositos.find(dep => dep.id === atual.deposito_id);
+      const depositoId = deposito?.setor_id === produto.setor_id
+        ? atual.deposito_id : (produto.deposito_id || '');
+      return {
+        ...prev,
+        [id]: {
+          ...atual, produto_id: produto.id,
+          deposito_id: depositoId,
+          gaveta_id: depositoId && (atual.gaveta_id || produto.gaveta_id)
+            ? (atual.gaveta_id || produto.gaveta_id) : '',
+        },
+      };
+    });
+    setCriandoProdutoDe(null);
+    if (!novo) {
+      toast({ title: 'Produto existente selecionado', description: produto.nome });
+    }
+  }
 
   function alterar(id, campo, valor) {
     setEdicoes(prev => ({
@@ -179,6 +215,17 @@ export default function RecebimentosPendentes() {
               <option value="">Selecione o produto</option>
               {encontrados.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.unidade})</option>)}
             </select>
+            {!e.produto_id && podeCadastrar ? (
+              <button type="button" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                onClick={() => setCriandoProdutoDe(item)}>
+                <PackagePlus className="h-3.5 w-3.5" /> Não encontrou? Cadastrar usando a NF-e
+              </button>
+            ) : null}
+            {!e.produto_id && !podeCadastrar ? (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Produto não encontrado? Solicite o cadastro a quem tem acesso a Cadastros.
+              </p>
+            ) : null}
           </label>
           <label className="space-y-1 text-xs">Depósito de destino
             <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={e.deposito_id || ''} onChange={ev => alterar(item.origem_id, 'deposito_id', ev.target.value)}>
@@ -215,5 +262,18 @@ export default function RecebimentosPendentes() {
         </div>}
       </Card>;
     })}
+    {criandoProdutoDe && (
+      <NovoProdutoDaNota
+        key={criandoProdutoDe.origem_id}
+        item={criandoProdutoDe}
+        setores={setores}
+        depositos={depositos}
+        gavetas={gavetas}
+        produtos={produtos}
+        depositoInicial={edicoes[criandoProdutoDe.origem_id]?.deposito_id || ''}
+        onClose={() => setCriandoProdutoDe(null)}
+        onCreated={selecionarProdutoCriado}
+      />
+    )}
   </div>;
 }
