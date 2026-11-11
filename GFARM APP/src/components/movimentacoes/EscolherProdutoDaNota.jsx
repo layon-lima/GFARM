@@ -121,7 +121,7 @@ export default function EscolherProdutoDaNota({
       </div>
     )}
     {aberto && (
-      <div className="absolute left-0 right-0 top-[37px] z-50 overflow-hidden rounded-lg border bg-popover shadow-lg"
+      <div className="absolute left-0 right-0 top-[60px] z-50 overflow-hidden rounded-lg border bg-popover shadow-lg"
         style={{ minWidth: 'min(100%, 280px)' }}>
         <div className="max-h-56 overflow-y-auto p-1"
           id={'opcoes-produto-' + String(dados.origem_id || dados.numero_nota || 'nfe')}
