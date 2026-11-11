@@ -56,7 +56,6 @@ export default function NovoProdutoDaNota({
     event.preventDefault();
     if (salvando) return;
     const nome = form.nome.trim();
-    const referencia = form.codigo_referencia.trim();
     if (!nome || !form.setor_id || !form.unidade) {
       toast({ variant: 'destructive', title: 'Informe nome, setor e unidade.' });
       return;
