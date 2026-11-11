@@ -10,15 +10,21 @@ import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 
 const API = import.meta.env.VITE_API_URL || '/api';
-async function request(path, method = 'GET', payload) {
+async function request(path, method = 'GET', payload, signal) {
   const token = localStorage.getItem('nh_access_token');
   const response = await fetch(API + '/integracoes/recebimentos' + path, {
     method,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
+    signal,
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Falha ao processar recebimento.');
+  if (!response.ok) {
+    const detalhe = typeof data.detail === 'string' ? data.detail
+      : Array.isArray(data.detail) ? data.detail.map(x => x.msg).filter(Boolean).join('; ')
+      : typeof data.message === 'string' ? data.message : '';
+    throw new Error(detalhe || ('Erro HTTP ' + response.status + ' ao consultar recebimentos no GFARM.'));
+  }
   return data;
 }
 const txt = value => String(value ?? '');
@@ -42,11 +48,13 @@ export default function RecebimentosPendentes() {
 
   const produtosOrdenados = useMemo(() => [...produtos].sort((a, b) => txt(a.nome).localeCompare(txt(b.nome), 'pt-BR')), [produtos]);
 
-  async function carregar() {
+  async function carregar(signal) {
     if (!permitido) return;
     setLoading(true);
     try {
-      const lista = await request('?status=' + status);
+      const lista = await request('?status=' + status, 'GET', undefined, signal);
+      if (signal?.aborted) return;
+      if (!Array.isArray(lista)) throw new Error('A API retornou uma lista de recebimentos inválida.');
       setItens(lista);
       setEdicoes(prev => Object.fromEntries(lista.map(item => [
         item.origem_id, prev[item.origem_id] || {
@@ -58,11 +66,18 @@ export default function RecebimentosPendentes() {
         }
       ])));
     } catch (error) {
+      // O modo StrictMode do React cancela a primeira consulta ao montar a tela;
+      // não exibir dois avisos para um único erro.
+      if (signal?.aborted || error.name === 'AbortError') return;
       toast({ variant: 'destructive', title: 'Erro ao listar recebimentos', description: error.message });
-    } finally { setLoading(false); }
+    } finally { if (!signal?.aborted) setLoading(false); }
   }
 
-  useEffect(() => { carregar(); }, [status, permitido]);
+  useEffect(() => {
+    const controller = new AbortController();
+    carregar(controller.signal);
+    return () => controller.abort();
+  }, [status, permitido]);
 
   function alterar(id, campo, valor) {
     setEdicoes(prev => ({
@@ -129,7 +144,7 @@ export default function RecebimentosPendentes() {
           <option value="APROVADO">Aprovados</option>
           <option value="REJEITADO">Recusados</option>
         </select>
-        <Button variant="outline" onClick={carregar} disabled={loading}><RefreshCcw className="mr-1 h-4 w-4" /> Atualizar</Button>
+        <Button variant="outline" onClick={() => carregar()} disabled={loading}><RefreshCcw className="mr-1 h-4 w-4" /> Atualizar</Button>
       </div>
     </div>
     {loading && !itens.length ? <p className="text-sm text-muted-foreground">Carregando...</p> : null}
