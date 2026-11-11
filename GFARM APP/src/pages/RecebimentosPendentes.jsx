@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, PackagePlus, RefreshCcw, XCircle } from 'lucide-react';
+import { Check, ChevronLeft, FileUp, PackagePlus, RefreshCcw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -55,6 +55,7 @@ export default function RecebimentosPendentes() {
   const [status, setStatus] = useState('PENDENTE');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState('');
+  const [recuperando, setRecuperando] = useState('');
   const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
 
   const produtosOrdenados = useMemo(() => [...produtos].sort((a, b) => txt(a.nome).localeCompare(txt(b.nome), 'pt-BR')), [produtos]);
@@ -127,10 +128,55 @@ export default function RecebimentosPendentes() {
     }));
   }
 
+  async function recuperarValorXml(item, arquivo) {
+    if (!arquivo || recuperando) return;
+    if (arquivo.size > 3 * 1024 * 1024) {
+      toast({ variant: 'destructive', title: 'XML muito grande', description: 'Máximo de 3 MB.' });
+      return;
+    }
+    setRecuperando(item.origem_id);
+    try {
+      const xml = await new Promise((resolve, reject) => {
+        const leitor = new FileReader();
+        leitor.onload = () => {
+          const resultado = String(leitor.result || '');
+          resolve(resultado.slice(resultado.indexOf(',') + 1));
+        };
+        leitor.onerror = () => reject(new Error('Não foi possível ler o XML no navegador.'));
+        leitor.readAsDataURL(arquivo);
+      });
+      const retorno = await request(
+        '/' + encodeURIComponent(item.origem_id) + '/recuperar-custo-xml',
+        'POST', { xml }
+      );
+      await carregar();
+      toast({
+        title: 'Custo fiscal recuperado da NF-e',
+        description: retorno.itens_atualizados + ' produto(s) da mesma nota atualizado(s).' +
+          (retorno.nao_identificados?.length ? ' Alguns produtos precisam de conferência.' : ''),
+      });
+    } catch (erro) {
+      toast({
+        variant: 'destructive', title: 'Não foi possível recuperar o custo',
+        description: erro.message,
+      });
+    } finally {
+      setRecuperando('');
+    }
+  }
+
   async function aprovar(item) {
     const edit = edicoes[item.origem_id];
     if (!edit?.produto_id || !edit?.deposito_id) {
       toast({ variant: 'destructive', title: 'Selecione produto e depósito do GFARM' }); return;
+    }
+    if (item.dados.valor_unitario == null && item.dados.valor_total == null &&
+        edit.custo_unitario_base === '') {
+      toast({
+        variant: 'destructive', title: 'Falta o valor fiscal da NF-e',
+        description: 'Use "Recuperar custo pelo XML" nesta nota. O GFARM não vai inventar o preço.',
+      });
+      return;
     }
     const payload = {
       produto_id: edit.produto_id, deposito_id: edit.deposito_id,
@@ -196,6 +242,10 @@ export default function RecebimentosPendentes() {
       const filtro = txt(buscas[item.origem_id]).toLowerCase();
       const encontrados = produtosOrdenados.filter(p => (txt(p.nome) + ' ' + txt(p.codigo)).toLowerCase().includes(filtro)).slice(0, 100);
       const fechado = item.status === 'APROVADO' || item.status === 'REJEITADO';
+      const semCusto = d.valor_unitario == null && d.valor_total == null;
+      const unitarioFiscal = d.valor_total != null && Number(d.quantidade) > 0
+        ? Number(d.valor_total) / Number(d.quantidade)
+        : d.valor_unitario == null ? null : Number(d.valor_unitario);
       return <Card key={item.origem_id} className="space-y-3 border-border/70 p-3">
         <div className="flex flex-wrap justify-between gap-2">
           <div>
@@ -207,9 +257,32 @@ export default function RecebimentosPendentes() {
         </div>
         <div className="rounded-md border bg-muted/20 p-2 text-sm">
           <div className="font-semibold">{d.produto}</div>
-          <div>{d.quantidade} {d.unidade} · {money(d.valor_unitario)} / {d.unidade} · Total {money(d.valor_total)}</div>
+          <div>{d.quantidade} {d.unidade} · {money(unitarioFiscal)} / {d.unidade} · Total {money(d.valor_total)}</div>
+          <div className={semCusto ? 'mt-1 text-xs font-medium text-amber-700' : 'mt-1 text-xs text-emerald-700'}>
+            {semCusto
+              ? 'A nota chegou sem os valores fiscais. Recupere o custo com o XML original.'
+              : 'Custo unitário fiscal identificado — conversão para unidade-base automática na aprovação.'}
+          </div>
           <div className="mt-1 break-all text-xs text-muted-foreground">Chave {d.chave_acesso || 'não informada'} · Código {d.codigo_produto || '—'} · CFOP {d.cfop || '—'} · NCM {d.ncm || '—'} · Validade {d.validade || '—'}</div>
         </div>
+        {!fechado && semCusto ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50/60 px-3 py-2 text-xs">
+            <span>O custo não foi enviado pelo Controles. Anexe o XML original desta NF-e para recuperar os preços.</span>
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-background px-2.5 py-1.5 font-semibold hover:bg-muted">
+              <FileUp className="h-3.5 w-3.5" />
+              {recuperando === item.origem_id ? 'Lendo XML...' : 'Recuperar custo pelo XML'}
+              <input
+                type="file" accept=".xml,application/xml,text/xml" className="sr-only"
+                disabled={!!recuperando}
+                onChange={event => {
+                  const arquivo = event.target.files?.[0];
+                  event.target.value = '';
+                  if (arquivo) recuperarValorXml(item, arquivo);
+                }}
+              />
+            </label>
+          </div>
+        ) : null}
         {fechado ? <p className="text-sm text-muted-foreground">{item.documento_estoque_id ? 'Documento do estoque: ' + item.documento_estoque_id : item.motivo_recusa}</p> : <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-1 text-xs">Buscar produto do GFARM
             <Input placeholder="Nome ou código" value={buscas[item.origem_id] || ''} onChange={ev => setBuscas(p => ({ ...p, [item.origem_id]: ev.target.value }))} />
@@ -250,8 +323,11 @@ export default function RecebimentosPendentes() {
           <label className="space-y-1 text-xs">Conversão para unidade-base (opcional)
             <Input type="number" min="0.000001" step="any" placeholder="Automática pelo motor" value={e.fator_conversao || ''} onChange={ev => alterar(item.origem_id, 'fator_conversao', ev.target.value)} />
           </label>
-          <label className="space-y-1 text-xs">Custo unitário na unidade-base (R$)
-            <Input type="number" min="0" step="any" placeholder="Calculado pelo motor da unidade" value={e.custo_unitario_base ?? ''} onChange={ev => alterar(item.origem_id, 'custo_unitario_base', ev.target.value)} />
+          <label className="space-y-1 text-xs">Ajuste excepcional de custo na unidade-base (R$)
+            <Input type="number" min="0" step="any" placeholder="Automático a partir da NF-e" value={e.custo_unitario_base ?? ''} onChange={ev => alterar(item.origem_id, 'custo_unitario_base', ev.target.value)} />
+            <span className="block text-[10px] text-muted-foreground">
+              Deixe vazio para utilizar o preço da nota, com a conversão do produto.
+            </span>
           </label>
           <label className="space-y-1 text-xs">Validade
             <Input type="date" value={e.validade || ''} onChange={ev => alterar(item.origem_id, 'validade', ev.target.value)} />
