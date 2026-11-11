@@ -946,8 +946,6 @@ export default function Movimentacoes() {
               Registre entradas, saídas, transferências e estornos de produtos no seu estoque.
             </p>
             {podeEntradaManualSaldo ? <Link to="/recebimentos-pendentes" className="mt-2 inline-flex items-center rounded-lg border bg-background px-3 py-2 text-sm font-medium hover:bg-muted">Recebimentos pendentes do Meus Controles</Link> : null}
-            <p className="hidden">
-            </p>
           </header>
 
           <div className="flex flex-wrap gap-2">
