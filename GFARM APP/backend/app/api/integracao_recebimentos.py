@@ -233,16 +233,39 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
     except DadosFiscaisIncompativeis as err:
         raise HTTPException(422, str(err)) from err
 
-    payload = {**row["dados"], **fiscal}
-    atualizado = db.execute(text("""
-        UPDATE integracao_recebimentos_pendentes
-           SET dados=CAST(:dados AS JSONB), atualizado_em=NOW()
-         WHERE origem_id=:origem AND status='PENDENTE'
-         RETURNING id
-    """), {"origem": origem_id, "dados": json.dumps(payload, ensure_ascii=False)}).first()
-    if atualizado is None:
+    # Uma única NF-e pode ter vários produtos; aproveitar o mesmo XML para
+    # recuperar seus preços sem pedir que o usuário anexe o arquivo repetidamente.
+    # Só atualizar itens cujo código/nome corresponda de forma inequívoca.
+    chave = str(row["dados"].get("chave_acesso") or "")
+    candidatos = db.execute(text("""
+        SELECT origem_id, dados
+          FROM integracao_recebimentos_pendentes
+         WHERE status='PENDENTE' AND dados->>'chave_acesso'=:chave
+         FOR UPDATE
+    """), {"chave": chave}).mappings().all()
+    atualizados = 0
+    nao_identificados = []
+    for candidato in candidatos:
+        try:
+            campos = fiscal if candidato["origem_id"] == origem_id else extrair_custo_xml(
+                dados.xml, candidato["dados"]
+            )
+        except DadosFiscaisIncompativeis:
+            nao_identificados.append(str(candidato["dados"].get("produto") or "Produto desconhecido"))
+            continue
+        payload = {**candidato["dados"], **campos}
+        db.execute(text("""
+            UPDATE integracao_recebimentos_pendentes
+               SET dados=CAST(:dados AS JSONB), atualizado_em=NOW()
+             WHERE origem_id=:origem AND status='PENDENTE'
+        """), {
+            "origem": candidato["origem_id"],
+            "dados": json.dumps(payload, ensure_ascii=False),
+        })
+        atualizados += 1
+    if not atualizados:
         db.rollback()
-        raise HTTPException(409, "A pendência foi modificada durante a conferência.")
+        raise HTTPException(409, "Nenhum recebimento pendente correspondente foi localizado.")
     db.commit()
     return {
         "origem_id": origem_id,
@@ -250,6 +273,8 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
         "valor_unitario": fiscal["valor_unitario"],
         "valor_total": fiscal["valor_total"],
         "custo_origem": fiscal["custo_origem"],
+        "itens_atualizados": atualizados,
+        "nao_identificados": nao_identificados[:12],
     }
 
 
