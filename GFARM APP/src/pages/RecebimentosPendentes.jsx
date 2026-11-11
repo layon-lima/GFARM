@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 import NovoProdutoDaNota from '@/components/movimentacoes/NovoProdutoDaNota';
+import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 async function request(path, method = 'GET', payload, signal) {
@@ -73,7 +74,7 @@ export default function RecebimentosPendentes() {
           produto_id: '', deposito_id: '', gaveta_id: '',
           quantidade: txt(item.dados.quantidade),
           unidade: item.dados.unidade,
-          fator_conversao: '', custo_unitario_base: '',
+          fator_conversao: '', custo_unitario_base: '', custo_alterado: false,
           validade: item.dados.validade || ''
         }
       ])));
@@ -109,6 +110,7 @@ export default function RecebimentosPendentes() {
           ...atual, produto_id: produto.id,
           deposito_id: depositoId,
           gaveta_id: gavetaId,
+          custo_unitario_base: '', custo_alterado: false,
         },
       };
     });
@@ -123,7 +125,9 @@ export default function RecebimentosPendentes() {
       ...prev,
       [id]: { ...prev[id], [campo]: valor,
         ...(campo === 'produto_id' ? { deposito_id: '', gaveta_id: '' } : {}),
-        ...(campo === 'deposito_id' ? { gaveta_id: '' } : {})
+        ...(campo === 'deposito_id' ? { gaveta_id: '' } : {}),
+        ...(['produto_id', 'unidade', 'fator_conversao'].includes(campo)
+          ? { custo_unitario_base: '', custo_alterado: false } : {})
       }
     }));
   }
@@ -170,12 +174,21 @@ export default function RecebimentosPendentes() {
     if (!edit?.produto_id || !edit?.deposito_id) {
       toast({ variant: 'destructive', title: 'Selecione produto e depósito do GFARM' }); return;
     }
-    if (item.dados.valor_unitario == null && item.dados.valor_total == null &&
-        edit.custo_unitario_base === '') {
+    const produto = produtos.find(p => p.id === edit.produto_id);
+    const valorAutomatico = precoFiscalNaUnidadeBase(item.dados, produto, edit.fator_conversao);
+    if (!edit.custo_alterado && valorAutomatico === null) {
       toast({
-        variant: 'destructive', title: 'Falta o valor fiscal da NF-e',
-        description: 'Use "Recuperar custo pelo XML" nesta nota. O GFARM não vai inventar o preço.',
+        variant: 'destructive', title: 'Preço fiscal indisponível',
+        description: item.dados.valor_unitario == null && item.dados.valor_total == null
+          ? 'Recupere o preço pelo XML ou informe um custo unitário corrigido.'
+          : 'Confira o fator de conversão do produto antes de aprovar.',
       });
+      return;
+    }
+    if (edit.custo_alterado && (String(edit.custo_unitario_base).trim() === ''
+      || !Number.isFinite(Number(edit.custo_unitario_base))
+      || Number(edit.custo_unitario_base) < 0)) {
+      toast({ variant: 'destructive', title: 'Custo corrigido inválido' });
       return;
     }
     const payload = {
@@ -183,7 +196,7 @@ export default function RecebimentosPendentes() {
       gaveta_id: edit.gaveta_id || null,
       quantidade: edit.quantidade, unidade: edit.unidade,
       ...(edit.fator_conversao ? { fator_conversao: edit.fator_conversao } : {}),
-      ...(edit.custo_unitario_base !== '' ? { custo_unitario_base: edit.custo_unitario_base } : {}),
+      ...(edit.custo_alterado ? { custo_unitario_base: edit.custo_unitario_base } : {}),
       ...(edit.validade ? { validade: edit.validade } : {}),
     };
     setSaving(item.origem_id);
@@ -243,9 +256,13 @@ export default function RecebimentosPendentes() {
       const encontrados = produtosOrdenados.filter(p => (txt(p.nome) + ' ' + txt(p.codigo)).toLowerCase().includes(filtro)).slice(0, 100);
       const fechado = item.status === 'APROVADO' || item.status === 'REJEITADO';
       const semCusto = d.valor_unitario == null && d.valor_total == null;
-      const unitarioFiscal = d.valor_total != null && Number(d.quantidade) > 0
-        ? Number(d.valor_total) / Number(d.quantidade)
-        : d.valor_unitario == null ? null : Number(d.valor_unitario);
+      const unitarioFiscal = precoFiscalNaUnidadeBase(d);
+      const custoFiscalBase = precoFiscalNaUnidadeBase(d, produto, e.fator_conversao);
+      const custoEditado = !!e.custo_alterado;
+      const custoExibido = custoEditado
+        ? (e.custo_unitario_base ?? '')
+        : precoFiscalParaInput(custoFiscalBase);
+      const unidadeBase = produto?.unidade || d.unidade || 'unidade';
       return <Card key={item.origem_id} className="space-y-3 border-border/70 p-3">
         <div className="flex flex-wrap justify-between gap-2">
           <div>
@@ -323,10 +340,45 @@ export default function RecebimentosPendentes() {
           <label className="space-y-1 text-xs">Conversão para unidade-base (opcional)
             <Input type="number" min="0.000001" step="any" placeholder="Automática pelo motor" value={e.fator_conversao || ''} onChange={ev => alterar(item.origem_id, 'fator_conversao', ev.target.value)} />
           </label>
-          <label className="space-y-1 text-xs">Ajuste excepcional de custo na unidade-base (R$)
-            <Input type="number" min="0" step="any" placeholder="Automático a partir da NF-e" value={e.custo_unitario_base ?? ''} onChange={ev => alterar(item.origem_id, 'custo_unitario_base', ev.target.value)} />
+          <label className="space-y-1 text-xs">
+            <span className="flex items-center justify-between gap-2">
+              <span>Custo unitário (R$ / {unidadeBase})</span>
+              {custoEditado ? (
+                <button
+                  type="button"
+                  className="text-primary underline"
+                  onClick={() => setEdicoes(prev => ({
+                    ...prev,
+                    [item.origem_id]: {
+                      ...prev[item.origem_id],
+                      custo_unitario_base: '',
+                      custo_alterado: false,
+                    },
+                  }))}
+                >Restaurar valor da NF-e</button>
+              ) : null}
+            </span>
+            <Input
+              type="number" min="0" step="any"
+              placeholder={semCusto ? 'Valor não veio da nota; informe ou recupere o XML' : 'Selecione o produto para converter'}
+              value={custoExibido}
+              onChange={ev => setEdicoes(prev => ({
+                ...prev,
+                [item.origem_id]: {
+                  ...prev[item.origem_id],
+                  custo_unitario_base: ev.target.value,
+                  custo_alterado: ev.target.value !== '',
+                },
+              }))}
+            />
             <span className="block text-[10px] text-muted-foreground">
-              Deixe vazio para utilizar o preço da nota, com a conversão do produto.
+              {custoEditado
+                ? 'Valor corrigido manualmente. Esse será o custo usado na aprovação.'
+                : custoFiscalBase !== null
+                  ? `Preenchido pela NF-e: ${money(unitarioFiscal)} por ${d.unidade}. Você pode corrigir.`
+                  : semCusto
+                    ? 'Sem valor fiscal importado: recupere do XML ou informe o custo antes de aprovar.'
+                    : 'Selecione um produto com conversão de unidade válida para preencher o custo.'}
             </span>
           </label>
           <label className="space-y-1 text-xs">Validade
