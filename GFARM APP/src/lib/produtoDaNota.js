@@ -3,8 +3,9 @@ import { convertQty, normalizarUnidade } from './units.js';
 
 /**
  * Dados do cadastro mestre, usando exclusivamente informações confirmadas.
- * A quantidade, o preço, o lote e a validade permanecem na nota pendente;
- * o motor de estoque só os aplica depois da aprovação.
+ * A quantidade, o preço fiscal da NF-e, o lote e a validade permanecem na
+ * nota pendente. O usuario pode informar opcionalmente um custo médio
+ * INICIAL do cadastro, mas isso nunca movimenta quantidade/estoque.
  */
 export function montarProdutoDaNota(dados, form, produtos, depositos, gavetas) {
   const nome = String(form.nome || '').trim();
@@ -42,6 +43,20 @@ export function montarProdutoDaNota(dados, form, produtos, depositos, gavetas) {
     throw new Error(`Informe quantas unidades ${unidade} equivalem a 1 ${unidadeNfe}.`);
   }
 
+  // O custo é opcional e independente do preço fiscal da nota.
+  // Não importar automaticamente valor_unitario da NF-e para o cadastro.
+  const custoTexto = String(form.custo_unitario ?? '').trim();
+  let custoInicial = 0;
+  if (custoTexto !== '') {
+    if (!/^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(custoTexto)) {
+      throw new Error('Custo médio inválido. Informe somente um valor, como 7,65.');
+    }
+    custoInicial = Number(custoTexto.replace(',', '.'));
+    if (!Number.isFinite(custoInicial) || custoInicial < 0) {
+      throw new Error('Custo médio inicial inválido.');
+    }
+  }
+
   return {
     codigo: proximoCodigoInterno(produtos),
     nome,
@@ -53,7 +68,7 @@ export function montarProdutoDaNota(dados, form, produtos, depositos, gavetas) {
     unidade_alt: unidadeIgual ? null : unidadeNfe,
     fator_conversao: unidadeIgual ? 0 : fator,
     estoque_minimo: 0,
-    custo_unitario: 0,
+    custo_unitario: custoInicial,
     venda: false,
     // NÃO incluir quantidade: somente aprovação pelo motor de estoque.
   };
