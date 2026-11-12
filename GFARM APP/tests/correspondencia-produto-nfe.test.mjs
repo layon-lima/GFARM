@@ -59,6 +59,20 @@ test('unidade incompatível impede vínculo automático mesmo com nome idêntico
   assert.equal(encontrarProdutoExatoDaNota(nota('Viance','L'), produtos)?.id,'v1');
 });
 
+test('produto em TON aceita automaticamente NF-e em TN T ton e TO', () => {
+  const cadastrado = [{
+    id: 'f1', nome: 'FERTILIZANTE', unidade: 'ton', setor_id: 's1',
+  }];
+  for (const unidade of ['TN', 'Tn', 'T', 't', 'ton', 'TO', 'TONELADAS']) {
+    assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', unidade), cadastrado)?.id, 'f1', unidade);
+  }
+});
+test('TN so eh compativel com kg quando existe alternativa T com fator', () => {
+  const kg = [{ id: 'f1', nome: 'FERTILIZANTE', unidade: 'kg', setor_id: 's1' }];
+  assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'TN'), kg), null);
+  assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'TN'),
+    [{ ...kg[0], unidade_alt: 'T', fator_conversao: 1000 }])?.id, 'f1');
+});
 test('não confunde uma marca dentro do nome de outra', () => {
   assert.equal(encontrarProdutoExatoDaNota(nota('Vian'), produtos), null);
   assert.equal(encontrarProdutoExatoDaNota(nota('Viance Nova Formula'), produtos), null);
