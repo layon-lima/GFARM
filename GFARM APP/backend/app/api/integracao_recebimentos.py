@@ -77,6 +77,11 @@ class Aprovar(BaseModel):
     quantidade: Decimal | None = Field(default=None, gt=0)
     unidade: str | None = None
     fator_conversao: Decimal | None = Field(default=None, gt=0)
+    # "nota" usa o preco fiscal convertido; "cadastro" usa o custo
+    # atual de Produto.custo_unitario; "manual" exige preco informado.
+    # A opcao escolhida se refere ao custo da NOVA ENTRADA, nao a
+    # reavaliacao dos saldos antigos, que continua sob controle do motor.
+    origem_custo: Literal["nota", "cadastro", "manual"] = "nota"
     custo_unitario_base: Decimal | None = Field(default=None, ge=0)
     validade: date | None = None
 
@@ -375,13 +380,28 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
         raise HTTPException(422, str(err)) from err
     if fator <= 0:
         raise HTTPException(422, "Fator de conversão inválido.")
-    if dados.custo_unitario_base is not None:
-        # Ajuste excepcional e explícito do administrador.
+    # O custo do cadastro e consultado de novo na aprovacao, pois outras
+    # entradas podem ter alterado o custo medio desde a abertura da pagina.
+    # Clientes antigos que enviam custo_unitario_base sem origem_custo
+    # continuam funcionando como ajuste manual explicito.
+    origem_custo = dados.origem_custo
+    if origem_custo == "nota" and dados.custo_unitario_base is not None:
+        origem_custo = "manual"
+    if origem_custo == "cadastro":
+        valor_cadastrado = produto.custo_unitario
+        if valor_cadastrado is None:
+            raise HTTPException(422, "Este produto ainda não possui custo cadastrado.")
+        custo = Decimal(str(valor_cadastrado))
+        if not custo.is_finite() or custo < 0:
+            raise HTTPException(422, "O custo cadastrado deste produto é inválido.")
+    elif origem_custo == "manual":
+        if dados.custo_unitario_base is None:
+            raise HTTPException(422, "Informe o custo unitário corrigido.")
         custo = dados.custo_unitario_base
     else:
         try:
             # Primeiro usa o total da NF-e; se não existir, usa vUnCom.
-            # A conversão é feita sobre a quantidade ORIGINAL da nota,
+            # A conversão e feita sobre a quantidade ORIGINAL da nota,
             # sem distorção caso o administrador ajuste a entrada.
             custo = custo_unitario_na_base(payload, fator)
         except DadosFiscaisIncompativeis as err:
@@ -416,6 +436,7 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
         f"| chave {payload.get('chave_acesso','')} | fornecedor {payload.get('fornecedor','')} "
         f"| pedido {payload.get('numero_pedido','')} | CFOP {payload.get('cfop','')} "
         f"| NCM {payload.get('ncm','')} | lote informado {payload.get('lote','')}"
+        f" | preço da entrada: {origem_custo} (R$ {custo} / {produto.unidade or 'un'})"
     )
     try:
         db.rollback()  # motor abre sua própria transação
@@ -435,7 +456,10 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
              WHERE origem_id=:id AND status='PROCESSANDO'
         """), {"id": origem_id, "doc": numero})
         db.commit()
-        return {"status": "APROVADO", "documento_estoque_id": numero}
+        return {
+            "status": "APROVADO", "documento_estoque_id": numero,
+            "origem_custo": origem_custo, "custo_unitario_entrada": str(custo),
+        }
     except Exception as err:
         db.rollback()
         db.execute(text("""
