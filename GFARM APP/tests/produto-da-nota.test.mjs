@@ -45,6 +45,41 @@ test('cadastra nome e referência da NF-e, sem criar quantidade, lote ou custo d
   assert.ok(!('data_validade' in result));
 });
 
+test('custo médio inicial é opcional e fica separado da NF-e', () => {
+  const semPreco = { ...nota('L'), valor_unitario: null };
+  const vazio = montarProdutoDaNota(semPreco, formulario('L'), produtos, depositos, gavetas);
+  assert.equal(vazio.custo_unitario, 0);
+  assert.ok(!('quantidade' in vazio));
+  const cadastrado = montarProdutoDaNota(
+    semPreco, formulario('L', { custo_unitario: '7,65' }), produtos, depositos, gavetas,
+  );
+  assert.equal(cadastrado.custo_unitario, 7.65);
+  assert.ok(!('quantidade' in cadastrado));
+  assert.ok(!('valor_total' in cadastrado));
+  const comPonto = montarProdutoDaNota(
+    nota('kg'), formulario('kg', { custo_unitario: '0.000325' }),
+    produtos, depositos, gavetas,
+  );
+  assert.equal(comPonto.custo_unitario, 0.000325);
+});
+
+test('preço fiscal da nota não é assumido automaticamente como custo inicial', () => {
+  const notaComPreco = { ...nota('L'), valor_unitario: '999.50' };
+  assert.equal(montarProdutoDaNota(
+    notaComPreco, formulario('L'), produtos, depositos, gavetas,
+  ).custo_unitario, 0);
+});
+
+test('custo médio inválido não pode entrar no cadastro', () => {
+  for (const custo of ['-2', 'NaN', 'Infinity', '12,34,56', '1.000,25', 'abc']) {
+    assert.throws(
+      () => montarProdutoDaNota(
+        nota('L'), formulario('L', { custo_unitario: custo }), produtos, depositos, gavetas,
+      ), /Custo médio inválido/,
+    );
+  }
+});
+
 test('LT como unidade da nota aceita L com fator 1 no motor', () => {
   const result = montarProdutoDaNota(nota('LT'), formulario('L'), produtos, depositos, gavetas);
   assert.equal(result.unidade_alt, 'LT');
