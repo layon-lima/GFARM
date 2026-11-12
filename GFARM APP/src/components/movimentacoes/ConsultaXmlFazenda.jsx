@@ -137,6 +137,10 @@ export default function ConsultaXmlFazenda({ nota, link, onImportar, onClose }) 
             <p className="mt-2 text-[11px] text-muted-foreground">
               A captura exige a extensão GFARM instalada e a opção “Permitir acesso a URLs de arquivo” ativada
               na página de extensões do Chrome/Edge.
+              <a href="https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.1.0/gfarm-captura-xml-chrome.zip"
+                target="_blank" rel="noopener noreferrer" className="ml-1 font-semibold text-primary underline">
+                Baixar extensão GFARM
+              </a>
             </p>
           </div>
         </div>
