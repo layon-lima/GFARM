@@ -66,6 +66,20 @@ class ImportarXmlEmLoteTest(unittest.TestCase):
             "pedido-produto-a", "pedido-produto-b",
         ])
         self.assertEqual(len(result["nao_identificados"]), 1)
+        self.assertEqual(
+            [reg["origem_id"] for reg in result["itens_fiscais_atualizados"]],
+            ["pedido-produto-a", "pedido-produto-b"],
+        )
+        self.assertEqual(
+            Decimal(result["itens_fiscais_atualizados"][0]["dados"]["valor_unitario"]),
+            Decimal("6.20"),
+        )
+        self.assertEqual(
+            Decimal(result["itens_fiscais_atualizados"][1]["dados"]["valor_total"]),
+            Decimal("11375"),
+        )
+        self.assertEqual(result["detalhes_pendentes"][0]["origem_id"], "pedido-incorreto")
+        self.assertIn("Produto não identificado", result["detalhes_pendentes"][0]["motivo"])
         updates = [
             call for call in self.db.execute.call_args_list
             if "UPDATE integracao_recebimentos_pendentes" in str(call.args[0])
