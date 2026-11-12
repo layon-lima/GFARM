@@ -21,6 +21,7 @@ from app.models import Produto, User
 from app.services.motor_estoque import EstoqueErro, movimentar_estoque
 from app.services.unidades_estoque import converter_quantidade_estoque, fator_conversao_padrao
 from app.services.custo_nfe import DadosFiscaisIncompativeis, UNIDADES, custo_unitario_na_base, extrair_custo_xml
+from app.services.distribuicao_dfe import habilitada as dfe_habilitada, aplicar_cache_a_nota_pendente
 
 
 router = APIRouter(prefix="/api/integracoes/recebimentos", tags=["Recebimentos integrados"])
@@ -149,6 +150,18 @@ def receber(dados: Recebimento, x_integracao_token: str | None = Header(None),
     if updated is None:
         db.rollback()
         raise HTTPException(409, "Recebimento em revisão no GFARM; não é possível atualizar.")
+    # Se a Central Fiscal ja arquivou o XML, preencher o recebimento sem
+    # consultar a SEFAZ, sem acao do navegador e sem afetar o estoque.
+    if dfe_habilitada() and dados.chave_acesso:
+        try:
+            with db.begin_nested():
+                aplicar_cache_a_nota_pendente(db, dados.chave_acesso)
+        except Exception:
+            # Cache indisponivel nao pode impedir recebimentos do Controles.
+            import logging
+            logging.getLogger(__name__).exception(
+                "Cache fiscal temporariamente indisponivel no recebimento."
+            )
     db.commit()
     return {"origem_id": dados.origem_id, "status": "PENDENTE"}
 
