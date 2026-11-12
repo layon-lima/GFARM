@@ -78,7 +78,9 @@ function fileURL(path) {
   }
   // Não montar URL com nome recebido do site: sempre usar nome retornado
   // pelo próprio chrome.downloads após o download terminar.
-  const segments = p.split('/').map(encodeURIComponent).join('/');
+  const segments = p.split('/').map((part, index) =>
+    index === 0 && /^[A-Za-z]:$/.test(part) ? part : encodeURIComponent(part)
+  ).join('/');
   return /^[A-Za-z]:\//.test(p) ? 'file:///' + segments : 'file://' + segments;
 }
 function toBase64(bytes) {
