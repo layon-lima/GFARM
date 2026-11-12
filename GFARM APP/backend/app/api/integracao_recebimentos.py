@@ -1,6 +1,7 @@
 """Fila de recebimentos do Meus Controles. Nenhum registro altera estoque antes da aprovação."""
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date
 from decimal import Decimal
 import hmac
@@ -19,7 +20,7 @@ from app.db.database import engine, get_db
 from app.models import Produto, User
 from app.services.motor_estoque import EstoqueErro, movimentar_estoque
 from app.services.unidades_estoque import converter_quantidade_estoque
-from app.services.custo_nfe import DadosFiscaisIncompativeis, custo_unitario_na_base, extrair_custo_xml
+from app.services.custo_nfe import DadosFiscaisIncompativeis, UNIDADES, custo_unitario_na_base, extrair_custo_xml
 
 
 router = APIRouter(prefix="/api/integracoes/recebimentos", tags=["Recebimentos integrados"])
@@ -213,6 +214,22 @@ def recusar(origem_id: str, dados: Recusar, user: User = Depends(get_current_use
     return {"status": "REJEITADO"}
 
 
+def _chave_quantidade_fiscal(pendencia: dict):
+    """Detecta pendências concorrentes mesmo com grafias/unidades equivalentes."""
+    try:
+        quantidade = Decimal(str(pendencia.get("quantidade", "")))
+    except (ValueError, ArithmeticError):
+        return None
+    if not quantidade.is_finite() or quantidade <= 0:
+        return None
+    unidade = str(pendencia.get("unidade") or "").strip().upper()
+    conversao = UNIDADES.get(unidade)
+    if conversao:
+        familia, fator = conversao
+        return familia, quantidade * fator
+    return unidade, quantidade if unidade else None
+
+
 @router.post("/{origem_id}/recuperar-custo-xml")
 def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
                        user: User = Depends(get_current_user),
@@ -244,6 +261,14 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
          WHERE status='PENDENTE' AND dados->>'chave_acesso'=:chave
          FOR UPDATE
     """), {"chave": chave}).mappings().all()
+    # Um nome pode aparecer de modo completamente diferente no XML
+    # (ex.: nome comercial x denominação fiscal). Se código/nome falharem,
+    # só aceitar correspondência por quantidade quando não houver outra
+    # pendência concorrente com a mesma quantidade e unidade canônicas.
+    quantidades = Counter(
+        chave for candidato in candidatos
+        if (chave := _chave_quantidade_fiscal(candidato["dados"])) is not None
+    )
     atualizados = 0
     origens_atualizadas = []
     itens_fiscais_atualizados = []
@@ -253,7 +278,13 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
     primeiro_erro = None
     for candidato in candidatos:
         try:
-            campos = extrair_custo_xml(dados.xml, candidato["dados"])
+            chave_quantidade = _chave_quantidade_fiscal(candidato["dados"])
+            campos = extrair_custo_xml(
+                dados.xml, candidato["dados"],
+                permitir_correspondencia_quantidade=bool(
+                    chave_quantidade and quantidades[chave_quantidade] == 1
+                ),
+            )
         except DadosFiscaisIncompativeis as err:
             if primeiro_erro is None:
                 primeiro_erro = str(err)
