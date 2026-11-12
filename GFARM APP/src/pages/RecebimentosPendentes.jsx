@@ -543,7 +543,7 @@ export default function RecebimentosPendentes() {
           <div className="space-y-1 text-sm text-muted-foreground">
             <p>{item.documento_estoque_id ? 'Documento do estoque: ' + item.documento_estoque_id : item.motivo_recusa}</p>
             {d.custo_origem_aprovacao === 'pendente' ? (
-              <p className="text-amber-700">Custo pendente: entrada física contabilizada sem preço conhecido.</p>
+              <p className="text-amber-700">Entrada aprovada sem preço conhecido na data do lançamento. O saldo remanescente poderá ser valorizado pela primeira NF com preço.</p>
             ) : d.custo_unitario_aprovado_base != null ? (
               <p>Custo utilizado na entrada: {money(d.custo_unitario_aprovado_base)} / {unidadeBase}
                 {' · '}{d.custo_origem_aprovacao === 'fiscal' ? 'Preço fiscal'
