@@ -132,6 +132,73 @@ class ImportarXmlEmLoteTest(unittest.TestCase):
         self.db.commit.assert_called_once()
 
     @patch("app.api.integracao_recebimentos._row")
+    def test_nome_fiscal_diferente_custo_e_validade_por_quantidade_unica(self, mock_row):
+        mbio = {
+            **self.payload_a,
+            "produto": "MBIO Brady",
+            "codigo_produto": "",
+            "quantidade": "9280.000",
+            "unidade": "DOS",
+        }
+        self.db.execute.return_value.mappings.return_value.all.return_value = [
+            {"origem_id": "mbio", "dados": mbio},
+            {"origem_id": "viance", "dados": self.payload_b},
+        ]
+        mock_row.return_value = {
+            "origem_id": "mbio", "status": "PENDENTE", "dados": mbio,
+        }
+        import base64
+        xml = base64.b64decode(gerar_xml(produtos=[
+            ("IN001", "BRADYRHIZOBIUM JAPONICUM INOCULANTE", "9280", "DOSES", "5.25", "48720"),
+            ("A002", "VIANCE", "250", "L", "45.50", "11375"),
+        ])).decode("utf-8")
+        xml = xml.replace(
+            '<CFOP>5102</CFOP>',
+            '<CFOP>5102</CFOP><rastro><nLote>X88</nLote><dVal>2027-12-31</dVal></rastro>',
+            1,
+        )
+        result = recuperar_custo_xml(
+            "mbio", RecuperarCustoXml(xml=base64.b64encode(xml.encode()).decode()),
+            user=self.admin, db=self.db,
+        )
+        self.assertEqual(result["itens_atualizados"], 2)
+        preenchidos = {x["origem_id"]: x["dados"] for x in result["itens_fiscais_atualizados"]}
+        self.assertEqual(preenchidos["mbio"]["valor_unitario"], "5.25")
+        self.assertEqual(preenchidos["mbio"]["valor_total"], "48720.00000")
+        self.assertEqual(preenchidos["mbio"]["identificacao_fiscal"], "quantidade_e_unidade_unicas")
+        # Rastreio e valido somente quando o XML realmente traz dVal.
+        # Neste teste rastro foi colocado no item XML.
+        self.assertEqual(preenchidos["mbio"]["validade"], "2027-12-31")
+        self.assertEqual(preenchidos["mbio"]["lote"], "X88")
+        self.assertEqual(preenchidos["viance"]["produto"], "VIANCE")
+
+    @patch("app.api.integracao_recebimentos._row")
+    def test_mesma_quantidade_em_duas_pendencias_nao_associa_por_adivinhacao(self, mock_row):
+        mbio = {
+            **self.payload_a, "produto": "MBIO Brady",
+            "codigo_produto": "", "quantidade": "9280", "unidade": "DOS",
+        }
+        outra = {**mbio, "produto": "OUTRO INOCULANTE"}
+        self.db.execute.return_value.mappings.return_value.all.return_value = [
+            {"origem_id": "mbio", "dados": mbio},
+            {"origem_id": "outro", "dados": outra},
+            {"origem_id": "viance", "dados": self.payload_b},
+        ]
+        mock_row.return_value = {
+            "origem_id": "mbio", "status": "PENDENTE", "dados": mbio,
+        }
+        xml = gerar_xml(produtos=[
+            ("IN001", "BRADYRHIZOBIUM JAPONICUM", "9280", "DOS", "5.25", "48720"),
+            ("A002", "VIANCE", "250", "L", "45.50", "11375"),
+        ])
+        result = recuperar_custo_xml(
+            "mbio", RecuperarCustoXml(xml=xml), user=self.admin, db=self.db,
+        )
+        self.assertEqual(result["itens_atualizados"], 1)
+        self.assertEqual(result["origens_atualizadas"], ["viance"])
+        self.assertEqual(len(result["detalhes_pendentes"]), 2)
+
+    @patch("app.api.integracao_recebimentos._row")
     def test_xml_de_outra_chave_nao_modifica_qualquer_item(self, mock_row):
         mock_row.return_value = {
             "origem_id": "pedido-produto-a",
