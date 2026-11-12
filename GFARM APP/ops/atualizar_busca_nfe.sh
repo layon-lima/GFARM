@@ -17,8 +17,11 @@ echo '[3/5] Atualizando somente o app (sem dependencias)...'
 echo '[4/5] Conferindo bundle servido no container...'
 docker exec gfarm-app-1 sh -c "grep -Fql 'Busca inteligente v2' /app/dist/assets/*.js" || { echo 'ERRO: interface antiga no container' >&2; exit 1; }
 docker exec gfarm-app-1 sh -c "grep -Fql 'Identificado automaticamente' /app/dist/assets/*.js" || { echo 'ERRO: correspondencia nao compilada' >&2; exit 1; }
-docker exec gfarm-app-1 sh -c "grep -Fql 'Consultar e importar XML' /app/dist/assets/*.js" || { echo 'ERRO: janela fiscal nao foi publicada no container' >&2; exit 1; }
+docker exec gfarm-app-1 sh -c "grep -Fql 'Abrir FSist e capturar XML' /app/dist/assets/*.js" || { echo 'ERRO: abertura direta do FSist nao foi publicada' >&2; exit 1; }
 docker exec gfarm-app-1 sh -c "grep -Fql 'Extensão GFARM não detectada' /app/dist/assets/*.js" || { echo 'ERRO: interceptacao de XML no navegador nao foi publicada' >&2; exit 1; }
+if docker exec gfarm-app-1 sh -c "grep -Fql 'Alternativa sem extensão' /app/dist/assets/*.js"; then
+  echo 'ERRO: formulario XML antigo ainda foi compilado' >&2; exit 1
+fi
 echo '[5/5] Validando resposta da API e politica anti-cache...'
 docker exec gfarm-app-1 python -c '
 import urllib.request
