@@ -1338,6 +1338,10 @@ def movimentar_estoque(
                             produto,
                             quantidade_informada,
                             dados.get("unidade"),
+                            permitir_conversao_padrao=(
+                                origem_modulo == "controles_recebimentos"
+                                and tipo_movimento in MOVIMENTOS_ENTRADA
+                            ),
                         )
                     except ValueError as erro:
                         raise EstoqueErro(
