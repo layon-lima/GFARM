@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "GFARM — Captura de XML da NF-e",
+  "version": "0.1.0",
+  "description": "Detecta XML recém-baixado pelo Chrome/Edge e entrega somente a NF-e conferida ao GFARM aberto.",
+  "permissions": [
+    "downloads",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "file:///*",
+    "https://estoque.fazendanovohorizonte.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://estoque.fazendanovohorizonte.com/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.fsist.com.br/*",
+        "https://chaves.fsist.com.br/*"
+      ],
+      "js": [
+        "fsist.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
