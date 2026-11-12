@@ -284,6 +284,7 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
                 permitir_correspondencia_quantidade=bool(
                     chave_quantidade and quantidades[chave_quantidade] == 1
                 ),
+                permitir_item_unico=len(candidatos) == 1,
             )
         except DadosFiscaisIncompativeis as err:
             if primeiro_erro is None:
