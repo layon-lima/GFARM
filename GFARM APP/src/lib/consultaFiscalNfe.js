@@ -9,8 +9,8 @@ export function linkConsultaFiscalNfe(chave) {
   const digitos = chaveNfeNumerica(chave);
   if (!/^\d{44}$/.test(digitos)) return null;
   const url = new URL(PORTAL_NFE);
-  url.searchParams.set('tipoConsulta', 'resumo');
-  url.searchParams.set('tipoConteudo', '7PhJ+gAVw2g=');
+  url.searchParams.set('tipoConsulta', 'completa');
+  url.searchParams.set('tipoConteudo', 'XbSeqxE8pl8=');
   url.searchParams.set('nfe', digitos);
   return url.toString();
 }
