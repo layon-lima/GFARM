@@ -79,7 +79,11 @@ export default function RecebimentosPendentes() {
         if (item.status !== 'PENDENTE') continue;
         const atual = anterior[item.origem_id] || {};
         if (atual.produto_id || atual.vinculo_manual) continue;
-        const encontrado = encontrarProdutoExatoDaNota(item.dados, produtos);
+        const encontrado = encontrarProdutoExatoDaNota(item.dados, produtos)
+          || (item.dados.custo_origem === 'xml_conferido' && item.dados.produto_xml
+            ? encontrarProdutoExatoDaNota(
+              { ...item.dados, produto: item.dados.produto_xml }, produtos
+            ) : null);
         if (!encontrado) continue;
         const destinoAnterior = depositos.find(dep => dep.id === atual.deposito_id);
         const depositoId = destinoAnterior?.setor_id === encontrado.setor_id
