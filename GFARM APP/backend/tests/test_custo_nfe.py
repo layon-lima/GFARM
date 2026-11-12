@@ -219,6 +219,37 @@ class CustoNfeTest(unittest.TestCase):
         self.assertEqual(com_validade["validade"], "2027-12-31")
         self.assertEqual(com_validade["lote"], "LOTE-X")
 
+    def test_to_tonelada_preco_fiscal_prevalece_com_nome_divergente(self):
+        xml = gerar_xml(produtos=[
+            ("NPK104600", "Fertilizante: 10%N - 46%P2O5 - 00%K2O 40%P2O5 Sol. Agua",
+             "48.0000", "TO", "6000", "288000"),
+        ])
+        fiscal = extrair_custo_xml(
+            xml, recebimento(
+                produto="KCL", quantidade="48.000", unidade="t",
+            ), permitir_correspondencia_quantidade=True,
+        )
+        self.assertEqual(fiscal["identificacao_fiscal"], "quantidade_e_unidade_unicas")
+        self.assertTrue(fiscal["divergencia_produto_xml"])
+        self.assertEqual(fiscal["quantidade_xml"], "48.0000")
+        self.assertEqual(fiscal["unidade_fiscal_origem"], "TO")
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("6000"))
+        self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("288000"))
+        self.assertEqual(fiscal["produto_xml"].split(":")[0], "Fertilizante")
+        self.assertNotIn("produto", fiscal)
+
+    def test_to_tonelada_nao_adivinha_produto_se_duas_linhas_48t(self):
+        xml = gerar_xml(produtos=[
+            ("A", "NPK 10-46-00", "48", "TO", "6000", "288000"),
+            ("B", "NPK 00-00-60", "48", "T", "5000", "240000"),
+        ])
+        with self.assertRaisesRegex(DadosFiscaisIncompativeis, "Produto não identificado"):
+            extrair_custo_xml(
+                xml, recebimento(
+                    produto="KCL", quantidade="48", unidade="T",
+                ), permitir_correspondencia_quantidade=True,
+            )
+
     def test_xml_rejeita_documento_com_dtd(self):
         xml = b'<!DOCTYPE x [<!ENTITY secret "INSEGURO">]><x/>'
         with self.assertRaisesRegex(DadosFiscaisIncompativeis, "proibido"):
