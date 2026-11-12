@@ -60,7 +60,7 @@ def _configuracoes():
     GFARM_DFE_CERT_PFX, GFARM_DFE_CERT_PASSWORD.
 
     Varios: GFARM_DFE_PROFILES='[{"cnpj":"...","cuf":"21",
-    "cert_path":"/seguro/cert.pfx","password_env":"NOME_VARIAVEL_SECRETA"}]'.
+    "cert_path":"/seguro/cert.pfx","password_file":"/seguro/cert.pass"}]'.
     Nenhum formulario, nenhum segredo devolvido via API.
     """
     profiles_raw = os.getenv("GFARM_DFE_PROFILES", "").strip()
@@ -78,6 +78,7 @@ def _configuracoes():
             "cuf": os.getenv("GFARM_DFE_CUF", ""),
             "cert_path": os.getenv("GFARM_DFE_CERT_PFX", ""),
             "password_env": "GFARM_DFE_CERT_PASSWORD",
+            "password_file": os.getenv("GFARM_DFE_CERT_PASSWORD_FILE", ""),
         }]
     result = []
     seen = set()
@@ -88,10 +89,15 @@ def _configuracoes():
         cuf = str(p.get("cuf", "")).strip()
         path = str(p.get("cert_path", "")).strip()
         key = str(p.get("password_env", "")).strip()
+        password_file = str(p.get("password_file", "")).strip()
+        tem_senha = (
+            bool(password_file and Path(password_file).is_file())
+            or bool(key and key in os.environ)
+        )
         if (not re.fullmatch(r"\d{14}", cnpj)
                 or not re.fullmatch(r"\d{2}", cuf)
                 or not path or not Path(path).is_file()
-                or not key or key not in os.environ
+                or not tem_senha
                 or cnpj in seen):
             logger.warning(
                 "Central fiscal: perfil incompleto; nao sera consultado."
@@ -101,6 +107,7 @@ def _configuracoes():
         result.append({
             "cnpj": cnpj, "cuf": cuf,
             "cert_path": path, "password_env": key,
+            "password_file": password_file,
         })
     return result
 
@@ -149,7 +156,14 @@ def _ssl_contexto_a1(perfil):
     data = cert_pfx.read_bytes()
     if len(data) > 1024 * 1024:
         raise ValueError("Certificado A1 excede tamanho esperado.")
-    password = os.environ[perfil["password_env"]].encode("utf-8")
+    password_file = perfil.get("password_file")
+    if password_file:
+        # Senha em volume privado (0600), nao no Docker inspect nem no Git.
+        password = Path(password_file).read_bytes()
+        if len(password) > 4096:
+            raise ValueError("Arquivo de senha A1 invalido.")
+    else:
+        password = os.environ[perfil["password_env"]].encode("utf-8")
     private, cert, intermediarios = pkcs12.load_key_and_certificates(
         data, password if password else None
     )
