@@ -19,7 +19,7 @@ from app.core.access_control import tem_permissao
 from app.db.database import engine, get_db
 from app.models import Produto, User
 from app.services.motor_estoque import EstoqueErro, movimentar_estoque
-from app.services.unidades_estoque import converter_quantidade_estoque
+from app.services.unidades_estoque import converter_quantidade_estoque, fator_conversao_padrao
 from app.services.custo_nfe import DadosFiscaisIncompativeis, UNIDADES, custo_unitario_na_base, extrair_custo_xml
 
 
@@ -372,7 +372,19 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
     quantidade = dados.quantidade or Decimal(str(payload["quantidade"]))
     unidade = dados.unidade or payload["unidade"]
     try:
-        if dados.fator_conversao is not None:
+        fator_padrao = fator_conversao_padrao(unidade, produto.unidade)
+        if fator_padrao is not None:
+            # 1 tonelada = 1000 kg é uma equivalência exata e não deve
+            # ser sobrescrita por fator manual equivocado.
+            if dados.fator_conversao is not None and dados.fator_conversao != fator_padrao:
+                raise HTTPException(
+                    422, f"Conversão física da NF-e é fixa: "
+                    f"1 {unidade} = {fator_padrao} {produto.unidade}."
+                )
+            fator = fator_padrao
+        elif dados.fator_conversao is not None:
+            # Embalagem sem equivalência metrológica conhecida: mantém
+            # opção de fator explícito para CX/SACO etc.
             fator = dados.fator_conversao
         else:
             fator = Decimal(str(converter_quantidade_estoque(
@@ -438,7 +450,7 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
         item["custo_unitario"] = str(custo)
         if classificacao_custo == "fiscal" and custo > 0:
             item["valorizar_custo_pendente_inicial"] = True
-    if dados.fator_conversao is not None:
+    if dados.fator_conversao is not None and fator_padrao is None:
         item["fator_conversao"] = str(dados.fator_conversao)
     if validade:
         item["data_validade"] = validade
