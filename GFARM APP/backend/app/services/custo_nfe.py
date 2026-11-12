@@ -23,6 +23,8 @@ UNIDADES = {
     "GR": ("peso", Decimal("0.001")),
     "T": ("peso", Decimal("1000")),
     "TON": ("peso", Decimal("1000")),
+    "TO": ("peso", Decimal("1000")),
+    "TONS": ("peso", Decimal("1000")),
     "TONELADA": ("peso", Decimal("1000")),
     "L": ("volume", Decimal("1")),
     "LT": ("volume", Decimal("1")),
@@ -310,6 +312,12 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
         "origem_quantidade_fiscal": quantidades_convertidas[0][1]["origem"],
         "produto_xml": candidates[0]["nome"] if len(nomes) == 1 else "",
         "identificacao_fiscal": identificacao_fiscal,
+        # O XML prevalece na descrição fiscal; nunca reclassificar o
+        # produto do estoque de maneira silenciosa.
+        "divergencia_produto_xml": bool(
+            identificacao_fiscal == "quantidade_e_unidade_unicas"
+            and nome != _normalizar(candidates[0]["nome"])
+        ),
         "itens_xml": [i["numero_item"] for i in candidates],
         "custo_origem": "xml_conferido",
     }
