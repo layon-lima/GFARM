@@ -9,8 +9,15 @@ def _decimal(valor: Any) -> Decimal:
     return Decimal(str(valor))
 
 
+# Todas as grafias oficiais e comerciais abaixo representam tonelada.
+# Nao alterar a regra de conversao de T/TON para KG, que continua
+# dependendo do fator cadastrado para o produto.
+SINONIMOS_TONELADA = {"T", "TN", "TON", "TO", "TONS", "TONELADA", "TONELADAS"}
+
+
 def _unidade(valor: Any) -> str:
-    return str(valor or "").strip().upper()
+    unidade = str(valor or "").strip().upper()
+    return "TON" if unidade in SINONIMOS_TONELADA else unidade
 
 
 def converter_quantidade_estoque(
