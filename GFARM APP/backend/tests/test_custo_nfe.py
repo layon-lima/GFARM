@@ -140,6 +140,55 @@ class CustoNfeTest(unittest.TestCase):
                 xml, recebimento(produto="MBIO BRADY", quantidade="9280", unidade="UN"),
             )
 
+    def test_nome_fiscal_diferente_encontra_produto_por_quantidade_unidade_unicas(self):
+        # Situação realista: Controles usa nome comercial; XML usa nome científico.
+        xml = gerar_xml(produtos=[
+            ("IN001", "BRADYRHIZOBIUM JAPONICUM INOCULANTE", "9280", "DOSE", "5.25", "48720"),
+            ("IN002", "FERTILIZANTE FOLIAR", "850", "L", "8", "6800"),
+        ])
+        dados = recebimento(
+            produto="MBIO Brady", quantidade="9280.000", unidade="DOS",
+        )
+        with self.assertRaisesRegex(DadosFiscaisIncompativeis, "Produto não identificado"):
+            extrair_custo_xml(xml, dados)
+        fiscal = extrair_custo_xml(xml, dados, permitir_correspondencia_quantidade=True)
+        self.assertEqual(fiscal["produto_xml"], "BRADYRHIZOBIUM JAPONICUM INOCULANTE")
+        self.assertEqual(fiscal["identificacao_fiscal"], "quantidade_e_unidade_unicas")
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("5.25"))
+        self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("48720"))
+        self.assertEqual(fiscal["quantidade_xml"], "9280")
+
+    def test_quantidade_duplicada_no_xml_nao_associa_produto_sem_nome(self):
+        xml = gerar_xml(produtos=[
+            ("IN001", "BRADYRHIZOBIUM JAPONICUM", "9280", "DOS", "5", "46400"),
+            ("IN002", "BACTERIA INOCULANTE", "9280", "DOS", "7", "64960"),
+        ])
+        with self.assertRaisesRegex(DadosFiscaisIncompativeis, "Produto não identificado"):
+            extrair_custo_xml(xml, recebimento(
+                produto="MBIO Brady", quantidade="9280", unidade="DOS",
+            ), permitir_correspondencia_quantidade=True)
+
+    def test_xml_aplica_validade_quando_rastreio_existe_e_nao_inventa_quando_ausente(self):
+        xml = base64.b64decode(gerar_xml(produtos=[
+            ("IN001", "BRADYRHIZOBIUM JAPONICUM", "9280", "DOS", "5", "46400"),
+        ])).decode("utf-8")
+        dados = recebimento(produto="MBIO Brady", quantidade="9280", unidade="DOS")
+        sem_validade = extrair_custo_xml(
+            base64.b64encode(xml.encode()).decode(),
+            dados, permitir_correspondencia_quantidade=True,
+        )
+        self.assertNotIn("validade", sem_validade)
+        com_validade_xml = xml.replace(
+            "</prod>", "<rastro><nLote>LOTE-X</nLote>"
+            "<dVal>2027-12-31</dVal></rastro></prod>",
+        )
+        com_validade = extrair_custo_xml(
+            base64.b64encode(com_validade_xml.encode()).decode(),
+            dados, permitir_correspondencia_quantidade=True,
+        )
+        self.assertEqual(com_validade["validade"], "2027-12-31")
+        self.assertEqual(com_validade["lote"], "LOTE-X")
+
     def test_xml_rejeita_documento_com_dtd(self):
         xml = b'<!DOCTYPE x [<!ENTITY secret "INSEGURO">]><x/>'
         with self.assertRaisesRegex(DadosFiscaisIncompativeis, "proibido"):
