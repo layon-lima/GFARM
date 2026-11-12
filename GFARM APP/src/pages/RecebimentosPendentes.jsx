@@ -534,11 +534,24 @@ export default function RecebimentosPendentes() {
           )}
           {semCusto && (
             <p className="mt-2 text-xs text-amber-700">
-              Sem valor fiscal neste recebimento. Confira a identificação e a unidade do produto no XML.
+              NF-e sem preço: a entrada pode ser aprovada normalmente. O motor utilizará
+              o custo médio vigente; se ainda não existir, registrará custo pendente.
             </p>
           )}
         </div>
-        {fechado ? <p className="text-sm text-muted-foreground">{item.documento_estoque_id ? 'Documento do estoque: ' + item.documento_estoque_id : item.motivo_recusa}</p> : <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {fechado ? (
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <p>{item.documento_estoque_id ? 'Documento do estoque: ' + item.documento_estoque_id : item.motivo_recusa}</p>
+            {d.custo_origem_aprovacao === 'pendente' ? (
+              <p className="text-amber-700">Custo pendente: entrada física contabilizada sem preço conhecido.</p>
+            ) : d.custo_unitario_aprovado_base != null ? (
+              <p>Custo utilizado na entrada: {money(d.custo_unitario_aprovado_base)} / {unidadeBase}
+                {' · '}{d.custo_origem_aprovacao === 'fiscal' ? 'Preço fiscal'
+                  : d.custo_origem_aprovacao === 'medio_provisorio' ? 'Média provisória'
+                    : 'Custo informado'}</p>
+            ) : null}
+          </div>
+        ) : <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
           <EscolherProdutoDaNota
             dados={{ ...d, origem_id: item.origem_id,
               produto: d.divergencia_produto_xml ? d.produto_xml : d.produto }}
@@ -599,6 +612,9 @@ export default function RecebimentosPendentes() {
                   {precoCadastrado !== null ? 'Usar média atual' : 'Registrar custo pendente'}
                 </span>
               </button>
+            </div>
+            <div className="text-[11px] font-medium text-foreground">
+              Valor escolhido: {custoExibido !== '' ? money(custoExibido) : 'Custo pendente'} / {unidadeBase}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="flex items-center gap-1 text-[11px]">
