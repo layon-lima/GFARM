@@ -67,11 +67,17 @@ test('produto em TON aceita automaticamente NF-e em TN T ton e TO', () => {
     assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', unidade), cadastrado)?.id, 'f1', unidade);
   }
 });
-test('TN so eh compativel com kg quando existe alternativa T com fator', () => {
+test('NF-e em TN e cadastro em kg identificam nome exato por unidade fisica conhecida', () => {
   const kg = [{ id: 'f1', nome: 'FERTILIZANTE', unidade: 'kg', setor_id: 's1' }];
-  assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'TN'), kg), null);
+  assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'TN'), kg)?.id, 'f1');
+  assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'TON'), kg)?.id, 'f1');
+  assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'TO'), kg)?.id, 'f1');
   assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'TN'),
     [{ ...kg[0], unidade_alt: 'T', fator_conversao: 1000 }])?.id, 'f1');
+  // Nome comercial diferente ainda nao autoriza auto-vinculo.
+  assert.equal(encontrarProdutoExatoDaNota(nota('CALCARIO', 'TON'),
+    [{ ...kg[0], nome: 'CALCARIO AGRICOLA DOLOMITICO' }]), null);
+  assert.equal(encontrarProdutoExatoDaNota(nota('FERTILIZANTE', 'CX'), kg), null);
 });
 test('não confunde uma marca dentro do nome de outra', () => {
   assert.equal(encontrarProdutoExatoDaNota(nota('Vian'), produtos), null);
