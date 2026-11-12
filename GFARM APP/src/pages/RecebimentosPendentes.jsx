@@ -444,8 +444,9 @@ export default function RecebimentosPendentes() {
       const unidadeBaseNormal = normalizarUnidade(produto?.unidade);
       const fatorPadrao = unidadeEntradaNormal && unidadeBaseNormal
         ? convertQty(1, unidadeEntradaNormal, unidadeBaseNormal) : null;
-      const quantidadeNaBase = fatorPadrao !== null && Number.isFinite(Number(e.quantidade))
-        ? Number(e.quantidade) * fatorPadrao : null;
+      const quantidadeInformada = Number(String(e.quantidade ?? '').replace(',', '.'));
+      const quantidadeNaBase = fatorPadrao !== null && Number.isFinite(quantidadeInformada)
+        ? quantidadeInformada * fatorPadrao : null;
       const modoPreco = e.origem_custo || (e.custo_alterado ? 'manual' : 'auto');
       const precoCadastrado = produto && produto.custo_unitario != null
         && Number.isFinite(Number(produto.custo_unitario)) && Number(produto.custo_unitario) > 0
