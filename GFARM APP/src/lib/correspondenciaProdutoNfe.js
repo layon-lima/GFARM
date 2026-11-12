@@ -31,10 +31,13 @@ export function unidadeCompatível(dados, produto) {
   const uNota = normalizarUnidade(nota);
   const uBase = normalizarUnidade(base) || base;
   if (!uNota) return false;
-  // Sinônimos da unidade-base, como TN e T, não exigem fator extra.
+  // Sinônimos de unidade e conversoes padrao exatas sao aceitos
+  // em recebimentos de NF-e mesmo sem fator alternativo no cadastro.
   if (uNota === uBase) return true;
-  // Outras conversões só são seguras quando o cadastro prevê a unidade
-  // alternativa com fator positivo (motor do estoque usa essa mesma regra).
+  const padrao = convertQty(1, uNota, uBase);
+  if (padrao !== null && Number.isFinite(padrao) && padrao > 0) return true;
+  // Embalagens e outras unidades sem equivalencia fisica obrigam fator
+  // alternativo cadastrado, preservando a identificacao segura do produto.
   const uAlternativo = normalizarUnidade(alternativo);
   if (!alternativo || !(Number(produto.fator_conversao) > 0) ||
       !uAlternativo || uNota !== uAlternativo) return false;
