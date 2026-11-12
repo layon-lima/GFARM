@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { ExternalLink, FileUp, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ExternalLink, FileUp, FolderOpen, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -12,20 +12,100 @@ export default function ConsultaXmlFazenda({ nota, link, onImportar, onClose }) 
   const [arrastando, setArrastando] = useState(false);
   const [processando, setProcessando] = useState(false);
   const [resultado, setResultado] = useState(null);
+  const [pasta, setPasta] = useState(null);
+  const [statusPasta, setStatusPasta] = useState('');
   const arquivoRef = useRef(null);
+  const importandoRef = useRef(false);
+  const varrendoRef = useRef(false);
+  const arquivosVistosRef = useRef(new Set());
+  const iniciouEmRef = useRef(0);
 
   async function importar(arquivo) {
-    if (!arquivo || processando) return;
+    if (!arquivo || importandoRef.current) return null;
+    importandoRef.current = true;
     setResultado(null);
     setProcessando(true);
     try {
       const res = await onImportar(arquivo);
       if (res) setResultado(res);
+      return res;
     } finally {
+      importandoRef.current = false;
       setProcessando(false);
       if (arquivoRef.current) arquivoRef.current.value = '';
     }
   }
+
+  async function autorizarPasta() {
+    if (typeof window.showDirectoryPicker !== 'function') {
+      setStatusPasta('Seu navegador não oferece monitoramento de pasta. Use o botão de selecionar XML.');
+      return;
+    }
+    try {
+      // A permissão é apenas de LEITURA e vale para esta janela.
+      const handle = await window.showDirectoryPicker({
+        mode: 'read', startIn: 'downloads', id: 'gfarm-xml-nfe',
+      });
+      iniciouEmRef.current = Date.now();
+      arquivosVistosRef.current.clear();
+      setStatusPasta('Pasta autorizada: aguardando XML novo com a chave desta nota...');
+      setPasta(handle);
+    } catch (erro) {
+      if (erro?.name === 'AbortError') {
+        setStatusPasta('Pasta não autorizada. Você ainda pode selecionar ou arrastar o XML.');
+      } else {
+        setStatusPasta('O navegador não permitiu acessar a pasta. Use Selecionar XML.');
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!pasta) return undefined;
+    let ativo = true;
+    async function verificar() {
+      if (!ativo || varrendoRef.current || importandoRef.current) return;
+      varrendoRef.current = true;
+      try {
+        let examinados = 0;
+        for await (const handle of pasta.values()) {
+          if (!ativo || ++examinados > 4000) break;
+          if (handle.kind !== 'file' || !/\.xml$/i.test(handle.name)) continue;
+          const arquivo = await handle.getFile();
+          if (arquivo.size < 50 || arquivo.size > 3 * 1024 * 1024 ||
+              arquivo.lastModified < iniciouEmRef.current - 20000) continue;
+          const idArquivo = handle.name + ':' + arquivo.size + ':' + arquivo.lastModified;
+          if (arquivosVistosRef.current.has(idArquivo)) continue;
+          arquivosVistosRef.current.add(idArquivo);
+
+          // Confere a chave NO NAVEGADOR antes de enviar o arquivo.
+          const documento = new DOMParser().parseFromString(await arquivo.text(), 'application/xml');
+          const nfe = documento.getElementsByTagNameNS('*', 'infNFe')[0];
+          const protocolo = documento.getElementsByTagNameNS('*', 'chNFe')[0];
+          const chaveDoArquivo = nfe?.getAttribute('Id')?.replace(/^NFe/, '') ||
+            protocolo?.textContent?.trim() || '';
+          if (chaveDoArquivo !== String(nota.chave_acesso || '').replace(/\D/g, '')) continue;
+          const numeroXml = documento.getElementsByTagNameNS('*', 'nNF')[0]?.textContent?.trim() || '';
+          if (numeroXml.replace(/^0+/, '') !== String(nota.numero_nota || '').replace(/^0+/, '')) continue;
+          const importado = await importar(arquivo);
+          if (importado && ativo) {
+            setStatusPasta('XML desta NF-e detectado e importado automaticamente.');
+            setPasta(null);
+            break;
+          }
+        }
+      } catch {
+        if (ativo) {
+          setStatusPasta('Não foi possível continuar lendo a pasta. Selecione ou arraste o XML.');
+          setPasta(null);
+        }
+      } finally {
+        varrendoRef.current = false;
+      }
+    }
+    verificar();
+    const timer = setInterval(verificar, 2500);
+    return () => { ativo = false; clearInterval(timer); };
+  }, [pasta, nota.chave_acesso, nota.numero_nota]);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-2 md:p-4"
@@ -75,9 +155,25 @@ export default function ConsultaXmlFazenda({ nota, link, onImportar, onClose }) 
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 Se o portal bloquear a janela interna, use “Abrir no navegador”.
-                O download fica na pasta do navegador: por segurança, o GFARM
-                só pode lê-lo depois que você selecionar ou arrastar o arquivo.
+                O download fica na pasta do navegador. Você pode autorizar o monitoramento
+                abaixo ou selecionar e arrastar o arquivo manualmente.
               </p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs font-semibold">Detectar o XML ao baixar</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                No Chrome ou Edge, autorize uma pasta de downloads uma vez.
+                Enquanto esta janela estiver aberta, o GFARM procura novos XMLs
+                com a chave desta nota e importa automaticamente. Não lê outras
+                notas para o servidor.
+              </p>
+              <Button variant="outline" size="sm" className="mt-2"
+                onClick={pasta ? () => { setPasta(null); setStatusPasta('Monitoramento interrompido.'); } : autorizarPasta}
+                disabled={processando}>
+                <FolderOpen className="mr-1 h-4 w-4" />
+                {pasta ? 'Parar monitoramento' : 'Autorizar pasta de downloads'}
+              </Button>
+              {!!statusPasta && <p className="mt-2 text-[11px] text-muted-foreground" role="status">{statusPasta}</p>}
             </div>
             <div
               className={'rounded-lg border-2 border-dashed p-4 text-center ' +
