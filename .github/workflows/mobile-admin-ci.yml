@@ -36,6 +36,7 @@ jobs:
       - run: node --test tests/custo-recebimento-nfe.test.mjs
       - run: node --test tests/correspondencia-produto-nfe.test.mjs
       - run: node --test tests/consulta-fiscal-nfe.test.mjs
+      - run: node --test tests/atualizar-recebimentos-xml.test.mjs
       - run: npm run build
       - run: npm run lint
 
