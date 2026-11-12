@@ -456,10 +456,7 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
              WHERE origem_id=:id AND status='PROCESSANDO'
         """), {"id": origem_id, "doc": numero})
         db.commit()
-        return {
-            "status": "APROVADO", "documento_estoque_id": numero,
-            "origem_custo": origem_custo, "custo_unitario_entrada": str(custo),
-        }
+        return {"status": "APROVADO", "documento_estoque_id": numero}
     except Exception as err:
         db.rollback()
         db.execute(text("""
