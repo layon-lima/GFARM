@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'gfarm-pwa-v3-branding';
+const CACHE_VERSION = 'gfarm-pwa-v4-assets-rede';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 const NEVER_CACHE_PREFIXES = [
@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
   // Navigation: network first so a newly published version is preferred.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then((response) => {
           if (response && response.ok) {
             const copy = response.clone();
@@ -69,6 +69,23 @@ self.addEventListener('fetch', (event) => {
             }
           );
         })
+    );
+    return;
+  }
+
+  // O navegador nunca deve exibir JS/CSS antigo depois de uma atualizacao:
+  // rede primeiro, cache apenas para funcionamento offline.
+  if (request.destination === 'script' || request.destination === 'style') {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .then(async (response) => {
+          if (response && response.ok) {
+            const cache = await caches.open(STATIC_CACHE);
+            await cache.put(request, response.clone());
+          }
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || Response.error())
     );
     return;
   }
