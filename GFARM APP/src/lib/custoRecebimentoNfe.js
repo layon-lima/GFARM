@@ -1,3 +1,5 @@
+import { normalizarUnidade } from './units.js';
+
 /**
  * Custo fiscal de um recebimento, apresentado na unidade-base do produto.
  * O valor vem da NF-e; o motor do GFARM recalcula com Decimal no servidor
@@ -13,8 +15,14 @@ export function fatorParaUnidadeBase(dados, produto, fatorManual = '') {
   const original = String(dados?.unidade || '').trim().toUpperCase();
   const base = String(produto.unidade || '').trim().toUpperCase();
   if (!original || !base) return null;
-  if (original === base) return 1;
-  if (original === String(produto.unidade_alt || '').trim().toUpperCase()) {
+  const unidadeFiscal = normalizarUnidade(original);
+  const unidadeBase = normalizarUnidade(base);
+  // TN, T, TON e TO representam a MESMA tonelada, sem fator extra.
+  if (original === base || (unidadeFiscal && unidadeFiscal === unidadeBase)) return 1;
+  const alternativo = String(produto.unidade_alt || '').trim().toUpperCase();
+  if (original === alternativo || (
+    unidadeFiscal && alternativo && unidadeFiscal === normalizarUnidade(alternativo)
+  )) {
     const fator = Number(produto.fator_conversao);
     return Number.isFinite(fator) && fator > 0 ? fator : null;
   }
