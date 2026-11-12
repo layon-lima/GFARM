@@ -1217,6 +1217,7 @@ def movimentar_estoque(
 
     produtos_tocados: set[str] = set()
     lotes_tocados: set[str] = set()
+    custo_recebimento_efetivo = None
 
     try:
         with db.begin():
@@ -1477,7 +1478,8 @@ def movimentar_estoque(
                                 else "CUSTO_PENDENTE_NF_SEM_PRECO"
                             )
                             dados["observacao"] = marcador + " | NF sem preço fiscal"
-                    documento._custo_unitario_entrada = str(custo_unitario)
+                    if origem_modulo == "controles_recebimentos":
+                        custo_recebimento_efetivo = str(custo_unitario)
 
                     _adicionar_saldo(
                         db,
@@ -1732,6 +1734,10 @@ def movimentar_estoque(
             db.flush()
 
         db.refresh(documento)
+        if custo_recebimento_efetivo is not None:
+            # A API usa o valor que foi efetivamente calculado dentro
+            # do motor, inclusive quando havia outra NF concorrente.
+            documento._custo_unitario_entrada = custo_recebimento_efetivo
 
         return documento
 
