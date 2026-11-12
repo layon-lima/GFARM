@@ -11,6 +11,9 @@ on:
       - 'GFARM APP/tests/custo-recebimento-nfe.test.mjs'
       - 'GFARM APP/tests/correspondencia-produto-nfe.test.mjs'
       - 'GFARM APP/src/pages/RecebimentosPendentes.jsx'
+      - 'GFARM APP/src/components/movimentacoes/NovoProdutoDaNota.jsx'
+      - 'GFARM APP/src/lib/produtoDaNota.js'
+      - 'GFARM APP/tests/produto-da-nota.test.mjs'
       - 'GFARM APP/tests/consulta-fiscal-nfe.test.mjs'
       - 'GFARM APP/src/lib/atualizarRecebimentosXml.js'
       - 'GFARM APP/tests/atualizar-recebimentos-xml.test.mjs'
@@ -35,4 +38,5 @@ jobs:
       - run: node --test tests/atualizar-recebimentos-xml.test.mjs
       - run: node --test tests/custo-recebimento-nfe.test.mjs
       - run: node --test tests/correspondencia-produto-nfe.test.mjs
+      - run: node --test tests/produto-da-nota.test.mjs
       - run: npm run build
