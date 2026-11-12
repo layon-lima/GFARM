@@ -3,6 +3,7 @@ sem alterar quantidade parcial, aprovar ou chamar o motor de estoque.
 """
 import json
 import unittest
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
@@ -78,8 +79,8 @@ class ImportarXmlEmLoteTest(unittest.TestCase):
         self.assertEqual(atualizados["pedido-produto-b"]["quantidade"], "250")
         self.assertEqual(atualizados["pedido-produto-a"]["quantidade_xml"], "8000")
         self.assertEqual(atualizados["pedido-produto-b"]["quantidade_xml"], "250")
-        self.assertEqual(atualizados["pedido-produto-a"]["valor_total"], "620.0")
-        self.assertEqual(atualizados["pedido-produto-b"]["valor_total"], "11375.00")
+        self.assertEqual(Decimal(atualizados["pedido-produto-a"]["valor_total"]), Decimal("620"))
+        self.assertEqual(Decimal(atualizados["pedido-produto-b"]["valor_total"]), Decimal("11375"))
         self.db.commit.assert_called_once()
         # A rota de importacao NAO deve chamar movimentar_estoque.
         # Apenas UPDATE de JSON de pendencias, sem criar documentos de estoque.
