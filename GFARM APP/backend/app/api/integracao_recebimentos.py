@@ -375,7 +375,9 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
         if dados.fator_conversao is not None:
             fator = dados.fator_conversao
         else:
-            fator = Decimal(str(converter_quantidade_estoque(produto, quantidade, unidade)["fator_conversao"]))
+            fator = Decimal(str(converter_quantidade_estoque(
+                produto, quantidade, unidade, permitir_conversao_padrao=True
+            )["fator_conversao"]))
     except ValueError as err:
         raise HTTPException(422, str(err)) from err
     if fator <= 0:
