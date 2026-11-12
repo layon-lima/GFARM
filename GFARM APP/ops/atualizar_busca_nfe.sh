@@ -17,6 +17,8 @@ echo '[3/5] Atualizando somente o app (sem dependencias)...'
 echo '[4/5] Conferindo bundle servido no container...'
 docker exec gfarm-app-1 sh -c "grep -Fql 'Busca inteligente v2' /app/dist/assets/*.js" || { echo 'ERRO: interface antiga no container' >&2; exit 1; }
 docker exec gfarm-app-1 sh -c "grep -Fql 'Identificado automaticamente' /app/dist/assets/*.js" || { echo 'ERRO: correspondencia nao compilada' >&2; exit 1; }
+docker exec gfarm-app-1 sh -c "grep -Fql 'Consultar e importar XML' /app/dist/assets/*.js" || { echo 'ERRO: janela fiscal nao foi publicada no container' >&2; exit 1; }
+docker exec gfarm-app-1 sh -c "grep -Fql 'Autorizar pasta de downloads' /app/dist/assets/*.js" || { echo 'ERRO: detector de XML na pasta nao foi publicado' >&2; exit 1; }
 echo '[5/5] Validando resposta da API e politica anti-cache...'
 docker exec gfarm-app-1 python -c '
 import urllib.request
@@ -29,5 +31,5 @@ for url in ("/api/health", "/recebimentos-pendentes", "/sw.js"):
             assert "no-store" in politica, (url, politica)
         print("OK", url, resp.status, politica)
 '
-echo 'SUCESSO: busca inteligente v2 confirmada no container.'
+echo 'SUCESSO: busca inteligente e importacao de XML por NF-e confirmadas no container.'
 echo 'No navegador: Ctrl+Shift+R uma vez para trocar a interface antiga.'
