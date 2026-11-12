@@ -154,7 +154,10 @@ def _frontend_file(
 
     if candidate.is_file():
         return FileResponse(
-            candidate
+            candidate,
+            headers={"Cache-Control": "no-store, max-age=0"}
+            if candidate.name in {"index.html", "sw.js"}
+            else None,
         )
 
     index = (
@@ -164,7 +167,8 @@ def _frontend_file(
 
     if index.is_file():
         return FileResponse(
-            index
+            index,
+            headers={"Cache-Control": "no-store, max-age=0"},
         )
 
     raise HTTPException(
