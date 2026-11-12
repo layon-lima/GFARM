@@ -74,7 +74,7 @@ export function convertQty(value, de, para) {
 
 // Mapeia códigos comuns da NF-e (uCom) para os códigos canônicos do sistema.
 const MAPA_UNIDADES = {
-  ton: 'ton', t: 'ton', tonelada: 'ton', toneladas: 'ton',
+  ton: 'ton', t: 'ton', tn: 'ton', to: 'ton', tons: 'ton', tonelada: 'ton', toneladas: 'ton',
   kg: 'kg', quilograma: 'kg', quilos: 'kg', quilo: 'kg',
   g: 'g', grama: 'g', gr: 'g', gramas: 'g',
   l: 'L', lt: 'L', litro: 'L', litros: 'L',
