@@ -32,6 +32,11 @@ UNIDADES = {
     "UND": ("un", Decimal("1")),
     "UNID": ("un", Decimal("1")),
     "UNIDADE": ("un", Decimal("1")),
+    # Doses não são automaticamente convertidas em unidades (UN).
+    # Apenas grafias equivalentes da própria unidade DOS podem ser somadas.
+    "DOS": ("dose", Decimal("1")),
+    "DOSE": ("dose", Decimal("1")),
+    "DOSES": ("dose", Decimal("1")),
 }
 
 
@@ -43,6 +48,21 @@ def _normalizar(valor):
     raw = unicodedata.normalize("NFKD", str(valor or "").strip())
     raw = "".join(c for c in raw if not unicodedata.combining(c))
     return " ".join(re.sub(r"[^A-Z0-9]+", " ", raw.upper()).split())
+
+
+def _nome_com_sufixo_curto(nome_pendente: str, nome_xml: str) -> bool:
+    """Tolera abreviação final de 1-2 letras, mas nunca dígitos distintos.
+
+    Ex.: MBIO BRAD x MBIO BRADY. Apenas ajuda quando não houve
+    correspondência exata; a rotina principal ainda exige código único.
+    """
+    if len(nome_pendente) < 6 or len(nome_xml) < 6:
+        return False
+    if not nome_pendente[:1] == nome_xml[:1]:
+        return False
+    curto, longo = sorted((nome_pendente, nome_xml), key=len)
+    sobra = longo[len(curto):]
+    return bool(longo.startswith(curto) and 1 <= len(sobra) <= 2 and sobra.isalpha())
 
 
 def _text(parent, tag):
@@ -170,6 +190,11 @@ def extrair_custo_xml(xml_base64: str, dados: dict) -> dict:
             if (_normalizar(item["nome"]) == nome
                 or _normalizar(item["nome"]).startswith(nome + " ")
                 or nome.startswith(_normalizar(item["nome"]) + " "))
+        ]
+    if not candidates and nome:
+        candidates = [
+            item for item in all_items
+            if _nome_com_sufixo_curto(nome, _normalizar(item["nome"]))
         ]
     if not candidates:
         raise DadosFiscaisIncompativeis(
