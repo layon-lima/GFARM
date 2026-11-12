@@ -106,6 +106,38 @@ def _quantidade_convertida(quantidade, unidade_xml, unidade_recebimento):
     return quantidade * origem[1] / destino[1]
 
 
+def _quantidade_do_item(item, unidade_recebimento, quantidade_referencia=None):
+    """Compara quantidade comercial e tributável, evitando conversões presumidas.
+
+    A NF-e pode informar embalagem (uCom/qCom) e unidade tributável
+    (uTrib/qTrib). Usar a unidade compatível com a entrada do Controles.
+    """
+    possibilidades = []
+    for origem in item.get("variantes_quantidade") or [
+        {"quantidade": item["quantidade"], "unidade": item["unidade"], "origem": "comercial"}
+    ]:
+        try:
+            convertido = _quantidade_convertida(
+                origem["quantidade"], origem["unidade"], unidade_recebimento
+            )
+        except DadosFiscaisIncompativeis:
+            continue
+        possibilidades.append((convertido, origem))
+    if not possibilidades:
+        todas = ", ".join(
+            str(v["unidade"]) for v in item.get("variantes_quantidade", [])
+        ) or str(item["unidade"])
+        raise DadosFiscaisIncompativeis(
+            f"Não é possível converter {todas} para {unidade_recebimento} "
+            "com segurança. Confira a unidade/custo da nota."
+        )
+    if quantidade_referencia is not None:
+        for convertido, origem in possibilidades:
+            if convertido == quantidade_referencia:
+                return convertido, origem
+    return possibilidades[0]
+
+
 def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_quantidade=False) -> dict:
     """Preço na unidade do recebimento, validado contra a mesma NF-e."""
     if not isinstance(xml_base64, str) or len(xml_base64) > MAX_XML_BYTES * 4 // 3 + 100:
@@ -154,14 +186,25 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
             continue
         preco = _text(prod, "vUnCom")
         quantidade = _text(prod, "qCom")
+        unidade = _text(prod, "uCom")
+        qtde_tributavel = _text(prod, "qTrib")
+        unidade_tributavel = _text(prod, "uTrib")
         total = _text(prod, "vProd")
         if not preco and not total:
             continue
+        variantes = [{"quantidade": _decimal(quantidade, "qCom"),
+                     "unidade": unidade, "origem": "comercial"}]
+        if qtde_tributavel and unidade_tributavel:
+            variantes.append({
+                "quantidade": _decimal(qtde_tributavel, "qTrib"),
+                "unidade": unidade_tributavel, "origem": "tributavel",
+            })
         all_items.append({
             "codigo": _text(prod, "cProd"),
             "nome": _text(prod, "xProd"),
-            "quantidade": _decimal(quantidade, "qCom"),
-            "unidade": _text(prod, "uCom"),
+            "quantidade": variantes[0]["quantidade"],
+            "unidade": unidade,
+            "variantes_quantidade": variantes,
             "total": _decimal(total, "vProd") if total else
                      _decimal(preco, "vUnCom") * _decimal(quantidade, "qCom"),
             "cfop": _text(prod, "CFOP"),
@@ -209,8 +252,8 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
         unicos = []
         for candidato in all_items:
             try:
-                convertido = _quantidade_convertida(
-                    candidato["quantidade"], candidato["unidade"], dados.get("unidade")
+                convertido, _ = _quantidade_do_item(
+                    candidato, dados.get("unidade"), qtde_recebida
                 )
             except DadosFiscaisIncompativeis:
                 continue
@@ -235,14 +278,15 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
         raise DadosFiscaisIncompativeis(
             "O XML tem mais de um produto com descrição parecida. Confira o código."
         )
-    quantidade_xml = sum(
-        (_quantidade_convertida(i["quantidade"], i["unidade"], dados.get("unidade"))
-         for i in candidates), Decimal("0")
-    )
+    quantidade_recebida = _decimal(dados.get("quantidade"), "quantidade recebida")
+    quantidades_convertidas = [
+        _quantidade_do_item(i, dados.get("unidade"), quantidade_recebida)
+        for i in candidates
+    ]
+    quantidade_xml = sum((qtde for qtde, _ in quantidades_convertidas), Decimal("0"))
     valor_xml = sum((i["total"] for i in candidates), Decimal("0"))
     if quantidade_xml <= 0 or valor_xml <= 0:
         raise DadosFiscaisIncompativeis("Quantidade ou valor da NF-e inválidos.")
-    quantidade_recebida = _decimal(dados.get("quantidade"), "quantidade recebida")
     unitario = valor_xml / quantidade_xml
     total_recebido = unitario * quantidade_recebida
 
@@ -262,6 +306,8 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
         "ncm": candidates[0]["ncm"] or dados.get("ncm") or "",
         "quantidade_xml": str(quantidade_xml),
         "unidade_xml": dados.get("unidade") or candidates[0]["unidade"],
+        "unidade_fiscal_origem": quantidades_convertidas[0][1]["unidade"],
+        "origem_quantidade_fiscal": quantidades_convertidas[0][1]["origem"],
         "produto_xml": candidates[0]["nome"] if len(nomes) == 1 else "",
         "identificacao_fiscal": identificacao_fiscal,
         "itens_xml": [i["numero_item"] for i in candidates],
