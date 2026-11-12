@@ -14,6 +14,10 @@ from app.services.consistencia_estoque import (
 from app.services.nfe_ticket_watcher import (
     processar_pasta_nfe_tickets,
 )
+from app.services.distribuicao_dfe import (
+    habilitada as dfe_habilitada,
+    executar_sincronizacao_silenciosa,
+)
 
 
 logger = logging.getLogger(
@@ -111,6 +115,19 @@ def iniciar_agendador():
         max_instances=1,
         coalesce=True,
     )
+
+    # Nunca agenda uma unica requisicao a SEFAZ sem a chave de
+    # habilitacao explicita no ambiente do servidor. Sem formularios.
+    if dfe_habilitada():
+        scheduler.add_job(
+            executar_sincronizacao_silenciosa,
+            trigger="interval",
+            minutes=5,
+            id="central_fiscal_nsu_silenciosa",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
 
     scheduler.add_job(
         executar_backup_automatico,
