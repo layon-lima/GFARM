@@ -527,6 +527,58 @@ def _adicionar_saldo(
     return saldo
 
 
+def _valorizar_saldos_sem_custo_inicial(
+    db: Session,
+    *,
+    produto: Produto,
+    custo_fiscal: Decimal,
+) -> bool:
+    """Valoriza o estoque ainda sem custo quando surge o primeiro preco fiscal.
+
+    Somente para produtos com saldo sem valor e com entrada anterior do
+    Meus Controles explicitamente marcada como custo pendente. Isto impede
+    que 100 unidades ainda nao valorizadas a R$ 0 diluam artificialmente o
+    primeiro custo fiscal de 50 unidades a R$ 12.
+
+    Nao altera documentos ou baixas historicas e nao mexe em saldos que ja
+    possuam custo contabil. Executa na mesma transacao da nova entrada.
+    """
+    if custo_fiscal <= 0 or _decimal(produto.custo_unitario) != 0:
+        return False
+
+    saldos = db.scalars(
+        select(EstoqueSaldo)
+        .where(EstoqueSaldo.produto_id == produto.id)
+        .with_for_update()
+    ).all()
+    if not any(_qtd(s.quantidade) > 0 for s in saldos):
+        return False
+    if any(_dinheiro(s.valor_total) != 0 for s in saldos):
+        return False
+
+    # Nunca reavaliar estoque antigo/cadastrado por engano: o proprio
+    # motor precisa ter registrado antes uma NF-e sem custo conhecido.
+    pendencia = db.scalar(
+        select(EstoqueDocumentoItem.id)
+        .join(EstoqueDocumento, EstoqueDocumento.id == EstoqueDocumentoItem.documento_id)
+        .where(
+            EstoqueDocumentoItem.produto_id == produto.id,
+            EstoqueDocumentoItem.observacao.contains("CUSTO_PENDENTE_NF_SEM_PRECO"),
+            EstoqueDocumento.status == "contabilizado",
+        ).limit(1)
+    )
+    if not pendencia:
+        return False
+
+    for saldo in saldos:
+        quantidade = _qtd(saldo.quantidade)
+        if quantidade > 0:
+            saldo.custo_medio = _custo(custo_fiscal)
+            saldo.valor_total = _dinheiro(quantidade * custo_fiscal)
+    produto.custo_unitario = float(_custo(custo_fiscal))
+    return True
+
+
 def _subtrair_saldo(
     db: Session,
     *,
@@ -1315,6 +1367,23 @@ def movimentar_estoque(
                     produto.id
                 )
 
+                # NFs de custo provisório precisam ler a media mais recente
+                # na mesma transacao do motor. O lock por produto impede
+                # corridas entre duas notas aprovadas ao mesmo tempo.
+                if (
+                    tipo_movimento in MOVIMENTOS_ENTRADA
+                    and origem_modulo == "controles_recebimentos"
+                    and (
+                        dados.get("usar_custo_medio_atual")
+                        or dados.get("valorizar_custo_pendente_inicial")
+                    )
+                ):
+                    db.scalar(
+                        select(Produto).where(Produto.id == produto.id)
+                        .with_for_update()
+                    )
+                    db.refresh(produto)
+
                 if (
                     tipo_movimento
                     in MOVIMENTOS_ENTRADA
@@ -1382,6 +1451,33 @@ def movimentar_estoque(
                             or 0,
                         )
                     )
+                    if custo_unitario < 0:
+                        raise EstoqueErro("Custo unitário não pode ser negativo.")
+
+                    origem_custo_nota = dados.get("origem_custo_recebimento")
+                    if origem_modulo == "controles_recebimentos":
+                        if (
+                            dados.get("valorizar_custo_pendente_inicial")
+                            and origem_custo_nota == "fiscal"
+                        ):
+                            if _valorizar_saldos_sem_custo_inicial(
+                                db, produto=produto, custo_fiscal=custo_unitario
+                            ):
+                                documento.observacao = (
+                                    (documento.observacao or "")
+                                    + " | estoque sem custo anterior valorizado "
+                                      "pelo primeiro preço fiscal"
+                                )
+                        if dados.get("usar_custo_medio_atual"):
+                            # Este preco foi efetivamente calculado dentro
+                            # da transacao, apos obter lock do produto.
+                            marcador = (
+                                "CUSTO_MEDIO_PROVISORIO"
+                                if custo_unitario > 0
+                                else "CUSTO_PENDENTE_NF_SEM_PRECO"
+                            )
+                            dados["observacao"] = marcador + " | NF sem preço fiscal"
+                    documento._custo_unitario_entrada = str(custo_unitario)
 
                     _adicionar_saldo(
                         db,
