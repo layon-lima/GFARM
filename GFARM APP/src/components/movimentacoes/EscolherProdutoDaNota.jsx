@@ -7,7 +7,7 @@ import { sugerirProdutosDaNota } from '@/lib/correspondenciaProdutoNfe';
  * como sugestão, nunca são vinculadas silenciosamente à NF-e.
  */
 export default function EscolherProdutoDaNota({
-  dados, produtos = [], setores = [],
+  dados, produtos = [], setores = [], carregando = false, onReload,
   selecionado = null, busca, identificacao,
   onSearch, onSelect, onClear, onCreate, podeCadastrar = false,
 }) {
@@ -119,8 +119,18 @@ export default function EscolherProdutoDaNota({
       </div>
     ) : (
       <div className="text-[11px] text-muted-foreground">
-        {opcoes.length ? 'Confira as correspondências sugeridas' : 'Nenhuma correspondência segura no cadastro'}
+        {carregando && !produtos.length
+          ? 'Carregando produtos cadastrados...'
+          : !produtos.length
+            ? 'Nenhum produto carregado do GFARM'
+            : opcoes.length
+              ? 'Confira as correspondências sugeridas'
+              : 'Nenhuma correspondência segura no cadastro'}
       </div>
+    )}
+    {!carregando && !produtos.length && onReload && (
+      <button type="button" className="text-xs font-semibold text-primary underline"
+        onClick={onReload}>Recarregar produtos do cadastro</button>
     )}
     {aberto && (
       <div className="absolute left-0 right-0 top-[60px] z-50 overflow-hidden rounded-lg border bg-popover shadow-lg"
