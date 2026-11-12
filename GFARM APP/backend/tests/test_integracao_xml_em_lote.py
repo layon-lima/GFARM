@@ -199,6 +199,38 @@ class ImportarXmlEmLoteTest(unittest.TestCase):
         self.assertEqual(len(result["detalhes_pendentes"]), 2)
 
     @patch("app.api.integracao_recebimentos._row")
+    def test_chave_e_um_item_xml_preenchem_nota_com_produto_diferente(self, mock_row):
+        nota = {
+            **self.payload_a,
+            "produto": "KCL",
+            "codigo_produto": "KCL-00-00-60",
+            "quantidade": "48",
+            "unidade": "t",
+        }
+        self.db.execute.return_value.mappings.return_value.all.return_value = [
+            {"origem_id": "kcl", "dados": nota},
+        ]
+        mock_row.return_value = {
+            "origem_id": "kcl", "status": "PENDENTE", "dados": nota,
+        }
+        xml = gerar_xml(produtos=[
+            ("NPK104600", "Fertilizante 10-46-00", "48.0000", "TO", "6500", "312000"),
+        ])
+        resultado = recuperar_custo_xml(
+            "kcl", RecuperarCustoXml(xml=xml), user=self.admin, db=self.db,
+        )
+        self.assertEqual(resultado["itens_atualizados"], 1)
+        preenchido = resultado["itens_fiscais_atualizados"][0]["dados"]
+        self.assertTrue(preenchido["divergencia_produto_xml"])
+        self.assertEqual(preenchido["produto"], "KCL")
+        self.assertEqual(preenchido["produto_xml"], "Fertilizante 10-46-00")
+        self.assertEqual(preenchido["identificacao_fiscal"], "quantidade_e_unidade_unicas")
+        self.assertEqual(Decimal(preenchido["valor_unitario"]), Decimal("6500"))
+        self.assertEqual(Decimal(preenchido["valor_total"]), Decimal("312000"))
+        self.assertEqual(resultado["nao_identificados"], [])
+        self.db.commit.assert_called_once()
+
+    @patch("app.api.integracao_recebimentos._row")
     def test_xml_de_outra_chave_nao_modifica_qualquer_item(self, mock_row):
         mock_row.return_value = {
             "origem_id": "pedido-produto-a",
