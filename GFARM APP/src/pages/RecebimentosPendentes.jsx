@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 import NovoProdutoDaNota from '@/components/movimentacoes/NovoProdutoDaNota';
+import ConsultaXmlFazenda from '@/components/movimentacoes/ConsultaXmlFazenda';
 import EscolherProdutoDaNota from '@/components/movimentacoes/EscolherProdutoDaNota';
 import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
@@ -65,6 +66,7 @@ export default function RecebimentosPendentes() {
   const [saving, setSaving] = useState('');
   const [recuperando, setRecuperando] = useState('');
   const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
+  const [consultandoNota, setConsultandoNota] = useState(null);
 
   // A fila pode chegar ANTES do cache de Produtos. Vincular quando ambos
   // estiverem carregados, sem sobrescrever escolhas/correções feitas pelo usuário.
@@ -141,7 +143,11 @@ export default function RecebimentosPendentes() {
       if (!Array.isArray(lista)) throw new Error('A API retornou uma lista de recebimentos inválida.');
       setItens(lista);
       setEdicoes(prev => Object.fromEntries(lista.map(item => [
-        item.origem_id, prev[item.origem_id] || {
+        item.origem_id, prev[item.origem_id] ? {
+          ...prev[item.origem_id],
+          ...(!prev[item.origem_id].validade && item.dados.validade
+            ? { validade: formatarValidadeInicial(item.dados.validade) } : {}),
+        } : {
           produto_id: '', deposito_id: '', gaveta_id: '',
           quantidade: txt(item.dados.quantidade),
           unidade: item.dados.unidade,
@@ -209,10 +215,11 @@ export default function RecebimentosPendentes() {
       );
       await carregar();
       toast({
-        title: 'Custo fiscal recuperado da NF-e',
-        description: retorno.itens_atualizados + ' produto(s) da mesma nota atualizado(s).' +
-          (retorno.nao_identificados?.length ? ' Alguns produtos precisam de conferência.' : ''),
+        title: 'Dados fiscais recuperados do XML',
+        description: retorno.itens_atualizados + ' entrada(s) da mesma NF-e preenchida(s).' +
+          (retorno.nao_identificados?.length ? ' Confira as entradas não identificadas.' : ''),
       });
+      return retorno;
     } catch (erro) {
       toast({
         variant: 'destructive', title: 'Não foi possível recuperar o custo',
@@ -221,6 +228,7 @@ export default function RecebimentosPendentes() {
     } finally {
       setRecuperando('');
     }
+    return null;
   }
 
   async function aprovar(item) {
@@ -357,18 +365,31 @@ export default function RecebimentosPendentes() {
               <div className="mb-1 text-[11px] text-muted-foreground">Chave de acesso da NF-e</div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="min-w-0 break-all font-mono text-xs">{d.chave_acesso || 'Não informada'}</span>
+                {d.custo_origem === 'xml_conferido' && <span className="text-[11px] font-semibold text-emerald-700">XML conferido</span>}
                 {linkFazenda ? (
-                  <a href={linkFazenda} target="_blank" rel="noopener noreferrer"
+                  <button type="button"
                     className="inline-flex shrink-0 items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs font-semibold text-primary hover:bg-muted"
-                    title="Abrir consulta no Portal Nacional da NF-e com a chave informada; o portal exige captcha">
-                    <ExternalLink className="h-3.5 w-3.5" /> Consultar na Fazenda
-                  </a>
+                    title="Consultar a NF-e e importar seu XML em todas as entradas pendentes"
+                    onClick={() => setConsultandoNota(item)}>
+                    <ExternalLink className="h-3.5 w-3.5" /> Consultar e importar XML
+                  </button>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">Consulta disponível com chave válida de 44 dígitos.</span>
                 )}
               </div>
             </div>
           </div>
+          {d.custo_origem === 'xml_conferido' && (
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
+              <span>Itens da NF-e: {Array.isArray(d.itens_xml) ? d.itens_xml.join(', ') : '—'}</span>
+              <span>Quantidade fiscal: {d.quantidade_xml || '—'} {d.unidade_xml || d.unidade || ''}</span>
+              {d.produto_xml && <span>Descrição na NF-e: {d.produto_xml}</span>}
+              {d.cfop && <span>CFOP: {d.cfop}</span>}
+              {d.ncm && <span>NCM: {d.ncm}</span>}
+              {d.lote && <span>Lote: {d.lote}</span>}
+              {d.validade && <span>Validade: {formatarValidadeInicial(d.validade)}</span>}
+            </div>
+          )}
           {semCusto && (
             <p className="mt-2 text-xs text-amber-700">
               Valores fiscais ausentes: recupere pelo XML no campo de custo ou informe o valor manualmente.
@@ -488,6 +509,15 @@ export default function RecebimentosPendentes() {
         </div>}
       </Card>;
     })}
+    {consultandoNota && (
+      <ConsultaXmlFazenda
+        key={consultandoNota.origem_id}
+        nota={consultandoNota.dados}
+        link={linkConsultaFiscalNfe(consultandoNota.dados.chave_acesso)}
+        onClose={() => setConsultandoNota(null)}
+        onImportar={arquivo => recuperarValorXml(consultandoNota, arquivo)}
+      />
+    )}
     {criandoProdutoDe && (
       <NovoProdutoDaNota
         key={criandoProdutoDe.origem_id}
