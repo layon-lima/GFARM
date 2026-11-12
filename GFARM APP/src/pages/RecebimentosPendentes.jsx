@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, FileUp, RefreshCcw, XCircle } from 'lucide-react';
+import { Check, ChevronLeft, ExternalLink, FileUp, RefreshCcw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import NovoProdutoDaNota from '@/components/movimentacoes/NovoProdutoDaNota';
 import EscolherProdutoDaNota from '@/components/movimentacoes/EscolherProdutoDaNota';
 import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
+import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 async function request(path, method = 'GET', payload, signal) {
@@ -145,7 +146,7 @@ export default function RecebimentosPendentes() {
           quantidade: txt(item.dados.quantidade),
           unidade: item.dados.unidade,
           fator_conversao: '', custo_unitario_base: '', custo_alterado: false,
-          validade: item.dados.validade || ''
+          validade: formatarValidadeInicial(item.dados.validade)
         }
       ])));
     } catch (error) {
@@ -244,13 +245,20 @@ export default function RecebimentosPendentes() {
       toast({ variant: 'destructive', title: 'Custo corrigido inválido' });
       return;
     }
+    const validadeInformada = txt(edit.validade).trim();
+    const validade = validadeInformada ? interpretarValidadeLivre(validadeInformada) : null;
+    if (validadeInformada && !validade) {
+      toast({ variant: 'destructive', title: 'Validade inválida',
+        description: 'Informe 010126, 01012026 ou 01/01/2026.' });
+      return;
+    }
     const payload = {
       produto_id: edit.produto_id, deposito_id: edit.deposito_id,
       gaveta_id: edit.gaveta_id || null,
       quantidade: edit.quantidade, unidade: edit.unidade,
       ...(edit.fator_conversao ? { fator_conversao: edit.fator_conversao } : {}),
       ...(edit.custo_alterado ? { custo_unitario_base: edit.custo_unitario_base } : {}),
-      ...(edit.validade ? { validade: edit.validade } : {}),
+      ...(validade ? { validade: validade.iso } : {}),
     };
     setSaving(item.origem_id);
     try {
@@ -307,6 +315,7 @@ export default function RecebimentosPendentes() {
       const optsGavetas = gavetas.filter(gav => gav.deposito_id === e.deposito_id);
       const fechado = item.status === 'APROVADO' || item.status === 'REJEITADO';
       const semCusto = d.valor_unitario == null && d.valor_total == null;
+      const linkFazenda = linkConsultaFiscalNfe(d.chave_acesso);
       const unitarioFiscal = precoFiscalNaUnidadeBase(d);
       const custoFiscalBase = precoFiscalNaUnidadeBase(d, produto, e.fator_conversao);
       const custoEditado = !!e.custo_alterado;
@@ -318,39 +327,54 @@ export default function RecebimentosPendentes() {
         <div className="flex flex-wrap justify-between gap-2">
           <div>
             <div className="text-sm font-semibold">NF {d.numero_nota} {d.serie ? '· Série ' + d.serie : ''}</div>
-            <div className="text-xs text-muted-foreground">{d.fornecedor} {d.documento_fornecedor ? '· ' + d.documento_fornecedor : ''}</div>
             <div className="text-xs text-muted-foreground">Pedido {d.numero_pedido || '—'} · Recebido em {d.data_recebimento || '—'}</div>
           </div>
           <span className="text-xs font-semibold">{item.status}</span>
         </div>
-        <div className="rounded-md border bg-muted/20 p-2 text-sm">
-          <div className="font-semibold">{d.produto}</div>
-          <div>{d.quantidade} {d.unidade} · {money(unitarioFiscal)} / {d.unidade} · Total {money(d.valor_total)}</div>
-          <div className={semCusto ? 'mt-1 text-xs font-medium text-amber-700' : 'mt-1 text-xs text-emerald-700'}>
-            {semCusto
-              ? 'A nota chegou sem os valores fiscais. Recupere pelo XML ou corrija o custo no campo abaixo.'
-              : 'Custo unitário fiscal identificado — conversão para unidade-base automática na aprovação.'}
+        <div className="rounded-lg border border-border/70 bg-muted/10 p-3 text-sm">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-3 xl:grid-cols-5">
+            <div className="min-w-0">
+              <div className="text-[11px] text-muted-foreground">Produto da NF-e</div>
+              <div className="font-semibold">{d.produto || '—'}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[11px] text-muted-foreground">Fornecedor</div>
+              <div className="break-words font-medium">{d.fornecedor || '—'}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground">Quantidade</div>
+              <div className="font-semibold">{d.quantidade ?? '—'} {d.unidade || ''}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground">Valor unitário</div>
+              <div className="font-semibold">{money(unitarioFiscal)}{d.unidade ? ' / ' + d.unidade : ''}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground">Valor total</div>
+              <div className="font-semibold">{money(d.valor_total)}</div>
+            </div>
+            <div className="col-span-2 border-t pt-2 md:col-span-3 xl:col-span-5">
+              <div className="mb-1 text-[11px] text-muted-foreground">Chave de acesso da NF-e</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 break-all font-mono text-xs">{d.chave_acesso || 'Não informada'}</span>
+                {linkFazenda ? (
+                  <a href={linkFazenda} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs font-semibold text-primary hover:bg-muted"
+                    title="Abrir consulta no Portal Nacional da NF-e com a chave informada; o portal exige captcha">
+                    <ExternalLink className="h-3.5 w-3.5" /> Consultar na Fazenda
+                  </a>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">Consulta disponível com chave válida de 44 dígitos.</span>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="mt-1 break-all text-xs text-muted-foreground">Chave {d.chave_acesso || 'não informada'} · Código {d.codigo_produto || '—'} · CFOP {d.cfop || '—'} · NCM {d.ncm || '—'} · Validade {d.validade || '—'}</div>
+          {semCusto && (
+            <p className="mt-2 text-xs text-amber-700">
+              Valores fiscais ausentes: recupere pelo XML no campo de custo ou informe o valor manualmente.
+            </p>
+          )}
         </div>
-        {!fechado && semCusto ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50/60 px-3 py-2 text-xs">
-            <span>Os valores não vieram do Controles. Você pode recuperar pelo XML ou informar o custo unitário para aprovação.</span>
-            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-background px-2.5 py-1.5 font-semibold hover:bg-muted">
-              <FileUp className="h-3.5 w-3.5" />
-              {recuperando === item.origem_id ? 'Lendo XML...' : 'Recuperar custo pelo XML'}
-              <input
-                type="file" accept=".xml,application/xml,text/xml" className="sr-only"
-                disabled={!!recuperando}
-                onChange={event => {
-                  const arquivo = event.target.files?.[0];
-                  event.target.value = '';
-                  if (arquivo) recuperarValorXml(item, arquivo);
-                }}
-              />
-            </label>
-          </div>
-        ) : null}
         {fechado ? <p className="text-sm text-muted-foreground">{item.documento_estoque_id ? 'Documento do estoque: ' + item.documento_estoque_id : item.motivo_recusa}</p> : <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
           <EscolherProdutoDaNota
             dados={{ ...d, origem_id: item.origem_id }}
@@ -388,9 +412,9 @@ export default function RecebimentosPendentes() {
           <label className="space-y-1 text-xs">Conversão para unidade-base (opcional)
             <Input type="number" min="0.000001" step="any" placeholder="Automática pelo motor" value={e.fator_conversao || ''} onChange={ev => alterar(item.origem_id, 'fator_conversao', ev.target.value)} />
           </label>
-          <label className="space-y-1 text-xs">
-            <span className="flex items-center justify-between gap-2">
-              <span>Custo unitário (R$ / {unidadeBase})</span>
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor={'custo-nfe-' + item.origem_id}>Custo unitário (R$ / {unidadeBase})</label>
               {custoEditado ? (
                 <button
                   type="button"
@@ -405,10 +429,11 @@ export default function RecebimentosPendentes() {
                   }))}
                 >Restaurar valor da NF-e</button>
               ) : null}
-            </span>
+            </div>
             <Input
+              id={'custo-nfe-' + item.origem_id}
               type="number" min="0" step="any"
-              placeholder={semCusto ? 'Valor não veio da nota; informe ou recupere o XML' : 'Selecione o produto para converter'}
+              placeholder={semCusto ? 'Informe o custo ou recupere do XML' : 'Selecione o produto para converter'}
               value={custoExibido}
               onChange={ev => setEdicoes(prev => ({
                 ...prev,
@@ -428,9 +453,32 @@ export default function RecebimentosPendentes() {
                     ? 'Sem valor fiscal importado: recupere do XML ou informe o custo antes de aprovar.'
                     : 'Selecione um produto com conversão de unidade válida para preencher o custo.'}
             </span>
-          </label>
+            {semCusto ? (
+              <label className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md border bg-background px-2 py-1 text-[11px] font-semibold hover:bg-muted">
+                <FileUp className="h-3.5 w-3.5" />
+                {recuperando === item.origem_id ? 'Lendo XML...' : 'Recuperar custo pelo XML'}
+                <input type="file" accept=".xml,application/xml,text/xml" className="sr-only"
+                  disabled={!!recuperando || fechado}
+                  onChange={event => {
+                    const arquivo = event.target.files?.[0];
+                    event.target.value = '';
+                    if (arquivo) recuperarValorXml(item, arquivo);
+                  }} />
+              </label>
+            ) : null}
+          </div>
           <label className="space-y-1 text-xs">Validade
-            <Input type="date" value={e.validade || ''} onChange={ev => alterar(item.origem_id, 'validade', ev.target.value)} />
+            <Input
+              type="text" inputMode="numeric" autoComplete="off" maxLength={10}
+              placeholder="010126 ou 01012026"
+              value={e.validade || ''}
+              onChange={ev => alterar(item.origem_id, 'validade', ev.target.value)}
+              onBlur={ev => {
+                const normalizada = interpretarValidadeLivre(ev.target.value);
+                if (normalizada) alterar(item.origem_id, 'validade', normalizada.exibicao);
+              }}
+            />
+            <span className="block text-[10px] text-muted-foreground">Digite livremente; formatação ao sair do campo.</span>
           </label>
           <div className="flex gap-2 md:col-span-2 xl:col-span-4">
             <Button disabled={!!saving || !e.produto_id || !e.deposito_id} onClick={() => aprovar(item)}><Check className="mr-1 h-4 w-4" /> Aprovar entrada</Button>
