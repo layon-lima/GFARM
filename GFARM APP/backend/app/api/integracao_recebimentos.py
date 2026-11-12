@@ -81,7 +81,7 @@ class Aprovar(BaseModel):
     # atual de Produto.custo_unitario; "manual" exige preco informado.
     # A opcao escolhida se refere ao custo da NOVA ENTRADA, nao a
     # reavaliacao dos saldos antigos, que continua sob controle do motor.
-    origem_custo: Literal["nota", "cadastro", "manual"] = "nota"
+    origem_custo: Literal["auto", "nota", "cadastro", "manual"] = "auto"
     custo_unitario_base: Decimal | None = Field(default=None, ge=0)
     validade: date | None = None
 
@@ -380,32 +380,33 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
         raise HTTPException(422, str(err)) from err
     if fator <= 0:
         raise HTTPException(422, "Fator de conversão inválido.")
-    # O custo do cadastro e consultado de novo na aprovacao, pois outras
-    # entradas podem ter alterado o custo medio desde a abertura da pagina.
-    # Clientes antigos que enviam custo_unitario_base sem origem_custo
-    # continuam funcionando como ajuste manual explicito.
+    # Modo automatico: NF-e com valor usa custo fiscal. Sem valor fiscal,
+    # usa o custo medio vigente DENTRO do motor, ao movimentar (evita custo
+    # desatualizado quando outra NF foi aprovada segundos antes).
+    # Se ainda nao existe custo medio, registra entrada fisica com custeio
+    # pendente, distinguindo-a de NF cujo valor fiscal e legitimamente zero.
     origem_custo = dados.origem_custo
-    if origem_custo == "nota" and dados.custo_unitario_base is not None:
-        origem_custo = "manual"
-    if origem_custo == "cadastro":
-        valor_cadastrado = produto.custo_unitario
-        if valor_cadastrado is None:
-            raise HTTPException(422, "Este produto ainda não possui custo cadastrado.")
-        custo = Decimal(str(valor_cadastrado))
-        if not custo.is_finite() or custo < 0:
-            raise HTTPException(422, "O custo cadastrado deste produto é inválido.")
-    elif origem_custo == "manual":
+    if origem_custo in ("auto", "nota") and dados.custo_unitario_base is not None:
+        origem_custo = "manual"  # compativel com formulario anterior
+    sem_valor_fiscal = payload.get("valor_unitario") in (None, "") and payload.get("valor_total") in (None, "")
+    usar_medio_atual = origem_custo == "cadastro" or (origem_custo == "auto" and sem_valor_fiscal)
+    custo = None
+    if origem_custo == "manual":
         if dados.custo_unitario_base is None:
             raise HTTPException(422, "Informe o custo unitário corrigido.")
         custo = dados.custo_unitario_base
+        classificacao_custo = "manual"
+    elif usar_medio_atual:
+        # A quantidade é valorizada pela média do produto, sem modificar
+        # sua media. Se for zero/desconhecida, o registro fica pendente.
+        classificacao_custo = "medio_provisorio"
     else:
         try:
-            # Primeiro usa o total da NF-e; se não existir, usa vUnCom.
-            # A conversão e feita sobre a quantidade ORIGINAL da nota,
-            # sem distorção caso o administrador ajuste a entrada.
+            # Nao confundir falta de preco com preco fiscal 0.
             custo = custo_unitario_na_base(payload, fator)
         except DadosFiscaisIncompativeis as err:
             raise HTTPException(422, str(err)) from err
+        classificacao_custo = "fiscal"
     validade = dados.validade.isoformat() if dados.validade else (payload.get("validade") or None)
     # Transição antes da chamada ao motor; impede aprovação/recusa concorrente.
     claimed = db.execute(text("""
@@ -425,8 +426,16 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
         "produto_id": dados.produto_id, "quantidade": str(quantidade),
         "unidade": unidade, "deposito_destino_id": dados.deposito_id,
         "gaveta_destino_id": dados.gaveta_id or "",
-        "custo_unitario": str(custo),
+        "origem_custo_recebimento": classificacao_custo,
+        "observacao": "GFARM Meus Controles | custo " + classificacao_custo,
     }
+    if usar_medio_atual:
+        # O motor determina a media na mesma transacao da entrada.
+        item["usar_custo_medio_atual"] = True
+    else:
+        item["custo_unitario"] = str(custo)
+        if classificacao_custo == "fiscal" and custo > 0:
+            item["valorizar_custo_pendente_inicial"] = True
     if dados.fator_conversao is not None:
         item["fator_conversao"] = str(dados.fator_conversao)
     if validade:
@@ -436,7 +445,9 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
         f"| chave {payload.get('chave_acesso','')} | fornecedor {payload.get('fornecedor','')} "
         f"| pedido {payload.get('numero_pedido','')} | CFOP {payload.get('cfop','')} "
         f"| NCM {payload.get('ncm','')} | lote informado {payload.get('lote','')}"
-        f" | preço da entrada: {origem_custo} (R$ {custo} / {produto.unidade or 'un'})"
+        f" | custo de entrada: {classificacao_custo}"
+        f" | preço fiscal original: {payload.get('valor_unitario')}"
+        f" | total fiscal original: {payload.get('valor_total')}"
     )
     try:
         db.rollback()  # motor abre sua própria transação
@@ -448,13 +459,30 @@ def aprovar(origem_id: str, dados: Aprovar, user: User = Depends(get_current_use
             observacao=observacao,
         )
         numero = str(documento.id)
+        custo_aplicado = getattr(documento, "_custo_unitario_entrada", None)
+        # Nao substituir o preco FISCAL da NF-e pelo custo medio utilizado.
+        # Salvar separadamente o custo efetivo da entrada para auditoria.
+        dados_aprovados = {
+            **payload,
+            "custo_origem_aprovacao": (
+                "pendente" if usar_medio_atual and custo_aplicado in ("0", "0.000000", 0, None)
+                else classificacao_custo
+            ),
+            "custo_unitario_aprovado_base": (
+                str(custo_aplicado) if custo_aplicado is not None
+                else str(custo) if custo is not None else None
+            ),
+            "produto_gfarm_id_aprovado": dados.produto_id,
+        }
         db.rollback()
         db.execute(text("""
             UPDATE integracao_recebimentos_pendentes
                SET status='APROVADO', documento_estoque_id=:doc,
+                   dados=CAST(:dados AS JSONB),
                    revisado_em=NOW(), atualizado_em=NOW()
              WHERE origem_id=:id AND status='PROCESSANDO'
-        """), {"id": origem_id, "doc": numero})
+        """), {"id": origem_id, "doc": numero,
+               "dados": json.dumps(dados_aprovados, ensure_ascii=False)})
         db.commit()
         return {"status": "APROVADO", "documento_estoque_id": numero}
     except Exception as err:
