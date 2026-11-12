@@ -7,6 +7,8 @@ on:
       - 'GFARM APP/src/lib/consultaFiscalNfe.js'
       - 'GFARM APP/src/pages/RecebimentosPendentes.jsx'
       - 'GFARM APP/tests/consulta-fiscal-nfe.test.mjs'
+      - 'GFARM APP/src/lib/atualizarRecebimentosXml.js'
+      - 'GFARM APP/tests/atualizar-recebimentos-xml.test.mjs'
       - '.github/workflows/validar-consulta-fiscal.yml'
   workflow_dispatch:
 
@@ -25,6 +27,7 @@ jobs:
           cache-dependency-path: GFARM APP/package-lock.json
       - run: npm ci
       - run: node --test tests/consulta-fiscal-nfe.test.mjs
+      - run: node --test tests/atualizar-recebimentos-xml.test.mjs
       - run: node --test tests/custo-recebimento-nfe.test.mjs
       - run: node --test tests/correspondencia-produto-nfe.test.mjs
       - run: npm run build
