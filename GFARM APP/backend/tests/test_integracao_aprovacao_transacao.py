@@ -109,6 +109,69 @@ class AprovarSemTransacaoImplícitaTest(unittest.TestCase):
         self.assertEqual(len(chamadas), 1)
         self.assertEqual(self.db.estados, ["PROCESSANDO", "APROVADO"])
 
+    def test_nf_sem_preco_aprova_usando_media_atuante_no_motor(self):
+        self.row["dados"]["valor_total"] = None
+        self.row["dados"]["valor_unitario"] = None
+        chamados = []
+
+        def motor(db, **kwargs):
+            self.assertFalse(db.in_transaction())
+            item = kwargs["itens"][0]
+            self.assertTrue(item["usar_custo_medio_atual"])
+            self.assertEqual(item["origem_custo_recebimento"], "medio_provisorio")
+            self.assertNotIn("custo_unitario", item)
+            chamados.append(kwargs)
+            with db.session.begin():
+                pass
+            documento = SimpleNamespace(id="doc-sem-preco")
+            documento._custo_unitario_entrada = "12.500000"
+            return documento
+
+        with (patch("app.api.integracao_recebimentos._exigir_revisor"),
+              patch("app.api.integracao_recebimentos._row", return_value=self.row),
+              patch("app.api.integracao_recebimentos.movimentar_estoque", side_effect=motor)):
+            resultado = aprovar("controles:sem-preco", self.dados, user=self.usuario, db=self.db)
+        self.assertEqual(resultado["status"], "APROVADO")
+        self.assertEqual(len(chamados), 1)
+        self.assertEqual(self.db.estados, ["PROCESSANDO", "APROVADO"])
+
+    def test_nf_sem_valor_e_sem_media_nao_e_bloqueada(self):
+        self.row["dados"]["valor_total"] = None
+        self.row["dados"]["valor_unitario"] = None
+
+        def motor(db, **kwargs):
+            self.assertNotIn("custo_unitario", kwargs["itens"][0])
+            with db.session.begin():
+                pass
+            documento = SimpleNamespace(id="doc-pendente")
+            documento._custo_unitario_entrada = "0.000000"
+            return documento
+
+        with (patch("app.api.integracao_recebimentos._exigir_revisor"),
+              patch("app.api.integracao_recebimentos._row", return_value=self.row),
+              patch("app.api.integracao_recebimentos.movimentar_estoque", side_effect=motor)):
+            resultado = aprovar("controles:sem-primeiro-preco", self.dados, user=self.usuario, db=self.db)
+        self.assertEqual(resultado["status"], "APROVADO")
+
+    def test_nf_com_valor_fiscal_continua_recalculando_pela_entrada(self):
+        chamado = []
+
+        def motor(db, **kwargs):
+            item = kwargs["itens"][0]
+            self.assertEqual(item["custo_unitario"], "6")
+            self.assertTrue(item["valorizar_custo_pendente_inicial"])
+            chamado.append(item)
+            with db.session.begin():
+                pass
+            return SimpleNamespace(id="doc-preco")
+
+        with (patch("app.api.integracao_recebimentos._exigir_revisor"),
+              patch("app.api.integracao_recebimentos._row", return_value=self.row),
+              patch("app.api.integracao_recebimentos.movimentar_estoque", side_effect=motor)):
+            resultado = aprovar("controles:com-preco", self.dados, user=self.usuario, db=self.db)
+        self.assertEqual(resultado["status"], "APROVADO")
+        self.assertEqual(len(chamado), 1)
+
     def test_erro_de_negocio_nao_produz_http_500_nem_marca_aprovado(self):
         with (patch("app.api.integracao_recebimentos._exigir_revisor"),
               patch("app.api.integracao_recebimentos._row", return_value=self.row),
