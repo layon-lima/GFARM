@@ -13,6 +13,7 @@ import ConsultaXmlFazenda from '@/components/movimentacoes/ConsultaXmlFazenda';
 import EscolherProdutoDaNota from '@/components/movimentacoes/EscolherProdutoDaNota';
 import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
+import { convertQty, normalizarUnidade } from '@/lib/units';
 import { aplicarItensFiscaisXml } from '@/lib/atualizarRecebimentosXml';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 const FSIST_URL = 'https://www.fsist.com.br/';
@@ -438,6 +439,13 @@ export default function RecebimentosPendentes() {
       const linkFazenda = linkConsultaFiscalNfe(d.chave_acesso);
       const unitarioFiscal = precoFiscalNaUnidadeBase(d);
       const custoFiscalBase = precoFiscalNaUnidadeBase(d, produto, e.fator_conversao);
+      const unidadeEntrada = e.unidade || d.unidade;
+      const unidadeEntradaNormal = normalizarUnidade(unidadeEntrada);
+      const unidadeBaseNormal = normalizarUnidade(produto?.unidade);
+      const fatorPadrao = unidadeEntradaNormal && unidadeBaseNormal
+        ? convertQty(1, unidadeEntradaNormal, unidadeBaseNormal) : null;
+      const quantidadeNaBase = fatorPadrao !== null && Number.isFinite(Number(e.quantidade))
+        ? Number(e.quantidade) * fatorPadrao : null;
       const modoPreco = e.origem_custo || (e.custo_alterado ? 'manual' : 'auto');
       const precoCadastrado = produto && produto.custo_unitario != null
         && Number.isFinite(Number(produto.custo_unitario)) && Number(produto.custo_unitario) > 0
@@ -586,8 +594,21 @@ export default function RecebimentosPendentes() {
           <label className="space-y-1 text-xs">Unidade da nota
             <Input value={e.unidade || ''} onChange={ev => alterar(item.origem_id, 'unidade', ev.target.value)} />
           </label>
-          <label className="space-y-1 text-xs">Conversão para unidade-base (opcional)
-            <Input type="number" min="0.000001" step="any" placeholder="Automática pelo motor" value={e.fator_conversao || ''} onChange={ev => alterar(item.origem_id, 'fator_conversao', ev.target.value)} />
+          <label className="space-y-1 text-xs">
+            Conversão para unidade-base
+            <Input type="number" min="0.000001" step="any"
+              placeholder={fatorPadrao !== null ? 'Padrão da NF-e' : 'Fator opcional'}
+              disabled={fatorPadrao !== null}
+              value={fatorPadrao !== null ? String(fatorPadrao) : e.fator_conversao || ''}
+              onChange={ev => alterar(item.origem_id, 'fator_conversao', ev.target.value)} />
+            <span className="block text-[10px] text-muted-foreground">
+              {fatorPadrao !== null
+                ? `Automática: 1 ${unidadeEntrada} = ${fatorPadrao.toLocaleString('pt-BR', { maximumFractionDigits: 6 })} ${produto?.unidade}.` +
+                  (quantidadeNaBase !== null
+                    ? ` Entrada: ${quantidadeNaBase.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${produto?.unidade}.`
+                    : '')
+                : 'Para caixas, sacos ou outras embalagens sem equivalência física, informe o fator cadastrado.'}
+            </span>
           </label>
           <div className="space-y-2 text-xs md:col-span-2">
             <div className="font-medium">Custo da entrada (R$ / {unidadeBase})</div>
