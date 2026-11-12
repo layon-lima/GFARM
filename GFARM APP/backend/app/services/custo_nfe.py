@@ -106,7 +106,7 @@ def _quantidade_convertida(quantidade, unidade_xml, unidade_recebimento):
     return quantidade * origem[1] / destino[1]
 
 
-def extrair_custo_xml(xml_base64: str, dados: dict) -> dict:
+def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_quantidade=False) -> dict:
     """Preço na unidade do recebimento, validado contra a mesma NF-e."""
     if not isinstance(xml_base64, str) or len(xml_base64) > MAX_XML_BYTES * 4 // 3 + 100:
         raise DadosFiscaisIncompativeis("XML ausente ou maior que 3 MB.")
@@ -196,10 +196,37 @@ def extrair_custo_xml(xml_base64: str, dados: dict) -> dict:
             item for item in all_items
             if _nome_com_sufixo_curto(nome, _normalizar(item["nome"]))
         ]
+    identificacao_fiscal = "codigo_ou_nome"
+    if not candidates and permitir_correspondencia_quantidade and not codigo:
+        # Plano B: descrição comercial diferente da NF-e. Só vincula caso
+        # quantidade E unidade identifiquem exatamente um item fiscal.
+        # O chamador precisa comprovar que nenhuma outra pendência da mesma
+        # NF-e concorre com a mesma quantidade/unidade.
+        try:
+            qtde_recebida = _decimal(dados.get("quantidade"), "quantidade recebida")
+        except DadosFiscaisIncompativeis:
+            qtde_recebida = None
+        unicos = []
+        for candidato in all_items:
+            try:
+                convertido = _quantidade_convertida(
+                    candidato["quantidade"], candidato["unidade"], dados.get("unidade")
+                )
+            except DadosFiscaisIncompativeis:
+                continue
+            if qtde_recebida is not None and convertido == qtde_recebida:
+                unicos.append(candidato)
+        if len(unicos) == 1:
+            candidates = unicos
+            identificacao_fiscal = "quantidade_e_unidade_unicas"
     if not candidates:
+        exemplo = "; ".join(
+            f'{i["nome"]} ({i["quantidade"]} {i["unidade"]})'
+            for i in all_items[:5]
+        )
         raise DadosFiscaisIncompativeis(
-            "Produto não identificado de forma segura neste XML. "
-            "Confira o código e a descrição da nota."
+            "Produto não identificado com segurança pelo nome/código ou "
+            "quantidade e unidade. No XML constam: " + (exemplo or "sem itens")
         )
     # Mesmo código/nome repetido em várias linhas é um único produto;
     # jamais somar descrições ou códigos diferentes.
@@ -236,6 +263,7 @@ def extrair_custo_xml(xml_base64: str, dados: dict) -> dict:
         "quantidade_xml": str(quantidade_xml),
         "unidade_xml": dados.get("unidade") or candidates[0]["unidade"],
         "produto_xml": candidates[0]["nome"] if len(nomes) == 1 else "",
+        "identificacao_fiscal": identificacao_fiscal,
         "itens_xml": [i["numero_item"] for i in candidates],
         "custo_origem": "xml_conferido",
     }
