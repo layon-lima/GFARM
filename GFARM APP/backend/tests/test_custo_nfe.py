@@ -77,6 +77,33 @@ class CustoNfeTest(unittest.TestCase):
         self.assertEqual(Decimal(viance["valor_unitario"]), Decimal("45.5"))
         self.assertEqual(Decimal(viance["valor_total"]), Decimal("11375"))
 
+    def test_todas_grafias_tonelada_sao_equivalentes(self):
+        # Varios fornecedores escrevem TN, T, TON, TO e tonelada no XML.
+        for unidade_xml in ("TN", "Tn", "tn", "T", "ton", "TO", "TONS", "tonelada", "TONELADAS"):
+            with self.subTest(unidade_xml=unidade_xml):
+                xml = gerar_xml(produtos=[
+                    ("NPK", "FERTILIZANTE 10-46-00", "48", unidade_xml, "6000", "288000"),
+                ])
+                fiscal = extrair_custo_xml(
+                    xml,
+                    recebimento(produto="KCL", quantidade="48", unidade="t"),
+                    permitir_correspondencia_quantidade=True,
+                )
+                self.assertEqual(Decimal(fiscal["quantidade_xml"]), Decimal("48"))
+                self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("6000"))
+                self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("288000"))
+                self.assertTrue(fiscal["divergencia_produto_xml"])
+
+    def test_tn_para_quilograma_usa_multiplicador_mil(self):
+        xml = gerar_xml(produtos=[
+            ("A01", "WELDEN", "2", "TN", "6000", "12000"),
+        ])
+        fiscal = extrair_custo_xml(
+            xml, recebimento(produto="WELDEN", quantidade="2000", unidade="kg"),
+        )
+        self.assertEqual(Decimal(fiscal["quantidade_xml"]), Decimal("2000"))
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("6"))
+
     def test_xml_respeita_quantidade_parcial(self):
         result = extrair_custo_xml(gerar_xml(), recebimento(quantidade="100"))
         self.assertEqual(Decimal(result["valor_total"]), Decimal("620"))
