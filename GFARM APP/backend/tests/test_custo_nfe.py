@@ -120,6 +120,57 @@ class CustoNfeTest(unittest.TestCase):
         with self.assertRaisesRegex(DadosFiscaisIncompativeis, "proibido"):
             extrair_custo_xml(base64.b64encode(xml).decode(), recebimento())
 
+    def test_xml_traz_metadados_do_emitente_item_e_rastreio(self):
+        xml = base64.b64decode(gerar_xml()).decode("utf-8")
+        xml = xml.replace(
+            "<serie>1</serie>",
+            "<serie>1</serie><dhEmi>2026-10-22T11:45:00-03:00</dhEmi>",
+        )
+        xml = xml.replace(
+            "</ide>",
+            "</ide><emit><CNPJ>12345678000199</CNPJ>"
+            "<xNome>AGREX AGROINDUSTRIAL LTDA</xNome></emit>",
+        )
+        xml = xml.replace(
+            "<NCM>38089999</NCM></prod></det>",
+            "<NCM>38089999</NCM><rastro><nLote>LOTE-22</nLote>"
+            "<dVal>2027-12-31</dVal></rastro></prod></det>",
+            1,
+        )
+        fiscal = extrair_custo_xml(
+            base64.b64encode(xml.encode()).decode(),
+            recebimento(produto="ZAFERA WG"),
+        )
+        self.assertEqual(fiscal["fornecedor"], "AGREX AGROINDUSTRIAL LTDA")
+        self.assertEqual(fiscal["documento_fornecedor"], "12345678000199")
+        self.assertEqual(fiscal["serie"], "1")
+        self.assertEqual(fiscal["data_emissao"], "2026-10-22")
+        self.assertEqual(fiscal["codigo_produto"], "A001")
+        self.assertEqual(fiscal["cfop"], "5102")
+        self.assertEqual(fiscal["ncm"], "38089999")
+        self.assertEqual(fiscal["quantidade_xml"], "8000")
+        self.assertEqual(fiscal["itens_xml"], ["1"])
+        self.assertEqual(fiscal["validade"], "2027-12-31")
+        self.assertEqual(fiscal["lote"], "LOTE-22")
+
+    def test_xml_nao_sobrescreve_quantidade_parcial_e_validade_ja_informada(self):
+        xml = base64.b64decode(gerar_xml()).decode("utf-8")
+        xml = xml.replace(
+            "<NCM>38089999</NCM></prod></det>",
+            "<NCM>38089999</NCM><rastro><nLote>ABC</nLote>"
+            "<dVal>2027-12-31</dVal></rastro></prod></det>",
+            1,
+        )
+        fiscal = extrair_custo_xml(
+            base64.b64encode(xml.encode()).decode(),
+            recebimento(produto="ZAFERA WG", quantidade="100", validade="2028-01-01"),
+        )
+        self.assertEqual(fiscal["quantidade_xml"], "8000")
+        self.assertNotIn("quantidade", fiscal)
+        self.assertNotIn("validade", fiscal)
+        self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("620"))
+
+
 
 if __name__ == "__main__":
     unittest.main()
