@@ -140,7 +140,9 @@ def _quantidade_do_item(item, unidade_recebimento, quantidade_referencia=None):
     return possibilidades[0]
 
 
-def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_quantidade=False) -> dict:
+def extrair_custo_xml(xml_base64: str, dados: dict, *,
+                     permitir_correspondencia_quantidade=False,
+                     permitir_item_unico=False) -> dict:
     """Preço na unidade do recebimento, validado contra a mesma NF-e."""
     if not isinstance(xml_base64, str) or len(xml_base64) > MAX_XML_BYTES * 4 // 3 + 100:
         raise DadosFiscaisIncompativeis("XML ausente ou maior que 3 MB.")
@@ -242,7 +244,7 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
             if _nome_com_sufixo_curto(nome, _normalizar(item["nome"]))
         ]
     identificacao_fiscal = "codigo_ou_nome"
-    if not candidates and permitir_correspondencia_quantidade and not codigo:
+    if not candidates and permitir_correspondencia_quantidade:
         # Plano B: descrição comercial diferente da NF-e. Só vincula caso
         # quantidade E unidade identifiquem exatamente um item fiscal.
         # O chamador precisa comprovar que nenhuma outra pendência da mesma
@@ -264,6 +266,12 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
         if len(unicos) == 1:
             candidates = unicos
             identificacao_fiscal = "quantidade_e_unidade_unicas"
+    if not candidates and permitir_item_unico and len(all_items) == 1:
+        # Só uma pendência da chave e só um produto fiscal: aceitar
+        # o XML mesmo que nome, código ou quantidade sejam diferentes.
+        # A seleção do produto no estoque será exigida na conferência.
+        candidates = all_items
+        identificacao_fiscal = "item_unico_da_nota"
     if not candidates:
         exemplo = "; ".join(
             f'{i["nome"]} ({i["quantidade"]} {i["unidade"]})'
@@ -315,7 +323,7 @@ def extrair_custo_xml(xml_base64: str, dados: dict, *, permitir_correspondencia_
         # O XML prevalece na descrição fiscal; nunca reclassificar o
         # produto do estoque de maneira silenciosa.
         "divergencia_produto_xml": bool(
-            identificacao_fiscal == "quantidade_e_unidade_unicas"
+            identificacao_fiscal in ("quantidade_e_unidade_unicas", "item_unico_da_nota")
             and nome != _normalizar(candidates[0]["nome"])
         ),
         "itens_xml": [i["numero_item"] for i in candidates],
