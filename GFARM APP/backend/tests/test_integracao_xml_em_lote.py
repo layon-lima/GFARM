@@ -87,6 +87,37 @@ class ImportarXmlEmLoteTest(unittest.TestCase):
         self.assertTrue(all("status='PENDENTE'" in str(c.args[0]) for c in updates))
 
     @patch("app.api.integracao_recebimentos._row")
+    def test_item_clicado_sem_correspondencia_nao_impede_outros_itens(self, mock_row):
+        # O botao do FSist pertence a uma linha da nota, mas o XML pode
+        # ter somente os dois outros produtos: importar os validos em lote.
+        nao_identificado = {
+            **self.payload_a, "produto": "NAO CONSTA NA NOTA",
+        }
+        self.db.execute.return_value.mappings.return_value.all.return_value = [
+            {"origem_id": "pedido-incorreto", "dados": nao_identificado},
+            {"origem_id": "pedido-produto-a", "dados": self.payload_a},
+            {"origem_id": "pedido-produto-b", "dados": self.payload_b},
+        ]
+        mock_row.return_value = {
+            "origem_id": "pedido-incorreto",
+            "status": "PENDENTE",
+            "dados": nao_identificado,
+        }
+        result = recuperar_custo_xml(
+            "pedido-incorreto",
+            RecuperarCustoXml(xml=gerar_xml()),
+            user=self.admin,
+            db=self.db,
+        )
+        self.assertEqual(result["itens_atualizados"], 2)
+        self.assertEqual(
+            result["origens_atualizadas"],
+            ["pedido-produto-a", "pedido-produto-b"],
+        )
+        self.assertEqual(len(result["nao_identificados"]), 1)
+        self.db.commit.assert_called_once()
+
+    @patch("app.api.integracao_recebimentos._row")
     def test_xml_de_outra_chave_nao_modifica_qualquer_item(self, mock_row):
         mock_row.return_value = {
             "origem_id": "pedido-produto-a",
