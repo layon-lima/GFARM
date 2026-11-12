@@ -119,6 +119,12 @@ def extrair_custo_xml(xml_base64: str, dados: dict) -> dict:
     if _normalizar(numero).lstrip("0") != _normalizar(dados.get("numero_nota")).lstrip("0"):
         raise DadosFiscaisIncompativeis("O número da NF-e não corresponde ao recebimento.")
 
+    emit = _element(nfe, "emit")
+    fornecedor_xml = _text(emit, "xNome")
+    documento_xml = _text(emit, "CNPJ") or _text(emit, "CPF")
+    serie_xml = _text(ide, "serie")
+    emissao_xml = (_text(ide, "dhEmi") or _text(ide, "dEmi"))[:10]
+
     all_items = []
     for det in nfe:
         if det.tag.rsplit("}", 1)[-1] != "det":
@@ -140,6 +146,15 @@ def extrair_custo_xml(xml_base64: str, dados: dict) -> dict:
                      _decimal(preco, "vUnCom") * _decimal(quantidade, "qCom"),
             "cfop": _text(prod, "CFOP"),
             "ncm": _text(prod, "NCM"),
+            "numero_item": str(det.attrib.get("nItem", "")),
+            "rastreio": [
+                {
+                    "lote": _text(rastro, "nLote"),
+                    "validade": _text(rastro, "dVal"),
+                }
+                for rastro in prod
+                if rastro.tag.rsplit("}", 1)[-1] == "rastro"
+            ],
         })
     if not all_items:
         raise DadosFiscaisIncompativeis("O XML não contém valores de produtos.")
@@ -179,14 +194,39 @@ def extrair_custo_xml(xml_base64: str, dados: dict) -> dict:
     unitario = valor_xml / quantidade_xml
     total_recebido = unitario * quantidade_recebida
 
-    return {
+    # Preserva quantidade e nome das pendências (pode ser recebimento parcial).
+    # Registra informações fiscais verificadas para conferência e sugere
+    # validade/lote apenas quando todos os rastreios concordam.
+    rastros = [r for item in candidates for r in item["rastreio"]]
+    validades = {r["validade"] for r in rastros if r["validade"]}
+    lotes = {r["lote"] for r in rastros if r["lote"]}
+    nomes = {_normalizar(i["nome"]) for i in candidates}
+    retorno = {
         "valor_unitario": str(unitario),
         "valor_total": str(total_recebido),
         "custo_origem": "xml_conferido",
         "codigo_produto": candidates[0]["codigo"] or dados.get("codigo_produto") or "",
         "cfop": candidates[0]["cfop"] or dados.get("cfop") or "",
         "ncm": candidates[0]["ncm"] or dados.get("ncm") or "",
+        "quantidade_xml": str(quantidade_xml),
+        "unidade_xml": dados.get("unidade") or candidates[0]["unidade"],
+        "produto_xml": candidates[0]["nome"] if len(nomes) == 1 else "",
+        "itens_xml": [i["numero_item"] for i in candidates],
+        "custo_origem": "xml_conferido",
     }
+    if fornecedor_xml:
+        retorno["fornecedor"] = fornecedor_xml
+    if documento_xml:
+        retorno["documento_fornecedor"] = documento_xml
+    if serie_xml:
+        retorno["serie"] = serie_xml
+    if emissao_xml:
+        retorno["data_emissao"] = emissao_xml
+    if not dados.get("validade") and len(validades) == 1 and len(rastros) >= 1:
+        retorno["validade"] = next(iter(validades))
+    if not dados.get("lote") and len(lotes) == 1 and len(rastros) >= 1:
+        retorno["lote"] = next(iter(lotes))
+    return retorno
 
 
 def custo_unitario_na_base(dados: dict, fator: Decimal) -> Decimal:
