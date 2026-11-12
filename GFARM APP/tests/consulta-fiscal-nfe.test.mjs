@@ -14,7 +14,7 @@ test('chave completa abre a consulta no dominio oficial e ja leva os 44 digitos'
   assert.equal(url.origin, 'https://www.nfe.fazenda.gov.br');
   assert.equal(url.pathname, '/portal/consultaRecaptcha.aspx');
   assert.equal(url.searchParams.get('nfe'), chave);
-  assert.equal(url.searchParams.get('tipoConsulta'), 'resumo');
+  assert.equal(url.searchParams.get('tipoConsulta'), 'completa');
 });
 
 test('chave com pontuacao e espacos eh limpa; chave incompleta nao abre consulta', () => {
