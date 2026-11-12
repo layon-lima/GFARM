@@ -45,7 +45,7 @@ export default function RecebimentosPendentes() {
   // Segue a mesma permissão da tela de cadastros: revisar estoque não concede,
   // por si só, autorização para criar produtos mestres.
   const podeCadastrar = hasPermission(user, 'page.cadastros');
-  const { data } = useEntidades({ Produto: {}, Deposito: {}, Gaveta: {}, Setor: {} });
+  const { data, loading: carregandoCadastros, reload: recarregarCadastros } = useEntidades({ Produto: {}, Deposito: {}, Gaveta: {}, Setor: {} });
   const [produtosCriados, setProdutosCriados] = useState([]);
   const produtos = useMemo(() => {
     const atuais = data.Produto || [];
@@ -285,7 +285,7 @@ export default function RecebimentosPendentes() {
       <div>
         <Link to="/movimentacoes" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline"><ChevronLeft className="h-4 w-4" /> Movimentos</Link>
         <h1 className="text-xl font-semibold">Recebimentos do Meus Controles</h1>
-        <p className="text-xs text-muted-foreground">Nada altera o saldo até sua aprovação. Confira produto, quantidade, local e custo.</p>
+        <p className="text-xs text-muted-foreground">Nada altera o saldo até sua aprovação. Confira produto, quantidade, local e custo. <span className="font-semibold">· Busca inteligente v2</span></p>
       </div>
       <div className="flex items-center gap-2">
         <select className="h-9 rounded-md border bg-background px-2 text-sm" value={status} onChange={e => setStatus(e.target.value)}>
@@ -356,6 +356,8 @@ export default function RecebimentosPendentes() {
             dados={{ ...d, origem_id: item.origem_id }}
             produtos={produtos}
             setores={setores}
+            carregando={carregandoCadastros}
+            onReload={recarregarCadastros}
             selecionado={produto || null}
             busca={buscas[item.origem_id]}
             identificacao={e.identificacao}
