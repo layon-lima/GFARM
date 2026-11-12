@@ -21,6 +21,21 @@ test('converter T para kg pelo cadastro do produto, sem multiplicar o preço', (
   assert.equal(fatorParaUnidadeBase(nfe, cadastrado), 1000);
   assert.equal(precoFiscalNaUnidadeBase(nfe, cadastrado), 6);
 });
+test('TN T ton e TO geram o mesmo custo em toneladas sem fator extra', () => {
+  const cadastrado = { unidade: 'ton', unidade_alt: null, fator_conversao: 0 };
+  for (const unidade of ['TN', 'Tn', 'T', 't', 'ton', 'TO', 'TON', 'Toneladas']) {
+    assert.equal(fatorParaUnidadeBase({ unidade }, cadastrado), 1, unidade);
+    assert.equal(precoFiscalNaUnidadeBase({
+      quantidade: '48', unidade, valor_total: '288000',
+    }, cadastrado), 6000, unidade);
+  }
+});
+test('TN e T usados no cadastro alternativo de kg compartilham fator 1000', () => {
+  const cadastrado = { unidade: 'kg', unidade_alt: 'T', fator_conversao: 1000 };
+  assert.equal(precoFiscalNaUnidadeBase({
+    quantidade: '48', unidade: 'TN', valor_total: '288000',
+  }, cadastrado), 6);
+});
 test('conversão de CX para kg pode usar fator informado no formulário', () => {
   const nfe = { quantidade: '10', unidade: 'CX', valor_unitario: '350' };
   const cadastrado = { unidade: 'kg', unidade_alt: 'CX', fator_conversao: 25 };
