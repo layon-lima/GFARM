@@ -19,6 +19,7 @@ from app.api.cadastros_mobile import router as cadastros_mobile_router
 from app.api.entrada_saldo_mobile import router as entrada_saldo_mobile_router
 from app.api.balanca_live import router as balanca_live_router, garantir_tabela_balanca_remota
 from app.api.integracao_recebimentos import router as recebimentos_integracao_router, garantir_tabela_recebimentos
+from app.services.distribuicao_dfe import habilitada as dfe_habilitada, garantir_tabelas_dfe
 from app.core.logging_config import configurar_logging
 from app.core.scheduler import (
     iniciar_agendador,
@@ -34,6 +35,16 @@ async def lifespan(app: FastAPI):
     # Tabela isolada, sem alterar pesagens ou estoque anteriores.
     garantir_tabela_balanca_remota()
     garantir_tabela_recebimentos()
+    # Nao cria tabelas nem inicia consultas de DFe quando nao configurado.
+    # Falha da central fiscal nao deve impedir o estoque de iniciar.
+    if dfe_habilitada():
+        import logging
+        try:
+            garantir_tabelas_dfe()
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "Central fiscal: nao foi possivel preparar cache; estoque segue funcionando."
+            )
     iniciar_agendador()
 
     yield
