@@ -115,6 +115,31 @@ class CustoNfeTest(unittest.TestCase):
         with self.assertRaisesRegex(DadosFiscaisIncompativeis, "converter CX"):
             extrair_custo_xml(xml, recebimento(produto="ZAFFERA", unidade="kg"))
 
+    def test_xml_reconhece_abreviacao_final_de_mbio_brady_sem_misturar_produtos(self):
+        xml = gerar_xml(produtos=[
+            ("MB001", "MBIO BRAD", "9280", "DOS", "12.50", "116000"),
+        ])
+        recebido = recebimento(
+            produto="MBIO Brady", quantidade="9280", unidade="DOS",
+        )
+        fiscal = extrair_custo_xml(xml, recebido)
+        self.assertEqual(fiscal["produto_xml"], "MBIO BRAD")
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("12.5"))
+        self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("116000"))
+
+    def test_xml_aceita_dos_e_dose_mas_nao_presume_dose_igual_unidade(self):
+        xml = gerar_xml(produtos=[
+            ("MB001", "MBIO BRADY", "9280", "DOSE", "12.50", "116000"),
+        ])
+        fiscal = extrair_custo_xml(
+            xml, recebimento(produto="MBIO BRADY", quantidade="9280", unidade="DOS"),
+        )
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("12.5"))
+        with self.assertRaisesRegex(DadosFiscaisIncompativeis, "converter DOSE para UN"):
+            extrair_custo_xml(
+                xml, recebimento(produto="MBIO BRADY", quantidade="9280", unidade="UN"),
+            )
+
     def test_xml_rejeita_documento_com_dtd(self):
         xml = b'<!DOCTYPE x [<!ENTITY secret "INSEGURO">]><x/>'
         with self.assertRaisesRegex(DadosFiscaisIncompativeis, "proibido"):
