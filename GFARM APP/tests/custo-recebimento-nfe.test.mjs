@@ -36,6 +36,29 @@ test('TN e T usados no cadastro alternativo de kg compartilham fator 1000', () =
     quantidade: '48', unidade: 'TN', valor_total: '288000',
   }, cadastrado), 6);
 });
+test('NF 2408 CALCARIO: 47,820 TON a R$320/ton gera R$0,32/kg automaticamente', () => {
+  const nfe = { numero_nota: '2408', quantidade: '47.820', unidade: 'TON',
+    valor_unitario: '320', valor_total: '15302.40' };
+  const produto = { nome: 'CALCARIO AGRICOLA DOLOMITICO', unidade: 'kg',
+    unidade_alt: null, fator_conversao: 0, custo_unitario: 0 };
+  assert.equal(fatorParaUnidadeBase(nfe, produto), 1000);
+  assert.equal(precoFiscalNaUnidadeBase(nfe, produto), 0.32);
+  assert.equal(precoFiscalParaInput(precoFiscalNaUnidadeBase(nfe, produto)), '0.32');
+});
+test('fator metrologico TN T TO TON igual para KG sem configuracao e sem alterar preco da nota', () => {
+  const produto = { unidade: 'kg', unidade_alt: null, fator_conversao: 0 };
+  for (const unidade of ['TN', 'T', 't', 'Tn', 'TO', 'TON', 'toneladas']) {
+    assert.equal(fatorParaUnidadeBase({ unidade }, produto), 1000);
+    assert.equal(precoFiscalNaUnidadeBase({
+      quantidade: '47.820', unidade, valor_total: '15302.40',
+    }, produto), 0.32);
+  }
+});
+test('litros e mililitros convertem, caixas nao sao adivinhadas', () => {
+  assert.equal(fatorParaUnidadeBase({ unidade: 'L' }, { unidade: 'ml' }), 1000);
+  assert.equal(fatorParaUnidadeBase({ unidade: 'CX' }, { unidade: 'kg' }), null);
+  assert.equal(fatorParaUnidadeBase({ unidade: 'L' }, { unidade: 'kg' }), null);
+});
 test('conversão de CX para kg pode usar fator informado no formulário', () => {
   const nfe = { quantidade: '10', unidade: 'CX', valor_unitario: '350' };
   const cadastrado = { unidade: 'kg', unidade_alt: 'CX', fator_conversao: 25 };
