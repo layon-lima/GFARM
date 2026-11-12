@@ -16,7 +16,7 @@ jobs:
       - name: Sintaxe e guardas do instalador
         run: |
           bash -n "GFARM APP/ops/proteger_terminal_vps.sh"
-          grep -q 'sshd.*-t' "GFARM APP/ops/proteger_terminal_vps.sh"
+          grep -Fq '"$SSHD" -t' "GFARM APP/ops/proteger_terminal_vps.sh"
           grep -q 'swapon' "GFARM APP/ops/proteger_terminal_vps.sh"
           grep -q 'fnh-terminal-recuperacao.timer' "GFARM APP/ops/proteger_terminal_vps.sh"
       - name: Nao permitir manutencao destrutiva
