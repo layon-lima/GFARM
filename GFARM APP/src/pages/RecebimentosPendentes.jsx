@@ -23,6 +23,7 @@ async function request(path, method = 'GET', payload, signal) {
   const token = localStorage.getItem('nh_access_token');
   const response = await fetch(API + '/integracoes/recebimentos' + path, {
     method,
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
     signal,
@@ -71,6 +72,7 @@ export default function RecebimentosPendentes() {
   const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
   const [consultandoNota, setConsultandoNota] = useState(null);
   const [extensaoAusente, setExtensaoAusente] = useState('');
+  const [avisosXml, setAvisosXml] = useState({});
   const abaFSistRef = useRef(null);
 
   function abrirFSist(item) {
@@ -256,11 +258,44 @@ export default function RecebimentosPendentes() {
         '/' + encodeURIComponent(item.origem_id) + '/recuperar-custo-xml',
         'POST', { xml }
       );
+      // Apresentar os valores QUE O SERVIDOR CONFIRMOU sem esperar a segunda
+      // consulta. O retorno contem cada origem_id e seus dados fiscais,
+      // nunca apenas uma contagem de produtos atualizados.
+      const novos = Array.isArray(retorno.itens_fiscais_atualizados)
+        ? retorno.itens_fiscais_atualizados : [];
+      const porOrigem = new Map(novos.map(reg => [reg.origem_id, reg.dados]));
+      setItens(anterior => anterior.map(reg => porOrigem.has(reg.origem_id)
+        ? { ...reg, dados: porOrigem.get(reg.origem_id) } : reg));
+      setEdicoes(anterior => {
+        const seguinte = { ...anterior };
+        for (const reg of novos) {
+          const atual = anterior[reg.origem_id];
+          if (!atual) continue;
+          seguinte[reg.origem_id] = {
+            ...atual,
+            ...(!atual.validade && reg.dados.validade
+              ? { validade: formatarValidadeInicial(reg.dados.validade) } : {}),
+          };
+        }
+        return seguinte;
+      });
+      setAvisosXml(anterior => {
+        const seguinte = { ...anterior };
+        for (const reg of novos) delete seguinte[reg.origem_id];
+        for (const erro of retorno.detalhes_pendentes || []) {
+          seguinte[erro.origem_id] = erro.motivo;
+        }
+        return seguinte;
+      });
+      // A lista é sincronizada novamente com o PostgreSQL após o preenchimento.
       await carregar();
+      const nomes = novos.map(reg => reg.dados.produto).filter(Boolean).slice(0, 4);
       toast({
-        title: 'Dados fiscais recuperados do XML',
-        description: retorno.itens_atualizados + ' entrada(s) da mesma NF-e preenchida(s).' +
-          (retorno.nao_identificados?.length ? ' Confira as entradas não identificadas.' : ''),
+        title: 'XML conferido: ' + retorno.itens_atualizados + ' entrada(s) preenchida(s)',
+        description: (nomes.length ? 'Preenchidos: ' + nomes.join(', ') + '. ' : '') +
+          (retorno.nao_identificados?.length
+            ? 'Sem correspondência: ' + retorno.nao_identificados.join(', ') + '.'
+            : 'Todos os produtos correspondentes foram atualizados.'),
       });
       return retorno;
     } catch (erro) {
@@ -443,9 +478,14 @@ export default function RecebimentosPendentes() {
               {d.validade && <span>Validade: {formatarValidadeInicial(d.validade)}</span>}
             </div>
           )}
+          {avisosXml[item.origem_id] && (
+            <p className="mt-2 text-xs font-semibold text-amber-700">
+              Este produto não foi preenchido pelo XML: {avisosXml[item.origem_id]}
+            </p>
+          )}
           {semCusto && (
             <p className="mt-2 text-xs text-amber-700">
-              Valores fiscais ausentes: recupere pelo XML no campo de custo ou informe o valor manualmente.
+              Sem valor fiscal neste recebimento. Confira a identificação e a unidade do produto no XML.
             </p>
           )}
         </div>
@@ -524,8 +564,10 @@ export default function RecebimentosPendentes() {
                 : custoFiscalBase !== null
                   ? `Preenchido pela NF-e: ${money(unitarioFiscal)} por ${d.unidade}. Você pode corrigir.`
                   : semCusto
-                    ? 'Sem valor fiscal importado: recupere do XML ou informe o custo antes de aprovar.'
-                    : 'Selecione um produto com conversão de unidade válida para preencher o custo.'}
+                    ? 'Sem valor fiscal importado para esta entrada; confira o XML ou informe o custo.'
+                    : 'O custo fiscal foi lido, mas falta configurar a conversão de ' +
+                      (d.unidade || 'unidade fiscal') + ' para ' + unidadeBase +
+                      ' no produto ou informar um fator válido.'}
             </span>
           </div>
           <label className="space-y-1 text-xs">Validade
