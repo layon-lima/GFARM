@@ -13,6 +13,7 @@ import ConsultaXmlFazenda from '@/components/movimentacoes/ConsultaXmlFazenda';
 import EscolherProdutoDaNota from '@/components/movimentacoes/EscolherProdutoDaNota';
 import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
+import { aplicarItensFiscaisXml } from '@/lib/atualizarRecebimentosXml';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 const FSIST_URL = 'https://www.fsist.com.br/';
 const EXTENSAO_GFARM_URL =
@@ -263,9 +264,7 @@ export default function RecebimentosPendentes() {
       // nunca apenas uma contagem de produtos atualizados.
       const novos = Array.isArray(retorno.itens_fiscais_atualizados)
         ? retorno.itens_fiscais_atualizados : [];
-      const porOrigem = new Map(novos.map(reg => [reg.origem_id, reg.dados]));
-      setItens(anterior => anterior.map(reg => porOrigem.has(reg.origem_id)
-        ? { ...reg, dados: porOrigem.get(reg.origem_id) } : reg));
+      setItens(anterior => aplicarItensFiscaisXml(anterior, novos));
       setEdicoes(anterior => {
         const seguinte = { ...anterior };
         for (const reg of novos) {
