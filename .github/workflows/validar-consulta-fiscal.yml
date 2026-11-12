@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - 'GFARM APP/src/lib/consultaFiscalNfe.js'
+      - 'GFARM APP/src/lib/units.js'
+      - 'GFARM APP/src/lib/custoRecebimentoNfe.js'
+      - 'GFARM APP/src/lib/correspondenciaProdutoNfe.js'
+      - 'GFARM APP/tests/custo-recebimento-nfe.test.mjs'
+      - 'GFARM APP/tests/correspondencia-produto-nfe.test.mjs'
       - 'GFARM APP/src/pages/RecebimentosPendentes.jsx'
       - 'GFARM APP/tests/consulta-fiscal-nfe.test.mjs'
       - 'GFARM APP/src/lib/atualizarRecebimentosXml.js'
