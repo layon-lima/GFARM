@@ -250,6 +250,37 @@ class CustoNfeTest(unittest.TestCase):
                 ), permitir_correspondencia_quantidade=True,
             )
 
+    def test_divergencia_de_codigo_nao_impede_dados_fiscais_por_quantidade_unica(self):
+        xml = gerar_xml(produtos=[
+            ("NPK104600", "FERTILIZANTE 10-46-00", "48", "TO", "6500", "312000"),
+            ("OUTRO", "ADUBO OUTRO", "12", "T", "1200", "14400"),
+        ])
+        fiscal = extrair_custo_xml(xml, recebimento(
+            produto="KCL", codigo_produto="KCL-00060",
+            quantidade="48", unidade="T",
+        ), permitir_correspondencia_quantidade=True)
+        self.assertEqual(fiscal["identificacao_fiscal"], "quantidade_e_unidade_unicas")
+        self.assertTrue(fiscal["divergencia_produto_xml"])
+        self.assertEqual(fiscal["produto_xml"], "FERTILIZANTE 10-46-00")
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("6500"))
+        self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("312000"))
+
+    def test_um_item_por_chave_recupera_fiscal_mesmo_com_quantidade_parcial(self):
+        xml = gerar_xml(produtos=[
+            ("NPK104600", "FERTILIZANTE 10-46-00", "48", "TO", "6500", "312000"),
+        ])
+        recebido = recebimento(produto="KCL", codigo_produto="KCL",
+                               quantidade="24", unidade="T")
+        with self.assertRaisesRegex(DadosFiscaisIncompativeis, "Produto não identificado"):
+            extrair_custo_xml(xml, recebido, permitir_correspondencia_quantidade=True)
+        fiscal = extrair_custo_xml(xml, recebido, permitir_item_unico=True)
+        self.assertEqual(fiscal["identificacao_fiscal"], "item_unico_da_nota")
+        self.assertTrue(fiscal["divergencia_produto_xml"])
+        self.assertEqual(Decimal(fiscal["quantidade_xml"]), Decimal("48"))
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("6500"))
+        self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("156000"))
+        self.assertEqual(recebido["produto"], "KCL")
+
     def test_xml_rejeita_documento_com_dtd(self):
         xml = b'<!DOCTYPE x [<!ENTITY secret "INSEGURO">]><x/>'
         with self.assertRaisesRegex(DadosFiscaisIncompativeis, "proibido"):
