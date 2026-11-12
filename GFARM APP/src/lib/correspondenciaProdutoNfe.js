@@ -31,11 +31,15 @@ export function unidadeCompatível(dados, produto) {
   const uNota = normalizarUnidade(nota);
   const uBase = normalizarUnidade(base) || base;
   if (!uNota) return false;
+  // Sinônimos da unidade-base, como TN e T, não exigem fator extra.
+  if (uNota === uBase) return true;
+  // Outras conversões só são seguras quando o cadastro prevê a unidade
+  // alternativa com fator positivo (motor do estoque usa essa mesma regra).
+  const uAlternativo = normalizarUnidade(alternativo);
+  if (!alternativo || !(Number(produto.fator_conversao) > 0) ||
+      !uAlternativo || uNota !== uAlternativo) return false;
   const convertido = convertQty(1, uNota, uBase);
-  // O motor GFARM somente faz essa conversão se houver unidade_alt;
-  // igualdade canônica é segura se o código da nota for outro sinônimo.
-  return convertido !== null && Number.isFinite(convertido) &&
-    (nota.toUpperCase() === base.toUpperCase() || !!alternativo);
+  return convertido !== null && Number.isFinite(convertido);
 }
 
 function scoreTermos(alvo, candidato) {
