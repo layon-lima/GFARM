@@ -1,0 +1,30 @@
+name: Validar publicacao da busca inteligente NF-e
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'GFARM APP/ops/atualizar_busca_nfe.sh'
+      - 'GFARM APP/public/sw.js'
+      - '.github/workflows/validar-busca-nfe.yml'
+  workflow_dispatch:
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sintaxe do script de atualizacao
+        run: bash -n "GFARM APP/ops/atualizar_busca_nfe.sh"
+      - name: Garantias contra publicacao antiga
+        run: |
+          grep -Fq 'Busca inteligente v2' "GFARM APP/src/pages/RecebimentosPendentes.jsx"
+          grep -Fq 'Identificado automaticamente' "GFARM APP/src/components/movimentacoes/EscolherProdutoDaNota.jsx"
+          grep -Fq 'cache: '\''no-store'\''' "GFARM APP/public/sw.js"
+          grep -Fq 'Cache-Control' "GFARM APP/backend/app/main.py"
+      - name: Impedir limpeza destrutiva de Docker
+        run: |
+          if grep -En 'docker (system|volume|image) prune|compose.*down -v|docker rm -f|reboot|shutdown -r' "GFARM APP/ops/atualizar_busca_nfe.sh"; then
+            echo 'Acao destrutiva nao permitida' >&2
+            exit 1
+          fi
