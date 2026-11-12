@@ -1,0 +1,30 @@
+name: Validar consulta SEFAZ e validade livre
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'GFARM APP/src/lib/consultaFiscalNfe.js'
+      - 'GFARM APP/src/pages/RecebimentosPendentes.jsx'
+      - 'GFARM APP/tests/consulta-fiscal-nfe.test.mjs'
+      - '.github/workflows/validar-consulta-fiscal.yml'
+  workflow_dispatch:
+
+jobs:
+  consulta-fiscal:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: GFARM APP
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: GFARM APP/package-lock.json
+      - run: npm ci
+      - run: node --test tests/consulta-fiscal-nfe.test.mjs
+      - run: node --test tests/custo-recebimento-nfe.test.mjs
+      - run: node --test tests/correspondencia-produto-nfe.test.mjs
+      - run: npm run build
