@@ -18,6 +18,16 @@ echo '[4/5] Conferindo bundle servido no container...'
 docker exec gfarm-app-1 sh -c "grep -Fql 'Busca inteligente v2' /app/dist/assets/*.js" || { echo 'ERRO: interface antiga no container' >&2; exit 1; }
 docker exec gfarm-app-1 sh -c "grep -Fql 'Identificado automaticamente' /app/dist/assets/*.js" || { echo 'ERRO: correspondencia nao compilada' >&2; exit 1; }
 echo '[5/5] Validando resposta da API e politica anti-cache...'
-docker exec gfarm-app-1 python -c 'import urllib.request; base="http://127.0.0.1:8000"; urls=("/api/health", "/recebimentos-pendentes", "/sw.js"); [(lambda resp,url: (print(url,resp.status,resp.headers.get("Cache-Control")),(url=="/api/health" or "no-store" in resp.headers.get("Cache-Control","")) or (_ for _ in ()).throw(Exception("Cache antigo: "+url))))(urllib.request.urlopen(base+url,timeout=10),url) for url in urls]'
+docker exec gfarm-app-1 python -c '
+import urllib.request
+base = "http://127.0.0.1:8000"
+for url in ("/api/health", "/recebimentos-pendentes", "/sw.js"):
+    with urllib.request.urlopen(base + url, timeout=10) as resp:
+        assert resp.status == 200, (url, resp.status)
+        politica = resp.headers.get("Cache-Control", "")
+        if url != "/api/health":
+            assert "no-store" in politica, (url, politica)
+        print("OK", url, resp.status, politica)
+'
 echo 'SUCESSO: busca inteligente v2 confirmada no container.'
 echo 'No navegador: Ctrl+Shift+R uma vez para trocar a interface antiga.'
