@@ -469,9 +469,11 @@ export default function RecebimentosPendentes() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="min-w-0 break-all font-mono text-xs">{d.chave_acesso || 'Não informada'}</span>
                 {d.custo_origem === 'xml_conferido' && <span className="text-[11px] font-semibold text-emerald-700">XML conferido</span>}
-                {d.identificacao_fiscal === 'quantidade_e_unidade_unicas' && (
+                {['quantidade_e_unidade_unicas', 'item_unico_da_nota'].includes(d.identificacao_fiscal) && (
                   <span className="text-[11px] font-semibold text-amber-700">
-                    Produto vinculado pela quantidade e unidade — confira o nome fiscal
+                    {d.identificacao_fiscal === 'item_unico_da_nota'
+                      ? 'Item único da NF-e — confira o produto fiscal'
+                      : 'Produto vinculado pela quantidade e unidade — confira o nome fiscal'}
                   </span>
                 )}
                 {linkFazenda ? (
@@ -506,8 +508,8 @@ export default function RecebimentosPendentes() {
           {d.divergencia_produto_xml && (
             <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-900">
               Atenção: o Meus Controles informou “{d.produto}”, mas a NF-e registra “{d.produto_xml}”.
-              Os dados fiscais foram recuperados pela chave, quantidade e unidade.
-              Confirme e selecione o produto correto no GFARM antes da entrada em estoque.
+              Os dados fiscais foram recuperados do XML da mesma chave, com associação
+              única à pendência. Confirme e selecione o produto correto no GFARM antes da entrada em estoque.
             </p>
           )}
           {avisosXml[item.origem_id] && (
