@@ -141,7 +141,7 @@ export default function RecebimentosPendentes() {
         seguinte[item.origem_id] = {
           ...atual, produto_id: encontrado.id, deposito_id: depositoId,
           gaveta_id: gavetaId, identificacao: 'automatico',
-          custo_unitario_base: '', custo_alterado: false,
+          custo_unitario_base: '', custo_alterado: false, origem_custo: 'auto',
         };
         alterado = true;
       }
@@ -166,7 +166,7 @@ export default function RecebimentosPendentes() {
         [id]: { ...atual, produto_id: produto.id,
           deposito_id: depositoId, gaveta_id: gavetaId,
           identificacao, vinculo_manual: true,
-          custo_unitario_base: '', custo_alterado: false },
+          custo_unitario_base: '', custo_alterado: false, origem_custo: 'auto' },
       };
     });
   }
@@ -178,7 +178,7 @@ export default function RecebimentosPendentes() {
       [id]: {
         ...anterior[id], produto_id: '', deposito_id: '', gaveta_id: '',
         identificacao: '', vinculo_manual: true,
-        custo_unitario_base: '', custo_alterado: false,
+        custo_unitario_base: '', custo_alterado: false, origem_custo: 'auto',
       },
     }));
   }
@@ -201,6 +201,7 @@ export default function RecebimentosPendentes() {
           quantidade: txt(item.dados.quantidade),
           unidade: item.dados.unidade,
           fator_conversao: '', custo_unitario_base: '', custo_alterado: false,
+          origem_custo: 'auto',
           validade: formatarValidadeInicial(item.dados.validade)
         }
       ])));
@@ -236,7 +237,7 @@ export default function RecebimentosPendentes() {
         ...(campo === 'produto_id' ? { deposito_id: '', gaveta_id: '' } : {}),
         ...(campo === 'deposito_id' ? { gaveta_id: '' } : {}),
         ...(['produto_id', 'unidade', 'fator_conversao'].includes(campo)
-          ? { custo_unitario_base: '', custo_alterado: false } : {})
+          ? { custo_unitario_base: '', custo_alterado: false, origem_custo: 'auto' } : {})
       }
     }));
   }
@@ -279,7 +280,7 @@ export default function RecebimentosPendentes() {
               ? {
                 produto_id: '', deposito_id: '', gaveta_id: '',
                 identificacao: '', vinculo_manual: true,
-                custo_unitario_base: '', custo_alterado: false,
+                custo_unitario_base: '', custo_alterado: false, origem_custo: 'auto',
               } : {}),
             ...(!atual.validade && reg.dados.validade
               ? { validade: formatarValidadeInicial(reg.dados.validade) } : {}),
@@ -331,16 +332,23 @@ export default function RecebimentosPendentes() {
     }
     const produto = produtos.find(p => p.id === edit.produto_id);
     const valorAutomatico = precoFiscalNaUnidadeBase(item.dados, produto, edit.fator_conversao);
-    if (!edit.custo_alterado && valorAutomatico === null) {
+    const modoPreco = edit.origem_custo || (edit.custo_alterado ? 'manual' : 'auto');
+    // Sem valor fiscal e no modo automatico, usa o custo medio do produto.
+    // Se nunca houve preco, aprova com custo pendente e aviso no historico.
+    // NUNCA tratar falta de fator de conversao como nota sem preco.
+    const temValorFiscal = item.dados.valor_total !== null && item.dados.valor_total !== undefined
+      && item.dados.valor_total !== ''
+      || item.dados.valor_unitario !== null && item.dados.valor_unitario !== undefined
+      && item.dados.valor_unitario !== '';
+    if ((modoPreco === 'nota' || (modoPreco === 'auto' && temValorFiscal))
+        && valorAutomatico === null) {
       toast({
-        variant: 'destructive', title: 'Preço fiscal indisponível',
-        description: item.dados.valor_unitario == null && item.dados.valor_total == null
-          ? 'Recupere o preço pelo XML ou informe um custo unitário corrigido.'
-          : 'Confira o fator de conversão do produto antes de aprovar.',
+        variant: 'destructive', title: 'Confira o preço ou a conversão fiscal',
+        description: 'O XML informou valor, mas ainda falta uma conversão de unidade válida.',
       });
       return;
     }
-    if (edit.custo_alterado && (String(edit.custo_unitario_base).trim() === ''
+    if (modoPreco === 'manual' && (String(edit.custo_unitario_base ?? '').trim() === ''
       || !Number.isFinite(Number(edit.custo_unitario_base))
       || Number(edit.custo_unitario_base) < 0)) {
       toast({ variant: 'destructive', title: 'Custo corrigido inválido' });
@@ -358,7 +366,8 @@ export default function RecebimentosPendentes() {
       gaveta_id: edit.gaveta_id || null,
       quantidade: edit.quantidade, unidade: edit.unidade,
       ...(edit.fator_conversao ? { fator_conversao: edit.fator_conversao } : {}),
-      ...(edit.custo_alterado ? { custo_unitario_base: edit.custo_unitario_base } : {}),
+      origem_custo: modoPreco,
+      ...(modoPreco === 'manual' ? { custo_unitario_base: edit.custo_unitario_base } : {}),
       ...(validade ? { validade: validade.iso } : {}),
     };
     setSaving(item.origem_id);
@@ -429,10 +438,16 @@ export default function RecebimentosPendentes() {
       const linkFazenda = linkConsultaFiscalNfe(d.chave_acesso);
       const unitarioFiscal = precoFiscalNaUnidadeBase(d);
       const custoFiscalBase = precoFiscalNaUnidadeBase(d, produto, e.fator_conversao);
-      const custoEditado = !!e.custo_alterado;
-      const custoExibido = custoEditado
-        ? (e.custo_unitario_base ?? '')
-        : precoFiscalParaInput(custoFiscalBase);
+      const modoPreco = e.origem_custo || (e.custo_alterado ? 'manual' : 'auto');
+      const precoCadastrado = produto && produto.custo_unitario != null
+        && Number.isFinite(Number(produto.custo_unitario)) && Number(produto.custo_unitario) > 0
+        ? Number(produto.custo_unitario) : null;
+      const origemEfetiva = modoPreco === 'auto'
+        ? (semCusto ? 'cadastro' : 'nota') : modoPreco;
+      const custoExibido = origemEfetiva === 'manual'
+        ? (e.custo_unitario_base ?? '') : origemEfetiva === 'cadastro'
+          ? precoFiscalParaInput(precoCadastrado)
+          : precoFiscalParaInput(custoFiscalBase);
       const unidadeBase = produto?.unidade || d.unidade || 'unidade';
       return <Card key={item.origem_id} className="space-y-3 border-border/70 p-3">
         <div className="flex flex-wrap justify-between gap-2">
@@ -561,49 +576,66 @@ export default function RecebimentosPendentes() {
           <label className="space-y-1 text-xs">Conversão para unidade-base (opcional)
             <Input type="number" min="0.000001" step="any" placeholder="Automática pelo motor" value={e.fator_conversao || ''} onChange={ev => alterar(item.origem_id, 'fator_conversao', ev.target.value)} />
           </label>
-          <div className="space-y-1 text-xs">
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor={'custo-nfe-' + item.origem_id}>Custo unitário (R$ / {unidadeBase})</label>
-              {custoEditado ? (
-                <button
-                  type="button"
-                  className="text-primary underline"
-                  onClick={() => setEdicoes(prev => ({
-                    ...prev,
-                    [item.origem_id]: {
-                      ...prev[item.origem_id],
-                      custo_unitario_base: '',
-                      custo_alterado: false,
-                    },
-                  }))}
-                >Restaurar valor da NF-e</button>
-              ) : null}
+          <div className="space-y-2 text-xs md:col-span-2">
+            <div className="font-medium">Custo da entrada (R$ / {unidadeBase})</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" disabled={!produto || custoFiscalBase === null}
+                onClick={() => alterar(item.origem_id, 'origem_custo', 'nota')}
+                className={'rounded-md border p-2 text-left transition-colors disabled:opacity-50 ' +
+                  (origemEfetiva === 'nota' ? 'border-primary bg-primary/5' : 'bg-background hover:bg-muted/40')}>
+                <span className="block text-[10px] text-muted-foreground">Preço da NF-e</span>
+                <span className="block font-semibold">{money(custoFiscalBase)}</span>
+                <span className="block text-[10px]">Usar valor fiscal</span>
+              </button>
+              <button type="button" disabled={!produto}
+                onClick={() => alterar(item.origem_id, 'origem_custo', 'cadastro')}
+                className={'rounded-md border p-2 text-left transition-colors disabled:opacity-50 ' +
+                  (origemEfetiva === 'cadastro' ? 'border-primary bg-primary/5' : 'bg-background hover:bg-muted/40')}>
+                <span className="block text-[10px] text-muted-foreground">Custo médio cadastrado</span>
+                <span className="block font-semibold">
+                  {precoCadastrado !== null ? money(precoCadastrado) : 'Ainda sem custo'}
+                </span>
+                <span className="block text-[10px]">
+                  {precoCadastrado !== null ? 'Usar média atual' : 'Registrar custo pendente'}
+                </span>
+              </button>
             </div>
-            <Input
-              id={'custo-nfe-' + item.origem_id}
-              type="number" min="0" step="any"
-              placeholder={semCusto ? 'Informe o custo ou recupere do XML' : 'Selecione o produto para converter'}
-              value={custoExibido}
-              onChange={ev => setEdicoes(prev => ({
-                ...prev,
-                [item.origem_id]: {
-                  ...prev[item.origem_id],
-                  custo_unitario_base: ev.target.value,
-                  custo_alterado: ev.target.value !== '',
-                },
-              }))}
-            />
-            <span className="block text-[10px] text-muted-foreground">
-              {custoEditado
-                ? 'Valor corrigido manualmente. Esse será o custo usado na aprovação.'
-                : custoFiscalBase !== null
-                  ? `Preenchido pela NF-e: ${money(unitarioFiscal)} por ${d.unidade}. Você pode corrigir.`
-                  : semCusto
-                    ? 'Sem valor fiscal importado para esta entrada; confira o XML ou informe o custo.'
-                    : 'O custo fiscal foi lido, mas falta configurar a conversão de ' +
-                      (d.unidade || 'unidade fiscal') + ' para ' + unidadeBase +
-                      ' no produto ou informar um fator válido.'}
-            </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex items-center gap-1 text-[11px]">
+                <input type="radio" name={'modo-custo-' + item.origem_id}
+                  checked={modoPreco === 'auto'}
+                  onChange={() => alterar(item.origem_id, 'origem_custo', 'auto')} />
+                Automático: nota com preço; sem preço, média atual
+              </label>
+              <button type="button"
+                className="text-primary underline"
+                onClick={() => alterar(item.origem_id, 'origem_custo', 'manual')}>
+                Corrigir preço manualmente
+              </button>
+            </div>
+            {modoPreco === 'manual' ? (
+              <Input id={'custo-nfe-' + item.origem_id}
+                aria-label="Custo unitário corrigido"
+                type="number" min="0" step="any" placeholder="Informe o custo por unidade-base"
+                value={e.custo_unitario_base ?? ''}
+                onChange={ev => setEdicoes(prev => ({
+                  ...prev,
+                  [item.origem_id]: {
+                    ...prev[item.origem_id],
+                    custo_unitario_base: ev.target.value, custo_alterado: true,
+                  },
+                }))} />
+            ) : (
+              <div className="rounded-md bg-muted/30 px-2 py-1.5 text-[11px]">
+                {origemEfetiva === 'nota'
+                  ? custoFiscalBase !== null
+                    ? `Preço fiscal da entrada: ${money(custoFiscalBase)} / ${unidadeBase}. O motor recalcula a média.`
+                    : 'Valor da nota indisponível ou conversão ainda não configurada.'
+                  : precoCadastrado !== null
+                    ? `Sem alterar a média: usa o custo vigente de ${money(precoCadastrado)} / ${unidadeBase}, conferido novamente na aprovação.`
+                    : 'Entrada sem preço: será registrada como custo pendente. A primeira NF com preço permitirá valorizar o saldo remanescente.'}
+              </div>
+            )}
           </div>
           <label className="space-y-1 text-xs">Validade
             <Input
