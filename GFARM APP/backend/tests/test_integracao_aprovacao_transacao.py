@@ -34,7 +34,8 @@ class SessaoAprovacao:
 
     def get(self, model, identifier):
         return SimpleNamespace(
-            id=identifier, nome="Welden", unidade="L",
+            id=identifier, nome="Welden",
+            unidade=getattr(self, "unidade_produto", "L"),
             unidade_alt=None, fator_conversao=0,
         )
 
@@ -108,6 +109,39 @@ class AprovarSemTransacaoImplícitaTest(unittest.TestCase):
         self.assertEqual(resultado, {"status": "APROVADO", "documento_estoque_id": "doc-1"})
         self.assertEqual(len(chamadas), 1)
         self.assertEqual(self.db.estados, ["PROCESSANDO", "APROVADO"])
+
+    def test_nf_2408_converte_47_820_t_em_kg_e_320_reais_em_0_32(self):
+        self.db.unidade_produto = "kg"
+        self.row["dados"].update({
+            "numero_nota": "2408", "quantidade": "47.820",
+            "unidade": "TON", "valor_total": "15302.40",
+            "valor_unitario": "320",
+        })
+        self.dados = Aprovar(
+            produto_id="produto-1", deposito_id="deposito-1",
+            unidade="TON", quantidade=Decimal("47.820"),
+        )
+        chamadas = []
+
+        def motor(db, **kwargs):
+            self.assertFalse(db.in_transaction())
+            item = kwargs["itens"][0]
+            self.assertEqual(item["unidade"], "TON")
+            self.assertEqual(item["quantidade"], "47.820")
+            self.assertEqual(item["custo_unitario"], "0.32")
+            self.assertNotIn("fator_conversao", item)
+            chamadas.append(item)
+            with db.session.begin():
+                pass
+            return SimpleNamespace(id="doc-2408", _custo_unitario_entrada="0.32")
+
+        with (patch("app.api.integracao_recebimentos._exigir_revisor"),
+              patch("app.api.integracao_recebimentos._row", return_value=self.row),
+              patch("app.api.integracao_recebimentos.movimentar_estoque", side_effect=motor)):
+            resposta = aprovar("controles:nf:2408", self.dados,
+                              user=self.usuario, db=self.db)
+        self.assertEqual(resposta["status"], "APROVADO")
+        self.assertEqual(len(chamadas), 1)
 
     def test_nf_sem_preco_aprova_usando_media_atuante_no_motor(self):
         self.row["dados"]["valor_total"] = None
