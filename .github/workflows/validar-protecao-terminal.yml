@@ -1,0 +1,27 @@
+name: Validar protecao do terminal VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'GFARM APP/ops/proteger_terminal_vps.sh'
+      - '.github/workflows/validar-protecao-terminal.yml'
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sintaxe e guardas do instalador
+        run: |
+          bash -n "GFARM APP/ops/proteger_terminal_vps.sh"
+          grep -q 'sshd.*-t' "GFARM APP/ops/proteger_terminal_vps.sh"
+          grep -q 'swapon' "GFARM APP/ops/proteger_terminal_vps.sh"
+          grep -q 'fnh-terminal-recuperacao.timer' "GFARM APP/ops/proteger_terminal_vps.sh"
+      - name: Nao permitir manutencao destrutiva
+        run: |
+          if grep -En 'docker (system|volume|image) prune|systemctl (restart|stop) docker|rm -rf /var/lib/docker|reboot|shutdown -r' "GFARM APP/ops/proteger_terminal_vps.sh"; then
+            echo 'Script contem operacao nao permitida' >&2
+            exit 1
+          fi
