@@ -1,4 +1,4 @@
-import { normalizarUnidade } from './units.js';
+import { normalizarUnidade, convertQty } from './units.js';
 
 /**
  * Custo fiscal de um recebimento, apresentado na unidade-base do produto.
@@ -17,8 +17,14 @@ export function fatorParaUnidadeBase(dados, produto, fatorManual = '') {
   if (!original || !base) return null;
   const unidadeFiscal = normalizarUnidade(original);
   const unidadeBase = normalizarUnidade(base);
-  // TN, T, TON e TO representam a MESMA tonelada, sem fator extra.
+  // A fonte fiscal determina a unidade de entrada. Convertemos somente
+  // medidas fisicas exatas (TN/T/TON/TO -> kg; LT -> L; L -> mL...).
+  // CX, SACO e DOSE exigem fator cadastrado, nao uma suposicao.
   if (original === base || (unidadeFiscal && unidadeFiscal === unidadeBase)) return 1;
+  if (unidadeFiscal && unidadeBase) {
+    const padrao = convertQty(1, unidadeFiscal, unidadeBase);
+    if (padrao !== null && Number.isFinite(padrao) && padrao > 0) return padrao;
+  }
   const alternativo = String(produto.unidade_alt || '').trim().toUpperCase();
   if (original === alternativo || (
     unidadeFiscal && alternativo && unidadeFiscal === normalizarUnidade(alternativo)
