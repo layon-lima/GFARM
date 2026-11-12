@@ -168,6 +168,36 @@ class CustoNfeTest(unittest.TestCase):
                 produto="MBIO Brady", quantidade="9280", unidade="DOS",
             ), permitir_correspondencia_quantidade=True)
 
+    def test_nome_cientifico_e_quantidade_tributavel_em_doses(self):
+        xml = base64.b64decode(gerar_xml(produtos=[
+            ("IN001", "BRADYRHIZOBIUM JAPONICUM", "46.4", "CX", "1050", "48720"),
+        ])).decode("utf-8")
+        xml = xml.replace(
+            "<qCom>46.4</qCom>",
+            "<qCom>46.4</qCom><qTrib>9280</qTrib><uTrib>DOS</uTrib>",
+        )
+        fiscal = extrair_custo_xml(
+            base64.b64encode(xml.encode()).decode(),
+            recebimento(produto="MBIO Brady", quantidade="9280", unidade="DOS"),
+            permitir_correspondencia_quantidade=True,
+        )
+        self.assertEqual(fiscal["identificacao_fiscal"], "quantidade_e_unidade_unicas")
+        self.assertEqual(fiscal["origem_quantidade_fiscal"], "tributavel")
+        self.assertEqual(fiscal["unidade_fiscal_origem"], "DOS")
+        self.assertEqual(Decimal(fiscal["valor_unitario"]), Decimal("5.25"))
+        self.assertEqual(Decimal(fiscal["valor_total"]), Decimal("48720"))
+
+    def test_nao_forca_conversao_de_embalagem_sem_qtrib_compativel(self):
+        xml = gerar_xml(produtos=[
+            ("IN001", "BRADYRHIZOBIUM JAPONICUM", "46.4", "CX", "1050", "48720"),
+        ])
+        with self.assertRaisesRegex(DadosFiscaisIncompativeis, "Produto não identificado"):
+            extrair_custo_xml(
+                xml,
+                recebimento(produto="MBIO Brady", quantidade="9280", unidade="DOS"),
+                permitir_correspondencia_quantidade=True,
+            )
+
     def test_xml_aplica_validade_quando_rastreio_existe_e_nao_inventa_quando_ausente(self):
         xml = base64.b64decode(gerar_xml(produtos=[
             ("IN001", "BRADYRHIZOBIUM JAPONICUM", "9280", "DOS", "5", "46400"),
