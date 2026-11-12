@@ -15,6 +15,8 @@ import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 const FSIST_URL = 'https://www.fsist.com.br/';
+const EXTENSAO_GFARM_URL =
+  'https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.1.0/gfarm-captura-xml-chrome.zip';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 async function request(path, method = 'GET', payload, signal) {
@@ -68,6 +70,7 @@ export default function RecebimentosPendentes() {
   const [recuperando, setRecuperando] = useState('');
   const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
   const [consultandoNota, setConsultandoNota] = useState(null);
+  const [extensaoAusente, setExtensaoAusente] = useState('');
   const abaFSistRef = useRef(null);
 
   function abrirFSist(item) {
@@ -87,6 +90,7 @@ export default function RecebimentosPendentes() {
     }
     aba.opener = null;
     abaFSistRef.current = aba;
+    setExtensaoAusente('');
     setConsultandoNota(item);
   }
 
@@ -96,12 +100,11 @@ export default function RecebimentosPendentes() {
       try { aba.location.replace(FSIST_URL); } catch { /* Aba fechada ou protegida. */ }
     }
     abaFSistRef.current = null;
-    if (!ok) {
-      toast({
-        variant: 'destructive', title: 'Captura automática não ativada',
-        description: mensagem || 'Verifique a extensão GFARM instalada no navegador.',
-      });
-    }
+    // O site nao pode instalar extensoes automaticamente.
+    // Quando ausente, manter o FSist aberto e oferecer um link discreto.
+    setExtensaoAusente(ok ? '' : (
+      mensagem || 'Instale a extensão GFARM para capturar XMLs automaticamente.'
+    ));
   }
 
   // A fila pode chegar ANTES do cache de Produtos. Vincular quando ambos
@@ -353,6 +356,16 @@ export default function RecebimentosPendentes() {
         <Button variant="outline" onClick={() => carregar()} disabled={loading}><RefreshCcw className="mr-1 h-4 w-4" /> Atualizar</Button>
       </div>
     </div>
+    {!!extensaoAusente && (
+      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/10 px-3 py-2 text-xs"
+        role="status">
+        <span>{extensaoAusente}</span>
+        <a href={EXTENSAO_GFARM_URL} target="_blank" rel="noopener noreferrer"
+          className="font-semibold text-primary underline">Baixar extensão GFARM</a>
+        <button type="button" className="ml-auto text-muted-foreground underline"
+          onClick={() => setExtensaoAusente('')}>Dispensar</button>
+      </div>
+    )}
     {loading && !itens.length ? <p className="text-sm text-muted-foreground">Carregando...</p> : null}
     {!loading && !itens.length ? <Card className="p-5 text-sm text-muted-foreground">Nenhum recebimento nesta situação.</Card> : null}
     {itens.map(item => {
