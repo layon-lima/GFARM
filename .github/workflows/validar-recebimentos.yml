@@ -7,6 +7,8 @@ on:
       - 'GFARM APP/backend/app/api/integracao_recebimentos.py'
       - 'GFARM APP/backend/tests/test_integracao_recebimentos.py'
       - 'GFARM APP/backend/app/services/custo_nfe.py'
+      - 'GFARM APP/backend/app/services/unidades_estoque.py'
+      - 'GFARM APP/backend/tests/test_sinonimos_tonelada.py'
       - 'GFARM APP/backend/tests/test_custo_nfe.py'
       - 'GFARM APP/backend/tests/test_integracao_aprovacao_transacao.py'
       - 'GFARM APP/backend/tests/test_integracao_xml_em_lote.py'
@@ -35,5 +37,5 @@ jobs:
           cache: pip
           cache-dependency-path: GFARM APP/backend/requirements.txt
       - run: python -m pip install -r requirements.txt
-      - run: python -m unittest -v tests.test_integracao_recebimentos tests.test_custo_nfe tests.test_integracao_aprovacao_transacao tests.test_integracao_xml_em_lote
+      - run: python -m unittest -v tests.test_integracao_recebimentos tests.test_custo_nfe tests.test_integracao_aprovacao_transacao tests.test_integracao_xml_em_lote tests.test_sinonimos_tonelada
       - run: python -m compileall -q app/api/integracao_recebimentos.py
