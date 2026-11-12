@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, ExternalLink, FileUp, RefreshCcw, XCircle } from 'lucide-react';
+import { Check, ChevronLeft, ExternalLink, RefreshCcw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import EscolherProdutoDaNota from '@/components/movimentacoes/EscolherProdutoDaN
 import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
+const FSIST_URL = 'https://www.fsist.com.br/';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 async function request(path, method = 'GET', payload, signal) {
@@ -67,6 +68,41 @@ export default function RecebimentosPendentes() {
   const [recuperando, setRecuperando] = useState('');
   const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
   const [consultandoNota, setConsultandoNota] = useState(null);
+  const abaFSistRef = useRef(null);
+
+  function abrirFSist(item) {
+    if (!/^[0-9]{44}$/.test(String(item.dados.chave_acesso || ''))) {
+      toast({ variant: 'destructive', title: 'Chave da NF-e inválida',
+        description: 'A consulta exige uma chave de 44 dígitos.' });
+      return;
+    }
+    // A aba deve ser aberta sincronamente pelo clique, antes de esperar
+    // a extensão. Só navegamos depois de ativar a captura, para não haver
+    // corrida entre o carregamento do FSist e a chave ativa na extensão.
+    const aba = window.open('about:blank', '_blank');
+    if (!aba) {
+      toast({ variant: 'destructive', title: 'Pop-up bloqueado',
+        description: 'Permita abrir abas para o GFARM e tente novamente.' });
+      return;
+    }
+    aba.opener = null;
+    abaFSistRef.current = aba;
+    setConsultandoNota(item);
+  }
+
+  function fsistPronto(ok, mensagem) {
+    const aba = abaFSistRef.current;
+    if (aba && !aba.closed) {
+      try { aba.location.replace(FSIST_URL); } catch { /* Aba fechada ou protegida. */ }
+    }
+    abaFSistRef.current = null;
+    if (!ok) {
+      toast({
+        variant: 'destructive', title: 'Captura automática não ativada',
+        description: mensagem || 'Verifique a extensão GFARM instalada no navegador.',
+      });
+    }
+  }
 
   // A fila pode chegar ANTES do cache de Produtos. Vincular quando ambos
   // estiverem carregados, sem sobrescrever escolhas/correções feitas pelo usuário.
@@ -373,9 +409,9 @@ export default function RecebimentosPendentes() {
                 {linkFazenda ? (
                   <button type="button"
                     className="inline-flex shrink-0 items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs font-semibold text-primary hover:bg-muted"
-                    title="Consultar a NF-e e importar seu XML em todas as entradas pendentes"
-                    onClick={() => setConsultandoNota(item)}>
-                    <ExternalLink className="h-3.5 w-3.5" /> Consultar e importar XML
+                    title="Abrir o FSist diretamente e capturar automaticamente o XML da NF-e"
+                    onClick={() => abrirFSist(item)}>
+                    <ExternalLink className="h-3.5 w-3.5" /> Abrir FSist e capturar XML
                   </button>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">Consulta disponível com chave válida de 44 dígitos.</span>
@@ -478,19 +514,6 @@ export default function RecebimentosPendentes() {
                     ? 'Sem valor fiscal importado: recupere do XML ou informe o custo antes de aprovar.'
                     : 'Selecione um produto com conversão de unidade válida para preencher o custo.'}
             </span>
-            {semCusto ? (
-              <label className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md border bg-background px-2 py-1 text-[11px] font-semibold hover:bg-muted">
-                <FileUp className="h-3.5 w-3.5" />
-                {recuperando === item.origem_id ? 'Lendo XML...' : 'Recuperar custo pelo XML'}
-                <input type="file" accept=".xml,application/xml,text/xml" className="sr-only"
-                  disabled={!!recuperando || fechado}
-                  onChange={event => {
-                    const arquivo = event.target.files?.[0];
-                    event.target.value = '';
-                    if (arquivo) recuperarValorXml(item, arquivo);
-                  }} />
-              </label>
-            ) : null}
           </div>
           <label className="space-y-1 text-xs">Validade
             <Input
@@ -517,9 +540,12 @@ export default function RecebimentosPendentes() {
       <ConsultaXmlFazenda
         key={consultandoNota.origem_id}
         nota={consultandoNota.dados}
-        link={linkConsultaFiscalNfe(consultandoNota.dados.chave_acesso)}
-        onClose={() => setConsultandoNota(null)}
+        onStatus={fsistPronto}
         onImportar={arquivo => recuperarValorXml(consultandoNota, arquivo)}
+        onConcluido={() => setConsultandoNota(null)}
+        onErro={mensagem => toast({
+          variant: 'destructive', title: 'Falha na captura do XML', description: mensagem,
+        })}
       />
     )}
     {criandoProdutoDe && (
