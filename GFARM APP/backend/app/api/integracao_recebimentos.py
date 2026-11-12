@@ -230,11 +230,10 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
         raise HTTPException(404, "Recebimento não encontrado.")
     if row["status"] != "PENDENTE":
         raise HTTPException(409, "Somente recebimentos pendentes podem receber valores fiscais.")
-    try:
-        fiscal = extrair_custo_xml(dados.xml, row["dados"])
-    except DadosFiscaisIncompativeis as err:
-        raise HTTPException(422, str(err)) from err
-
+    # A linha que abriu o FSist pode nao estar no XML. Neste caso,
+    # aproveitamos os outros produtos da mesma chave sem exigir
+    # correspondencia do item clicado como condicao para o lote inteiro.
+    # Cada candidato e conferido individualmente: chave, numero e produto.
     # Uma única NF-e pode ter vários produtos; aproveitar o mesmo XML para
     # recuperar seus preços sem pedir que o usuário anexe o arquivo repetidamente.
     # Só atualizar itens cujo código/nome corresponda de forma inequívoca.
@@ -248,14 +247,18 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
     atualizados = 0
     origens_atualizadas = []
     nao_identificados = []
+    fiscal = None
+    primeiro_erro = None
     for candidato in candidatos:
         try:
-            campos = fiscal if candidato["origem_id"] == origem_id else extrair_custo_xml(
-                dados.xml, candidato["dados"]
-            )
-        except DadosFiscaisIncompativeis:
+            campos = extrair_custo_xml(dados.xml, candidato["dados"])
+        except DadosFiscaisIncompativeis as err:
+            if primeiro_erro is None:
+                primeiro_erro = str(err)
             nao_identificados.append(str(candidato["dados"].get("produto") or "Produto desconhecido"))
             continue
+        if fiscal is None or candidato["origem_id"] == origem_id:
+            fiscal = campos
         payload = {**candidato["dados"], **campos}
         db.execute(text("""
             UPDATE integracao_recebimentos_pendentes
@@ -269,7 +272,10 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
         origens_atualizadas.append(candidato["origem_id"])
     if not atualizados:
         db.rollback()
-        raise HTTPException(409, "Nenhum recebimento pendente correspondente foi localizado.")
+        raise HTTPException(
+            422,
+            primeiro_erro or "Nenhuma entrada pendente desta nota corresponde aos produtos do XML.",
+        )
     db.commit()
     return {
         "origem_id": origem_id,
