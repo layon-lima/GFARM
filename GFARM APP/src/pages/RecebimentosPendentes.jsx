@@ -453,6 +453,11 @@ export default function RecebimentosPendentes() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="min-w-0 break-all font-mono text-xs">{d.chave_acesso || 'Não informada'}</span>
                 {d.custo_origem === 'xml_conferido' && <span className="text-[11px] font-semibold text-emerald-700">XML conferido</span>}
+                {d.identificacao_fiscal === 'quantidade_e_unidade_unicas' && (
+                  <span className="text-[11px] font-semibold text-amber-700">
+                    Produto vinculado pela quantidade e unidade — confira o nome fiscal
+                  </span>
+                )}
                 {linkFazenda ? (
                   <button type="button"
                     className="inline-flex shrink-0 items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs font-semibold text-primary hover:bg-muted"
@@ -470,11 +475,16 @@ export default function RecebimentosPendentes() {
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
               <span>Itens da NF-e: {Array.isArray(d.itens_xml) ? d.itens_xml.join(', ') : '—'}</span>
               <span>Quantidade fiscal: {d.quantidade_xml || '—'} {d.unidade_xml || d.unidade || ''}</span>
+              {d.origem_quantidade_fiscal === 'tributavel' && (
+                <span>Dados de quantidade tributável da NF-e ({d.unidade_fiscal_origem || 'qTrib'})</span>
+              )}
               {d.produto_xml && <span>Descrição na NF-e: {d.produto_xml}</span>}
               {d.cfop && <span>CFOP: {d.cfop}</span>}
               {d.ncm && <span>NCM: {d.ncm}</span>}
               {d.lote && <span>Lote: {d.lote}</span>}
-              {d.validade && <span>Validade: {formatarValidadeInicial(d.validade)}</span>}
+              {d.validade
+                ? <span>Validade: {formatarValidadeInicial(d.validade)}</span>
+                : <span>Validade não informada no XML</span>}
             </div>
           )}
           {avisosXml[item.origem_id] && (
