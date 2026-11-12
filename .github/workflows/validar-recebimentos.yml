@@ -7,6 +7,11 @@ on:
       - 'GFARM APP/backend/app/api/integracao_recebimentos.py'
       - 'GFARM APP/backend/tests/test_integracao_recebimentos.py'
       - 'GFARM APP/backend/app/services/custo_nfe.py'
+      - 'GFARM APP/backend/app/services/distribuicao_dfe.py'
+      - 'GFARM APP/backend/app/main.py'
+      - 'GFARM APP/backend/app/core/scheduler.py'
+      - 'GFARM APP/backend/requirements.txt'
+      - 'GFARM APP/backend/tests/test_distribuicao_dfe_offline.py'
       - 'GFARM APP/backend/app/services/unidades_estoque.py'
       - 'GFARM APP/backend/tests/test_sinonimos_tonelada.py'
       - 'GFARM APP/backend/tests/test_custo_nfe.py'
@@ -40,5 +45,5 @@ jobs:
           cache: pip
           cache-dependency-path: GFARM APP/backend/requirements.txt
       - run: python -m pip install -r requirements.txt
-      - run: python -m unittest -v tests.test_integracao_recebimentos tests.test_custo_nfe tests.test_integracao_aprovacao_transacao tests.test_integracao_xml_em_lote tests.test_sinonimos_tonelada tests.test_custo_medio_recebimento
-      - run: python -m compileall -q app/api/integracao_recebimentos.py
+      - run: python -m unittest -v tests.test_integracao_recebimentos tests.test_custo_nfe tests.test_integracao_aprovacao_transacao tests.test_integracao_xml_em_lote tests.test_sinonimos_tonelada tests.test_custo_medio_recebimento tests.test_distribuicao_dfe_offline
+      - run: python -m compileall -q app/api/integracao_recebimentos.py app/services/distribuicao_dfe.py app/core/scheduler.py app/main.py
