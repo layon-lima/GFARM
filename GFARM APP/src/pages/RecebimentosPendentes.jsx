@@ -119,6 +119,9 @@ export default function RecebimentosPendentes() {
       const seguinte = { ...anterior };
       for (const item of itens) {
         if (item.status !== 'PENDENTE') continue;
+        // O XML é a fonte fiscal: nunca auto-selecionar no estoque um
+        // produto cujo nome divergente só existia no Meus Controles.
+        if (item.dados.divergencia_produto_xml) continue;
         const atual = anterior[item.origem_id] || {};
         if (atual.produto_id || atual.vinculo_manual) continue;
         const encontrado = encontrarProdutoExatoDaNota(item.dados, produtos)
@@ -272,9 +275,22 @@ export default function RecebimentosPendentes() {
           if (!atual) continue;
           seguinte[reg.origem_id] = {
             ...atual,
+            ...(reg.dados.divergencia_produto_xml
+              ? {
+                produto_id: '', deposito_id: '', gaveta_id: '',
+                identificacao: '', vinculo_manual: true,
+                custo_unitario_base: '', custo_alterado: false,
+              } : {}),
             ...(!atual.validade && reg.dados.validade
               ? { validade: formatarValidadeInicial(reg.dados.validade) } : {}),
           };
+        }
+        return seguinte;
+      });
+      setBuscas(anterior => {
+        const seguinte = { ...anterior };
+        for (const reg of novos) {
+          if (reg.dados.divergencia_produto_xml) delete seguinte[reg.origem_id];
         }
         return seguinte;
       });
@@ -487,6 +503,13 @@ export default function RecebimentosPendentes() {
                 : <span>Validade não informada no XML</span>}
             </div>
           )}
+          {d.divergencia_produto_xml && (
+            <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-900">
+              Atenção: o Meus Controles informou “{d.produto}”, mas a NF-e registra “{d.produto_xml}”.
+              Os dados fiscais foram recuperados pela chave, quantidade e unidade.
+              Confirme e selecione o produto correto no GFARM antes da entrada em estoque.
+            </p>
+          )}
           {avisosXml[item.origem_id] && (
             <p className="mt-2 text-xs font-semibold text-amber-700">
               Este produto não foi preenchido pelo XML: {avisosXml[item.origem_id]}
@@ -500,7 +523,8 @@ export default function RecebimentosPendentes() {
         </div>
         {fechado ? <p className="text-sm text-muted-foreground">{item.documento_estoque_id ? 'Documento do estoque: ' + item.documento_estoque_id : item.motivo_recusa}</p> : <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
           <EscolherProdutoDaNota
-            dados={{ ...d, origem_id: item.origem_id }}
+            dados={{ ...d, origem_id: item.origem_id,
+              produto: d.divergencia_produto_xml ? d.produto_xml : d.produto }}
             produtos={produtos}
             setores={setores}
             carregando={carregandoCadastros}
