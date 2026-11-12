@@ -246,7 +246,9 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
     """), {"chave": chave}).mappings().all()
     atualizados = 0
     origens_atualizadas = []
+    itens_fiscais_atualizados = []
     nao_identificados = []
+    detalhes_pendentes = []
     fiscal = None
     primeiro_erro = None
     for candidato in candidatos:
@@ -255,7 +257,13 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
         except DadosFiscaisIncompativeis as err:
             if primeiro_erro is None:
                 primeiro_erro = str(err)
-            nao_identificados.append(str(candidato["dados"].get("produto") or "Produto desconhecido"))
+            nome = str(candidato["dados"].get("produto") or "Produto desconhecido")
+            nao_identificados.append(nome)
+            detalhes_pendentes.append({
+                "origem_id": candidato["origem_id"],
+                "produto": nome,
+                "motivo": str(err),
+            })
             continue
         if fiscal is None or candidato["origem_id"] == origem_id:
             fiscal = campos
@@ -270,6 +278,12 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
         })
         atualizados += 1
         origens_atualizadas.append(candidato["origem_id"])
+        # O frontend aplica imediatamente os dados confirmados, sem depender
+        # de uma segunda leitura que pode demorar ou renderizar a lista antiga.
+        itens_fiscais_atualizados.append({
+            "origem_id": candidato["origem_id"],
+            "dados": payload,
+        })
     if not atualizados:
         db.rollback()
         raise HTTPException(
@@ -285,7 +299,9 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
         "custo_origem": fiscal["custo_origem"],
         "itens_atualizados": atualizados,
         "origens_atualizadas": origens_atualizadas,
+        "itens_fiscais_atualizados": itens_fiscais_atualizados,
         "nao_identificados": nao_identificados[:30],
+        "detalhes_pendentes": detalhes_pendentes[:30],
     }
 
 
