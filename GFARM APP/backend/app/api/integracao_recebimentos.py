@@ -217,10 +217,12 @@ def recusar(origem_id: str, dados: Recusar, user: User = Depends(get_current_use
 def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
                        user: User = Depends(get_current_user),
                        db: Session = Depends(get_db)):
-    """Recupera preço de pendências antigas diretamente do XML original.
+    """Importa os dados fiscais de uma NF-e para TODAS as pendências compatíveis.
 
-    Confere a chave da NF-e, o número, o item e a unidade. A atualização
-    afeta somente a pendência: nunca altera saldo nem aprova a entrada.
+    Confere chave, número, código ou descrição e unidades para cada produto.
+    Registra custo, emitente, códigos, CFOP, NCM e rastreio quando inequívocos.
+    Mantém nome/quantidade do recebimento (podem ser parciais), status e saldo.
+    Nunca movimenta estoque nem aprova lançamentos.
     """
     _exigir_revisor(user)
     row = _row(db, origem_id)
@@ -244,6 +246,7 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
          FOR UPDATE
     """), {"chave": chave}).mappings().all()
     atualizados = 0
+    origens_atualizadas = []
     nao_identificados = []
     for candidato in candidatos:
         try:
@@ -263,6 +266,7 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
             "dados": json.dumps(payload, ensure_ascii=False),
         })
         atualizados += 1
+        origens_atualizadas.append(candidato["origem_id"])
     if not atualizados:
         db.rollback()
         raise HTTPException(409, "Nenhum recebimento pendente correspondente foi localizado.")
@@ -274,7 +278,8 @@ def recuperar_custo_xml(origem_id: str, dados: RecuperarCustoXml,
         "valor_total": fiscal["valor_total"],
         "custo_origem": fiscal["custo_origem"],
         "itens_atualizados": atualizados,
-        "nao_identificados": nao_identificados[:12],
+        "origens_atualizadas": origens_atualizadas,
+        "nao_identificados": nao_identificados[:30],
     }
 
 
