@@ -27,6 +27,7 @@ function iniciar(dados, depositoInicial, depositos) {
     deposito_id: depositoInicial || '',
     gaveta_id: '',
     fator_conversao: '',
+    custo_unitario: '',
   };
 }
 
@@ -187,6 +188,20 @@ export default function NovoProdutoDaNota({
                 </option>)}
               </select>
             </label>
+            <label className="space-y-1 text-xs sm:col-span-2">
+              Custo médio inicial (R$ / {form.unidade || 'unidade'}) — opcional
+              <Input
+                type="text" inputMode="decimal" autoComplete="off"
+                placeholder="Ex.: 7,65 — deixe vazio se não souber"
+                value={form.custo_unitario}
+                onChange={e => mudar('custo_unitario', e.target.value)}
+                aria-label="Custo médio inicial opcional"
+              />
+              <span className="block text-muted-foreground">
+                Preço inicial do cadastro, separado do valor da NF-e. Não movimenta estoque.
+                Se deixar vazio, poderá receber a nota sem preço e definir o custo depois.
+              </span>
+            </label>
             {exigeConversao && (
               <label className="space-y-1 text-xs sm:col-span-2">
                 Conversão obrigatória: 1 {dados.unidade} equivale a quantos {form.unidade}? *
@@ -200,8 +215,8 @@ export default function NovoProdutoDaNota({
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Código interno gerado pelo GFARM. CFOP, NCM, lote, validade e preço continuam
-            na nota para conferência; o cadastro do produto não movimenta quantidade nem contabiliza custo.
+            Código interno gerado pelo GFARM. CFOP, NCM, lote, validade e preço fiscal permanecem
+            na nota para conferência. O custo médio inicial acima é opcional e não movimenta estoque.
           </p>
         </form>
         <DialogFooter>
