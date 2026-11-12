@@ -1,6 +1,7 @@
 """Custo medio fiscal/provisorio sem reavaliar estoque indevidamente."""
 import unittest
 from decimal import Decimal
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -15,6 +16,11 @@ from app.services.motor_estoque import (
 
 class CustoMedioNotaTest(unittest.TestCase):
     def setUp(self):
+        # O lock por chave do motor usa pg_advisory_xact_lock no PostgreSQL.
+        # SQLite nos testes nao oferece esta funcao; nao muda o motor real.
+        self.bloqueio = patch("app.services.motor_estoque._bloquear_chave")
+        self.bloqueio.start()
+        self.addCleanup(self.bloqueio.stop)
         self.engine = create_engine("sqlite://")
         for model in (Produto, EstoqueSaldo, EstoqueDocumento, EstoqueDocumentoItem):
             model.__table__.create(self.engine)
