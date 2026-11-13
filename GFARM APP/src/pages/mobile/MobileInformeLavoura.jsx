@@ -32,7 +32,7 @@ function parseNumero(value) {
 
 const normalizarBusca = (valor) => String(valor || '')
   .normalize('NFD')
-  .replace(/[\\u0300-\\u036f]/g, '')
+  .replace(/[\u0300-\u036f]/g, '')
   .toLocaleLowerCase('pt-BR');
 
 function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
