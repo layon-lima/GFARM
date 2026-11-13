@@ -2,277 +2,101 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeftRight,
-  ChevronRight,
   ClipboardList,
   FileBarChart,
   Fuel,
-  PackagePlus,
   Leaf,
-  Scale,
+  PackagePlus,
   Settings,
   ShieldCheck,
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/AuthContext';
 import { useEntidades } from '@/lib/useEntidades';
-import { filterProdutos } from '@/lib/estoqueFilters';
 import { mobilePageAllowed } from '@/lib/mobileAccess';
 import { hasPermission } from '@/lib/permissions';
 import { setoresAcessiveis } from '@/lib/setoresAcesso';
+import SetorIcon from '@/components/setorIcon';
 
-const FILTROS_VAZIOS = {
-  setor_id: [],
-  estoque: '',
-  deposito_id: [],
-  maquina_id: [],
-  gaveta_id: [],
-  unidade: [],
-  codigo: '',
-  referencia: '',
-  quantidade_min: '',
-  quantidade_max: '',
-  valor_unit_min: '',
-  valor_unit_max: '',
-  valor_total_min: '',
-  valor_total_max: '',
-};
-
-const MOBILE_SHORTCUTS = [
-  {
-    key: 'movimentacoes',
-    label: 'Movimentos',
-    description: 'Entradas, saídas e histórico',
-    path: '/movimentacoes',
-    icon: ArrowLeftRight,
-    tone: 'blue',
-  },
-  {
-    key: 'abastecimento',
-    label: 'Abastecimento',
-    description: 'Registrar abastecimento',
-    path: '/abastecimento',
-    icon: Fuel,
-    tone: 'orange',
-  },
-  {
-    key: 'pesagem',
-    label: 'Pesagem',
-    description: 'Tickets e operações',
-    path: '/pesagem',
-    icon: Scale,
-    tone: 'slate',
-  },
-  {
-    key: 'informes-lavoura',
-    label: 'Saída para Lavoura',
-    description: 'Informar retirada de defensivos e adubos',
-    path: '/informes-lavoura',
-    icon: Leaf,
-    tone: 'green',
-  },
-  {
-    key: 'cadastros',
-    label: 'Cadastros',
-    description: 'Dados do sistema',
-    path: '/cadastros',
-    icon: Settings,
-    tone: 'violet',
-  },
-  {
-    key: 'relatorios',
-    label: 'Relatórios',
-    description: 'Análises e exportações',
-    path: '/relatorios',
-    icon: FileBarChart,
-    tone: 'cyan',
-  },
-  {
-    key: 'inventario',
-    label: 'Inventário',
-    description: 'Conferir estoque físico',
-    path: '/inventario',
-    icon: ClipboardList,
-    tone: 'emerald',
-  },
+const ACOES = [
+  { key: 'abastecimento', label: 'Abastecimento', path: '/abastecimento', icon: Fuel, tone: 'orange' },
+  { key: 'informes-lavoura', label: 'Saída para Lavoura', path: '/informes-lavoura', icon: Leaf, tone: 'green' },
+  { key: 'inventario', label: 'Inventário', path: '/inventario', icon: ClipboardList, tone: 'green' },
+  { key: 'movimentacoes', label: 'Movimentos', path: '/movimentacoes', icon: ArrowLeftRight, tone: 'blue' },
+  { key: 'cadastros', label: 'Cadastros', path: '/cadastros', icon: Settings, tone: 'violet' },
+  { key: 'relatorios', label: 'Relatórios', path: '/relatorios', icon: FileBarChart, tone: 'cyan' },
 ];
+
+function acessoAcao(user, acao) {
+  if (acao.key === 'informes-lavoura') {
+    return hasPermission(user, 'mobile.informe_lavoura.solicitar')
+      || hasPermission(user, 'admin.informe_lavoura.revisar');
+  }
+  return mobilePageAllowed(user, acao.key);
+}
 
 export default function MobileHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  const atalhosPermitidos = MOBILE_SHORTCUTS.filter(
-    (atalho) => atalho.key === 'informes-lavoura'
-      ? hasPermission(user, 'mobile.informe_lavoura.solicitar')
-        || hasPermission(user, 'admin.informe_lavoura.revisar')
-      : mobilePageAllowed(user, atalho.key)
+  // A home consulta apenas setores: saldo/produtos são carregados na própria
+  // tela de setor, evitando tráfego e contadores sem utilidade aqui.
+  const { data, loading } = useEntidades({ Setor: {} });
+  const setores = useMemo(
+    () => setoresAcessiveis(data.Setor || [], user),
+    [data.Setor, user]
   );
-
-  const entradaManualPermitida =
-    hasPermission(user, 'mobile.estoque.entrada_manual_saldo')
-    || hasPermission(user, 'admin.entrada_saldo_mobile.revisar');
-
-  const atalhoEntradaManual = {
-    key: 'entrada-manual-saldo',
-    label: 'Entrada Manual de Saldo',
-    description: 'Lançar saldo e revisar solicitações',
-    path: '/entrada-manual-saldo',
-    icon: PackagePlus,
-    tone: 'emerald',
-  };
-
-  const atalhosComEntrada = entradaManualPermitida
-    ? [atalhoEntradaManual, ...atalhosPermitidos]
-    : atalhosPermitidos;
-
-  const atalhosComAdmin = user?.role === 'admin'
-    ? [{ key: 'admin-mobile', label: 'Modo Admin', description: 'Cadastros para aprovação', path: '/admin-mobile', icon: ShieldCheck, tone: 'violet' }, ...atalhosComEntrada]
-    : atalhosComEntrada;
-
-  const { data, loading } = useEntidades({
-    Produto: {},
-    Setor: {},
-    SaldoEstoque: {},
-  });
-
-  const produtos = data.Produto || [];
-  const setores = data.Setor || [];
-  const saldos = data.SaldoEstoque || [];
-
-  const produtosComSaldo = useMemo(
-    () =>
-      filterProdutos(
-        produtos,
-        FILTROS_VAZIOS,
-        saldos
-      ),
-    [produtos, saldos]
-  );
-
-  const setoresVisiveis = useMemo(
-    () => setoresAcessiveis(setores, user),
-    [setores, user]
-  );
-
-  const setorIds = useMemo(
-    () =>
-      new Set(
-        setoresVisiveis.map((setor) => setor.id)
-      ),
-    [setoresVisiveis]
-  );
-
-  const produtosVisiveis = useMemo(
-    () =>
-      produtosComSaldo.filter((produto) =>
-        setorIds.has(produto.setor_id)
-      ),
-    [produtosComSaldo, setorIds]
-  );
+  const atalhos = [
+    ...ACOES.filter((item) => acessoAcao(user, item)),
+    ...(
+      hasPermission(user, 'mobile.estoque.entrada_manual_saldo')
+      || hasPermission(user, 'admin.entrada_saldo_mobile.revisar')
+      ? [{ key: 'entrada-manual-saldo', label: 'Entrada Manual', path: '/entrada-manual-saldo', icon: PackagePlus, tone: 'green' }]
+      : []
+    ),
+    ...(user?.role === 'admin'
+      ? [{ key: 'admin-mobile', label: 'Modo Admin', path: '/admin-mobile', icon: ShieldCheck, tone: 'violet' }]
+      : []),
+  ];
 
   return (
-    <div className="mobile-page mobile-home mobile-home-v5">
-      {atalhosComAdmin.length > 0 ? (
-        <section className="mobile-home-access">
-          <div className="mobile-section-heading mobile-section-heading--simple">
-            <div>
-              <span className="mobile-eyebrow">Acesso rápido</span>
-              <p className="mobile-section-copy">
-                Funções liberadas para seu usuário.
-              </p>
-            </div>
-          </div>
-
+    <div className="mobile-page mobile-home mobile-home-v6">
+      {atalhos.length > 0 && (
+        <section className="mobile-home-access" aria-label="Acesso rápido">
+          <h1 className="mobile-glass-section-title">Acesso rápido</h1>
           <div className="mobile-home-access-grid">
-            {atalhosComAdmin.map((atalho) => {
-              const Icon = atalho.icon;
-
+            {atalhos.map((item) => {
+              const Icon = item.icon;
               return (
-                <button
-                  type="button"
-                  key={atalho.key}
-                  className={`mobile-home-access-card is-${atalho.tone}`}
-                  onClick={() => navigate(atalho.path)}
-                >
-                  <span className="mobile-home-access-card__icon">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <span className="mobile-home-access-card__copy">
-                    <strong>{atalho.label}</strong>
-                    <small>{atalho.description}</small>
-                  </span>
-                  <ChevronRight className="mobile-home-access-card__arrow h-4 w-4" />
+                <button type="button" key={item.key}
+                  className={`mobile-home-access-card is-${item.tone}`}
+                  onClick={() => navigate(item.path)}
+                  aria-label={item.label}>
+                  <span className="mobile-home-access-card__icon"><Icon className="h-5 w-5" /></span>
+                  <strong className="mobile-home-access-card__title">{item.label}</strong>
                 </button>
               );
             })}
           </div>
         </section>
-      ) : null}
+      )}
 
-      <section className="mobile-home-sectors">
-        <div className="mobile-section-heading mobile-section-heading--simple">
-          <div>
-            <span className="mobile-eyebrow">
-              Seus setores
-            </span>
-
-            <p className="mobile-section-copy">
-              Acesse os setores liberados para você.
-            </p>
-          </div>
-        </div>
-
+      <section className="mobile-home-sectors" aria-label="Setores">
+        <h2 className="mobile-glass-section-title">Setores</h2>
         {loading ? (
-          <div className="mobile-loading-card">
-            Carregando setores...
-          </div>
-        ) : setoresVisiveis.length === 0 ? (
-          <div className="mobile-loading-card">
-            Nenhum setor foi liberado para este usuário.
-          </div>
+          <p className="mobile-loading-card">Carregando setores...</p>
+        ) : setores.length === 0 ? (
+          <p className="mobile-loading-card">Nenhum setor liberado.</p>
         ) : (
           <div className="mobile-sector-grid">
-            {setoresVisiveis.map((setor) => {
-              const itens =
-                produtosVisiveis.filter(
-                  (produto) =>
-                    produto.setor_id === setor.id
-                );
-
-              return (
-                <button
-                  type="button"
-                  key={setor.id}
-                  className="mobile-sector-card mobile-sector-card--v5"
-                  onClick={() =>
-                    navigate(`/setor/${setor.id}`)
-                  }
-                  style={{
-                    '--sector-color':
-                      setor.cor || '#0f8b68',
-                    '--sector-soft': `${
-                      setor.cor || '#0f8b68'
-                    }10`,
-                  }}
-                >
-                  <span className="mobile-sector-card__content">
-                    <strong title={setor.nome}>
-                      {setor.nome}
-                    </strong>
-
-                    <small>
-                      {itens.length}{' '}
-                      {itens.length === 1
-                        ? 'produto'
-                        : 'produtos'}
-                    </small>
-                  </span>
-
-                  <span className="mobile-sector-card__arrow">
-                    <ChevronRight className="h-4 w-4" />
-                  </span>
-                </button>
-              );
-            })}
+            {setores.map((setor) => (
+              <button type="button" key={setor.id}
+                className="mobile-sector-card mobile-sector-card--v5 mobile-sector-card--v6"
+                onClick={() => navigate(`/setor/${setor.id}`)}
+                aria-label={`Abrir ${setor.nome}`}>
+                <SetorIcon setor={setor} className="mobile-sector-card--v6__icon" />
+                <strong className="mobile-sector-card--v6__title">{setor.nome}</strong>
+              </button>
+            ))}
           </div>
         )}
       </section>
