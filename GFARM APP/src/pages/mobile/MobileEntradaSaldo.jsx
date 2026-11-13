@@ -10,7 +10,6 @@ import {
   Camera,
   Check,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   Loader2,
   Search,
