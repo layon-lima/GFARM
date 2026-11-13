@@ -30,8 +30,10 @@ function chamarPonteWindows(pedido, timeoutMs = 120000) {
       if (msg?.type === 'result') {
         finalizar(null, msg.value);
       } else if (msg?.type === 'chunk') {
-        pedacos.push(String(msg.data || ''));
-        if (pedacos.length > 150 || pedacos.join('').length > 22000000) {
+        const fragmento = String(msg.data || '');
+        pedacos.push(fragmento);
+        tamanhoRecebido += fragmento.length;
+        if (pedacos.length > 150 || tamanhoRecebido > 22000000) {
           finalizar(new Error('Resposta da ponte ultrapassou o limite.'));
         }
       } else if (msg?.type === 'done') {
