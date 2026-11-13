@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, String, text
+from sqlalchemy import Boolean, DateTime, Float, JSON, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,12 +26,16 @@ class BalancaLeituraRemota(Base):
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    # PostgreSQL mantém JSONB. A variante SQLite permite executar os testes
+    # de outros módulos sem tentar criar um tipo exclusivo do PostgreSQL.
+    _json_portavel = JSONB().with_variant(JSON(), "sqlite")
+
     estado_automacao = mapped_column(
-        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+        _json_portavel, nullable=False, server_default=text("'{}'")
     )
     eventos_automacao = mapped_column(
-        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+        _json_portavel, nullable=False, server_default=text("'[]'")
     )
     ultima_captura = mapped_column(
-        JSONB, nullable=True)
+        _json_portavel, nullable=True)
 
