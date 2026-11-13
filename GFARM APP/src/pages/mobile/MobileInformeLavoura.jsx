@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Check, ClipboardList, Loader2,
-  Pencil, Plus, RefreshCw, Search, Send, ShieldCheck,
+  ArrowLeft, Check, Loader2,
+  Pencil, Plus, Search, Send, ShieldCheck,
   Sprout, Trash2, X,
 } from 'lucide-react';
 
@@ -46,11 +46,13 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
     }));
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {itens.map((item, indice) => (
-        <div key={item.key} className="space-y-2 rounded-xl border bg-background p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground">Produto {indice + 1}</span>
+        <div key={item.key} className="mobile-informe-product space-y-2 rounded-xl border bg-card p-3">
+          <div className="mobile-informe-item-head">
+            <span className="text-xs font-semibold text-muted-foreground">
+              {itens.length > 1 ? `Produto ${indice + 1}` : 'Produto'}
+            </span>
             {itens.length > 1 && (
               <button type="button" aria-label="Remover produto" disabled={bloqueado}
                 onClick={() => onChange(itens.filter((entrada) => entrada.key !== item.key))}
@@ -103,7 +105,7 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
       <Button type="button" variant="outline" className="h-11 w-full gap-2 rounded-xl"
         disabled={bloqueado || itens.length >= 50}
         onClick={() => onChange([...itens, novoItem()])}>
-        <Plus className="h-4 w-4" /> Adicionar outro produto
+        <Plus className="h-4 w-4" /> Adicionar produto
       </Button>
     </div>
   );
@@ -162,6 +164,7 @@ export default function MobileInformeLavoura() {
   const [confirmarId, setConfirmarId] = useState('');
   const [recusarId, setRecusarId] = useState('');
   const [motivo, setMotivo] = useState('');
+  const [observacaoAberta, setObservacaoAberta] = useState(false);
 
   const lavouras = referencias.lavouras || [];
   const produtos = referencias.produtos || [];
@@ -213,8 +216,10 @@ export default function MobileInformeLavoura() {
       await informesLavouraApi.solicitar({ chave: form.chave, ...payload });
       setForm({ chave: crypto.randomUUID(), lavoura_id: '', itens: [novoItem()], observacao: '' });
       setBusca('');
+      setObservacaoAberta(false);
       setMinhas(await informesLavouraApi.minhas());
-      setAviso({ erro: false, texto: 'Informe enviado! Aguardando análise do ADM. O estoque não foi alterado.' });
+      setAba('meus');
+      setAviso({ erro: false, texto: 'Solicitação enviada. Aguardando aprovação.' });
     } catch (error) {
       setAviso({ erro: true, texto: error.message });
     } finally { setBusy(false); }
@@ -270,37 +275,55 @@ export default function MobileInformeLavoura() {
 
   if (!podeSolicitar && !podeRevisar) return <Navigate to="/" replace />;
 
+  const abasAdmin = [
+    ...(podeSolicitar ? [{ key: 'solicitar', label: 'Informar' }] : []),
+    ...(podeRevisar ? [{ key: 'revisar', label: 'Revisar' }] : []),
+    ...(admTotal ? [{ key: 'custos', label: 'Custos' }] : []),
+  ];
+
   return (
-    <div className="mobile-page space-y-3 pb-8">
-      <header className="flex items-center gap-3">
-        <button type="button" aria-label="Voltar" onClick={() => navigate('/')}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border bg-card">
-          <ArrowLeft className="h-5 w-5" />
+    <div className="mobile-page mobile-informe-v6 space-y-2 pb-8">
+      <header className="flex items-center gap-2">
+        <button type="button" aria-label="Voltar" onClick={() => {
+          if (aba === 'meus') setAba('solicitar');
+          else if (form.lavoura_id && aba === 'solicitar')
+            setForm((prev) => ({ ...prev, lavoura_id: '' }));
+          else navigate('/');
+        }} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-card">
+          <ArrowLeft className="h-4 w-4" />
         </button>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-primary">GFARM · Lavouras</p>
-          <h1 className="truncate text-lg font-bold">Informe de Saída</h1>
-        </div>
-        <button type="button" aria-label="Atualizar" disabled={busy || loading}
-          onClick={carregar} className="rounded-xl border bg-card p-2.5">
-          <RefreshCw className="h-4 w-4" />
-        </button>
+        <h1 className="min-w-0 flex-1 truncate text-base font-bold">
+          {aba === 'meus' ? 'Meus informes' : 'Saída para Lavoura'}
+        </h1>
+        {podeSolicitar && (
+          <button type="button" className="mobile-informe-inline-action"
+            onClick={async () => {
+              setAviso(null);
+              if (aba === 'meus') {
+                setAba('solicitar');
+                return;
+              }
+              setAba('meus');
+              try { setMinhas(await informesLavouraApi.minhas()); }
+              catch (error) { setAviso({ erro: true, texto: error.message }); }
+            }}>
+            {aba === 'meus' ? 'Informar' : 'Meus informes'}
+          </button>
+        )}
       </header>
 
-      <div className="flex gap-1 rounded-xl bg-muted/40 p-1">
-        {[
-          ...(podeSolicitar ? [{ key: 'solicitar', label: 'Informar' }] : []),
-          ...(podeRevisar ? [{ key: 'revisar', label: 'Revisar' }] : []),
-          ...(admTotal ? [{ key: 'custos', label: 'Custos' }] : []),
-        ].map((tab) => (
-          <button key={tab.key} type="button"
-            onClick={() => { setAba(tab.key); setAviso(null); }}
-            className={'min-w-0 flex-1 rounded-lg px-2 py-2.5 text-xs font-semibold ' +
-              (aba === tab.key ? 'bg-card shadow-sm' : 'text-muted-foreground')}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {abasAdmin.length > 1 && aba !== 'meus' && (
+        <div className="flex gap-1 rounded-2xl border border-white/80 bg-white/60 p-1">
+          {abasAdmin.map((tab) => (
+            <button key={tab.key} type="button"
+              onClick={() => { setAba(tab.key); setAviso(null); }}
+              className={'min-w-0 flex-1 rounded-xl px-2 py-2 text-xs font-semibold ' +
+                (aba === tab.key ? 'bg-emerald-700 text-white shadow-sm' : 'text-muted-foreground')}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {aviso && (
         <div role="status" className={'rounded-xl border px-3 py-3 text-sm ' +
@@ -314,24 +337,20 @@ export default function MobileInformeLavoura() {
       ) : aba === 'solicitar' && podeSolicitar ? (
         <>
           {!form.lavoura_id ? (
-            <section className="space-y-3 rounded-2xl border bg-card p-3">
+            <section className="space-y-2">
               <div className="relative">
                 <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                 <Input className="h-11 rounded-xl pl-9" placeholder="Pesquisar lavoura..."
                   value={busca} onChange={(event) => setBusca(event.target.value)} />
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="mobile-informe-lavouras">
                 {lavourasFiltradas.map((lavoura) => (
                   <button key={lavoura.id} type="button"
                     onClick={() => setForm((prev) => ({ ...prev, lavoura_id: lavoura.id }))}
-                    className="flex min-h-[106px] flex-col items-start justify-between gap-2 rounded-2xl border border-primary/15 bg-primary/5 p-3 text-left active:bg-primary/10">
-                    <Sprout className="h-5 w-5 text-primary" />
-                    <div className="min-w-0">
-                      <strong className="block break-words text-sm leading-tight">{lavoura.nome}</strong>
-                      <span className="mt-1 block text-[11px] text-muted-foreground">
-                        {lavoura.numero || ''}{lavoura.hectares ? ` · ${lavoura.hectares} ha` : ''}
-                      </span>
-                    </div>
+                    className="mobile-informe-lavoura">
+                    <Sprout className="mb-1 h-5 w-5 text-emerald-700" />
+                    <strong>{lavoura.nome}</strong>
+                    <small>{lavoura.numero || ''}{lavoura.hectares ? ` · ${lavoura.hectares} ha` : ''}</small>
                   </button>
                 ))}
               </div>
@@ -340,71 +359,72 @@ export default function MobileInformeLavoura() {
               )}
             </section>
           ) : (
-            <form onSubmit={enviar} className="space-y-3">
-              <div className="rounded-2xl border bg-card p-3.5">
-                <button type="button" className="mb-3 flex items-center gap-2 text-xs text-primary"
-                  onClick={() => setForm((prev) => ({ ...prev, lavoura_id: '' }))}>
-                  <ArrowLeft className="h-4 w-4" /> Alterar lavoura
-                </button>
-                <div className="flex items-center gap-2">
-                  <Sprout className="h-5 w-5 text-primary" />
-                  <h2 className="break-words text-base font-bold">{lavouraAtual?.nome}</h2>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Produtos destinados a esta lavoura</p>
-              </div>
+            <form onSubmit={enviar} className="mobile-informe-form">
+              <button type="button"
+                className="flex min-h-16 w-full items-center gap-3 rounded-2xl border border-white/80 bg-white/75 px-3.5 py-2 text-left shadow-sm"
+                onClick={() => setForm((prev) => ({ ...prev, lavoura_id: '' }))}>
+                <Sprout className="h-5 w-5 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <small className="block text-[11px] text-muted-foreground">Lavoura</small>
+                  <strong className="block truncate text-base">{lavouraAtual?.nome}</strong>
+                </span>
+                <span className="text-xs font-semibold text-primary">Alterar</span>
+              </button>
               <ItensEditor itens={form.itens} produtos={produtos}
                 bloqueado={busy} onChange={(itens) => setForm((prev) => ({ ...prev, itens }))} />
-              <div className="rounded-xl border bg-card p-3">
-                <Label>Observação (opcional)</Label>
-                <Textarea rows={2} className="mt-2 resize-none rounded-xl"
-                  placeholder="Ex.: responsável pela retirada ou observações"
-                  disabled={busy} value={form.observacao}
-                  onChange={(e) => setForm((prev) => ({ ...prev, observacao: e.target.value }))} />
+              <div className="mobile-informe-optional">
+                <button type="button" className="w-full py-1 text-left text-xs font-semibold text-muted-foreground"
+                  aria-expanded={observacaoAberta || Boolean(form.observacao)}
+                  onClick={() => setObservacaoAberta((value) => !value)}>
+                  {observacaoAberta || form.observacao ? 'Observação' : '+ Adicionar observação (opcional)'}
+                </button>
+                {(observacaoAberta || Boolean(form.observacao)) && (
+                  <Textarea rows={2} className="mt-2 resize-none rounded-xl"
+                    placeholder="Informação adicional"
+                    disabled={busy} value={form.observacao}
+                    onChange={(e) => setForm((prev) => ({ ...prev, observacao: e.target.value }))} />
+                )}
               </div>
-              <Button type="submit" disabled={busy} className="h-12 w-full gap-2 rounded-xl text-base font-semibold">
+              <Button type="submit" disabled={busy} className="mobile-informe-submit h-12 w-full gap-2 rounded-xl text-sm font-semibold">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Enviar solicitação de baixa
               </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                O estoque será baixado somente após a aprovação administrativa.
-              </p>
+
             </form>
           )}
-          <section className="rounded-2xl border bg-card p-3">
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-              <ClipboardList className="h-4 w-4" /> Meus últimos informes
-            </h3>
-            {!minhas.length && <p className="text-xs text-muted-foreground">Nenhuma solicitação enviada.</p>}
-            {minhas.slice(0, 6).map((item) => (
-              <div key={item.id} className="flex items-start justify-between gap-3 border-t py-2 text-xs first:border-0">
-                <div className="min-w-0">
-                  <strong className="block truncate">{item.lavoura_nome}</strong>
-                  <span className="text-muted-foreground">{item.itens?.length || 0} produto(s) · {dataBR(item.created_date)}</span>
-                  {item.motivo_recusa && <span className="block text-red-700">Recusa: {item.motivo_recusa}</span>}
-                </div>
-                <span className="shrink-0 font-semibold">
-                  {item.status === 'APROVADO' ? 'Aprovado' : item.status === 'RECUSADO' ? 'Recusado' : 'Pendente'}
-                </span>
-              </div>
-            ))}
-          </section>
         </>
+      ) : aba === 'meus' && podeSolicitar ? (
+        <section className="space-y-2">
+          {!minhas.length ? (
+            <p className="rounded-2xl border bg-white/70 p-4 text-sm text-muted-foreground">Nenhuma solicitação enviada.</p>
+          ) : minhas.map((item) => (
+            <div key={item.id} className="mobile-informe-history-row">
+              <div className="min-w-0 flex-1">
+                <strong className="block truncate text-sm">{item.lavoura_nome}</strong>
+                <small className="block pt-1">{dataBR(item.created_date)}</small>
+                {item.motivo_recusa && <small className="block text-red-700">Recusa: {item.motivo_recusa}</small>}
+              </div>
+              <span className={'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ' +
+                (item.status === 'APROVADO' ? 'bg-green-100 text-green-800' :
+                 item.status === 'RECUSADO' ? 'bg-red-100 text-red-800' :
+                 'bg-amber-100 text-amber-800')}>
+                {item.status === 'APROVADO' ? 'Aprovado' : item.status === 'RECUSADO' ? 'Recusado' : 'Pendente'}
+              </span>
+            </div>
+          ))}
+        </section>
       ) : aba === 'revisar' && podeRevisar ? (
         <section className="space-y-3">
-          <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/40 p-1">
-            {[
-              { key: 'PENDENTE', label: 'Pendentes' },
-              { key: 'APROVADO', label: 'Aprovados' },
-              { key: 'RECUSADO', label: 'Recusados' },
-            ].map((tab) => (
-              <button key={tab.key} type="button" onClick={() => {
-                setFiltro(tab.key); setEditando(null); setConfirmarId(''); setRecusarId('');
-              }} className={'rounded-lg px-1 py-2.5 text-xs font-semibold ' +
-                (filtro === tab.key ? 'bg-card shadow-sm' : 'text-muted-foreground')}>
-                {tab.label} ({fila.filter((x) =>
-                  x.status === tab.key || (tab.key === 'PENDENTE' && x.status === 'PROCESSANDO')).length})
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-bold">Solicitações</h2>
+            <select aria-label="Filtrar solicitações" value={filtro} className="h-10 rounded-xl border px-3 text-xs"
+              onChange={(event) => {
+                setFiltro(event.target.value); setEditando(null); setConfirmarId(''); setRecusarId('');
+              }}>
+              <option value="PENDENTE">Pendentes</option>
+              <option value="APROVADO">Aprovadas</option>
+              <option value="RECUSADO">Recusadas</option>
+            </select>
           </div>
           {fila.filter((x) => x.status === filtro || (filtro === 'PENDENTE' && x.status === 'PROCESSANDO')).map((item) => (
             <article key={item.id} className="space-y-3 rounded-2xl border bg-card p-3.5">
