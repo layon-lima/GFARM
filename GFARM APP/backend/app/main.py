@@ -19,6 +19,7 @@ from app.api.cadastros_mobile import router as cadastros_mobile_router
 from app.api.entrada_saldo_mobile import router as entrada_saldo_mobile_router
 from app.api.balanca_live import router as balanca_live_router, garantir_tabela_balanca_remota
 from app.api.integracao_recebimentos import router as recebimentos_integracao_router, garantir_tabela_recebimentos
+from app.api.distribuicao_dfe_manual import router as distribuicao_dfe_manual_router
 from app.services.distribuicao_dfe import habilitada as dfe_habilitada, garantir_tabelas_dfe
 from app.core.logging_config import configurar_logging
 from app.core.scheduler import (
@@ -109,6 +110,7 @@ app.include_router(entities_router)
 app.include_router(relatorios_router)
 app.include_router(estoque_router)
 app.include_router(recebimentos_integracao_router)
+app.include_router(distribuicao_dfe_manual_router)
 app.include_router(reservas_router)
 
 
