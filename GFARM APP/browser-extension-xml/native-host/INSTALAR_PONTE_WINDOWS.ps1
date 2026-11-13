@@ -1,98 +1,89 @@
-# Instalacao em Windows PowerShell 5.1; nao requer administrador.
+# Instalador GFARM v0.3 - execute no Windows PowerShell 5.1.
+# Nao execute na VPS. Nao precisa de privilegios de administrador.
 param([string]$ExtensionId = "")
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $nomeHost = "com.gfarm.certificados"
 $destino = Join-Path $env:LOCALAPPDATA "GFARM\Certificados"
-New-Item -ItemType Directory -Force -Path $destino | Out-Null
 $fonte = Join-Path $destino "NativeHost.cs"
 $exe = Join-Path $destino "GFARM-Certificados.exe"
+$manifesto = Join-Path $destino "com.gfarm.certificados.json"
 $origem = "https://raw.githubusercontent.com/layon-lima/GFARM/main/GFARM%20APP/browser-extension-xml/native-host/NativeHost.cs"
-Write-Host "Baixando fonte da ponte de certificados..."
+
+New-Item -ItemType Directory -Force -Path $destino | Out-Null
+Write-Host "1/3 - Baixando fonte da ponte local..."
 Invoke-WebRequest -UseBasicParsing -Uri $origem -OutFile $fonte
-Write-Host "Compilando ponte local do Windows (.NET Framework)..."
-if (Test-Path $exe) { Remove-Item $exe -Force }
+
+Write-Host "2/3 - Compilando a ponte Windows (.NET Framework)..."
+if (Test-Path $exe) { Remove-Item -LiteralPath $exe -Force }
 Add-Type -Path $fonte -OutputAssembly $exe -OutputType ConsoleApplication -ReferencedAssemblies @("System.Net.Http.dll", "System.Xml.dll", "System.Web.Extensions.dll", "System.Core.dll") -ErrorAction Stop
-if (-not (Test-Path $exe)) { throw "Falha na compilacao da ponte." }
+if (-not (Test-Path $exe)) { throw "A compilacao nao gerou o executavel." }
+
 $ids = New-Object 'System.Collections.Generic.HashSet[string]'
 if ($ExtensionId) {
     if ($ExtensionId -notmatch '^[a-p]{32}$') { throw "ID da extensao invalido." }
     [void]$ids.Add($ExtensionId)
 }
-$bases = @((Join-Path $env:LOCALAPPDATA "Microsoft\Edge\User Data"), (Join-Path $env:LOCALAPPDATA "Google\Chrome\User Data"))
-foreach ($base in $bases) {
+
+$perfisBase = @(
+    (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\User Data"),
+    (Join-Path $env:LOCALAPPDATA "Google\Chrome\User Data")
+)
+foreach ($base in $perfisBase) {
     if (-not (Test-Path $base)) { continue }
-    $perfis = Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "Default" -or $_.Name -match '^Profile \d+$' }
+    $perfis = Get-ChildItem -LiteralPath $base -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq "Default" -or $_.Name -match '^Profile \d+$' }
     foreach ($perfil in $perfis) {
-        foreach ($arquivo in @("Preferences", "Secure Preferences")) {
-            $prefs = Join-Path $perfil.FullName $arquivo
-            if (-not (Test-Path $prefs)) { continue }
+        foreach ($nomeArquivo in @("Preferences", "Secure Preferences")) {
+            $configPath = Join-Path $perfil.FullName $nomeArquivo
+            if (-not (Test-Path $configPath)) { continue }
             try {
-                $json = Get-Content -Raw -Encoding UTF8 $prefs | ConvertFrom-Json
-                $config = $json.extensions.settings
-                foreach ($entry in $config.PSObject.Properties) {
-                    $id = $entry.Name
-                    $nome = [string]$entry.Value.manifest.name
-                    if ($id -match '^[a-p]{32}
-    }
-}
-if ($ids.Count -eq 0) {
-    Write-Host "Nao foi possivel detectar o ID da extensao automaticamente." -ForegroundColor Yellow
-    $id = (Read-Host "Cole o ID da extensao GFARM mostrado em edge://extensions").Trim()
-    if ($id -notmatch '^[a-p]{32}$') { throw "ID da extensao invalido." }
-    [void]$ids.Add($id)
-}
-$manifesto = Join-Path $destino "com.gfarm.certificados.json"
-$data = @{
-    name = $nomeHost
-    description = "GFARM: usa certificados do Windows para TLS na SEFAZ"
-    path = $exe
-    type = "stdio"
-    allowed_origins = @($ids | ForEach-Object { "chrome-extension://$_/" })
-} | ConvertTo-Json -Depth 5
-[System.IO.File]::WriteAllText($manifesto, $data, (New-Object System.Text.UTF8Encoding($false)))
-foreach ($browser in @("Microsoft\Edge", "Google\Chrome")) {
-    $reg = "HKCU:\Software\$browser\NativeMessagingHosts\$nomeHost"
-    New-Item -Path $reg -Force | Out-Null
-    Set-Item -Path $reg -Value $manifesto
-}
-Write-Host ""
-Write-Host "PONTE GFARM INSTALADA!" -ForegroundColor Green
-Write-Host "Nenhuma chave privada foi exportada."
-Write-Host "Extensoes autorizadas: $($ids.Count)"
-Write-Host "Feche e abra o Edge/Chrome e clique em Sincronizar XML no GFARM."
- -and $nome -match 'GFARM.*(Captura|XML)') {
+                $preferencias = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                $settings = $preferencias.extensions.settings
+                if ($null -eq $settings) { continue }
+                foreach ($entrada in $settings.PSObject.Properties) {
+                    $id = $entrada.Name
+                    $nome = [string]$entrada.Value.manifest.name
+                    if (($id -match '^[a-p]{32}$') -and ($nome -match 'GFARM.*(Captura|XML)')) {
                         [void]$ids.Add($id)
                     }
                 }
-            } catch {
-                # Alguns perfis guardam extensoes no outro arquivo; seguir.
+            }
+            catch {
+                # Alguns perfis nao possuem esse campo. Tentar o proximo.
             }
         }
     }
 }
+
 if ($ids.Count -eq 0) {
-    Write-Host "Nao foi possivel detectar o ID da extensao automaticamente." -ForegroundColor Yellow
-    $id = (Read-Host "Cole o ID da extensao GFARM mostrado em edge://extensions").Trim()
+    Write-Host "Nao localizei automaticamente a extensao GFARM." -ForegroundColor Yellow
+    $id = (Read-Host "Cole somente o ID da extensao de edge://extensions").Trim()
     if ($id -notmatch '^[a-p]{32}$') { throw "ID da extensao invalido." }
     [void]$ids.Add($id)
 }
-$manifesto = Join-Path $destino "com.gfarm.certificados.json"
-$data = @{
+
+$allowed = @($ids | ForEach-Object { "chrome-extension://$_/" })
+$json = @{
     name = $nomeHost
-    description = "GFARM: usa certificados do Windows para TLS na SEFAZ"
+    description = "GFARM: certificados Windows para TLS da SEFAZ"
     path = $exe
     type = "stdio"
-    allowed_origins = @($ids | ForEach-Object { "chrome-extension://$_/" })
+    allowed_origins = $allowed
 } | ConvertTo-Json -Depth 5
-[System.IO.File]::WriteAllText($manifesto, $data, (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText($manifesto, $json, (New-Object System.Text.UTF8Encoding($false)))
+
+Write-Host "3/3 - Registrando a ponte para Edge e Chrome..."
 foreach ($browser in @("Microsoft\Edge", "Google\Chrome")) {
-    $reg = "HKCU:\Software\$browser\NativeMessagingHosts\$nomeHost"
-    New-Item -Path $reg -Force | Out-Null
-    Set-Item -Path $reg -Value $manifesto
+    $key = "HKCU:\Software\$browser\NativeMessagingHosts\$nomeHost"
+    New-Item -Path $key -Force | Out-Null
+    Set-Item -Path $key -Value $manifesto
 }
 Write-Host ""
-Write-Host "PONTE GFARM INSTALADA!" -ForegroundColor Green
-Write-Host "Nenhuma chave privada foi exportada."
+Write-Host "PONTE GFARM INSTALADA." -ForegroundColor Green
+Write-Host "Certificados nao foram exportados."
 Write-Host "Extensoes autorizadas: $($ids.Count)"
-Write-Host "Feche e abra o Edge/Chrome e clique em Sincronizar XML no GFARM."
+Write-Host "Feche todas as janelas do Edge/Chrome e abra novamente."
