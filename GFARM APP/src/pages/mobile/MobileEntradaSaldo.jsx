@@ -383,7 +383,7 @@ function SectorSelection({
 }) {
   return (
     <div className="mobile-page pb-6">
-      <header className="mb-4 flex items-center gap-3">
+      <header className="mb-2 flex items-center gap-2">
         <button
           type="button"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-background"
@@ -397,9 +397,7 @@ function SectorSelection({
           <h1 className="truncate text-lg font-bold leading-tight">
             Entrada Manual de Saldo
           </h1>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Selecione o setor onde será feita a entrada.
-          </p>
+
         </div>
       </header>
 
@@ -409,9 +407,9 @@ function SectorSelection({
           <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
           <span className="min-w-0 flex-1">
             <strong className="block text-sm font-semibold">Revisar lançamentos manuais</strong>
-            <span className="block text-[11px] text-muted-foreground">Aprovar, recusar ou editar pendências</span>
+            
           </span>
-          <ChevronRight className="h-4 w-4 text-primary" />
+
         </button>
       )}
 
@@ -429,7 +427,7 @@ function SectorSelection({
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2.5">
           {setores.map((setor) => {
             const totalDepositos = depositos.filter(
               (deposito) =>
@@ -441,23 +439,19 @@ function SectorSelection({
                 key={setor.id}
                 type="button"
                 onClick={() => onSelect(setor.id)}
-                className="flex min-h-[68px] w-full items-center gap-3 rounded-2xl border bg-card px-3.5 py-3 text-left active:bg-muted/35"
+                className="flex min-h-[94px] w-full flex-col items-start justify-center gap-1 rounded-2xl border bg-card px-3.5 py-3 text-left active:bg-muted/35"
               >
                 <div className="min-w-0 flex-1">
                   <strong className="block break-words text-sm font-bold leading-tight">
                     {setor.nome}
                   </strong>
 
-                  <span className="mt-1 block text-[11px] text-muted-foreground">
-                    {totalDepositos === 1
-                      ? '1 depósito · seleção automática'
-                      : totalDepositos > 1
-                        ? totalDepositos + ' depósitos'
-                        : 'Sem depósito cadastrado'}
-                  </span>
+                  {totalDepositos === 0 && (
+                    <span className="block text-[11px] text-amber-700">Sem depósito cadastrado</span>
+                  )}
                 </div>
 
-                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/60" />
+
               </button>
             );
           })}
@@ -830,22 +824,12 @@ export default function MobileEntradaSaldo() {
         </button>
 
         <div className="min-w-0 flex-1">
-          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-primary">
-            Entrada Manual
-          </span>
-
           <h1 className="truncate text-lg font-bold leading-tight">
             {setorSelecionado.nome}
           </h1>
         </div>
 
-        <button
-          type="button"
-          className="shrink-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-primary"
-          onClick={() => navigate('/entrada-manual-saldo')}
-        >
-          Trocar setor
-        </button>
+
       </header>
 
       {podeRevisar && (
