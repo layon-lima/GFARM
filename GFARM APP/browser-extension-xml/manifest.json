@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "GFARM — Captura de XML da NF-e",
-  "version": "0.2.0",
-  "description": "Captura XML do FSist e consulta NF-e em lotes pela SEFAZ, com certificado do navegador.",
+  "version": "0.3.0",
+  "description": "Captura XML de NF-e e consulta lotes SEFAZ com certificado Windows selecionado no GFARM.",
   "permissions": [
     "downloads",
     "storage",
-    "tabs"
+    "tabs",
+    "nativeMessaging",
+    "scripting"
   ],
   "host_permissions": [
     "file:///*",
