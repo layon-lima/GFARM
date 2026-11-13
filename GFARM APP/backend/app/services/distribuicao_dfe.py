@@ -117,9 +117,9 @@ def _configuracoes():
     return result
 
 
-def garantir_tabelas_dfe():
+def garantir_tabelas_dfe(*, forcar=False):
     """Somente tabelas NOVAS; nunca altera o legado de estoque/recebimentos."""
-    if not habilitada():
+    if not forcar and not habilitada():
         return
     with engine.begin() as db:
         db.execute(text("""
@@ -398,7 +398,13 @@ def _preencher_pendencias(db, chave: str, xml: bytes):
 
 def aplicar_cache_a_nota_pendente(db, chave: str) -> int:
     """Chamado apos chegada de pendencia do Controles, sem chamar a SEFAZ."""
-    if not habilitada() or not re.fullmatch(r"\d{44}", chave or ""):
+    if not re.fullmatch(r"\d{44}", chave or ""):
+        return 0
+    # O modo manual cria as tabelas na primeira sincronizacao; em
+    # instalacoes antigas sem cache, nao consulta tabelas inexistentes.
+    if not habilitada() and not db.scalar(text(
+        "SELECT to_regclass('gfarm_dfe_documentos_pf') IS NOT NULL"
+    )):
         return 0
     rows = db.execute(text("""
         SELECT conteudo_xml, cnpj AS interessado, recebido_em
