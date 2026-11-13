@@ -19,7 +19,7 @@ import { consultarExtensaoDfe } from '@/lib/sincronizarDfeNavegador';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 const FSIST_URL = 'https://www.fsist.com.br/';
 const EXTENSAO_GFARM_URL =
-  'https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.2.0/gfarm-captura-xml-chrome.zip';
+  'https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.3.0/gfarm-captura-xml-chrome.zip';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 async function request(path, method = 'GET', payload, signal) {
@@ -76,30 +76,52 @@ export default function RecebimentosPendentes() {
   const [consultandoNota, setConsultandoNota] = useState(null);
   const [extensaoAusente, setExtensaoAusente] = useState('');
   const [sincronizandoDfe, setSincronizandoDfe] = useState(false);
+  const [certificadosDfe, setCertificadosDfe] = useState([]);
   const [progressoDfe, setProgressoDfe] = useState('');
   const [avisosXml, setAvisosXml] = useState({});
   const abaFSistRef = useRef(null);
 
-  async function sincronizarXmlEmLote() {
+  async function escolherCertificadoDfe() {
     if (sincronizandoDfe) return;
+    setCertificadosDfe([]);
     setSincronizandoDfe(true);
-    setProgressoDfe('Verificando extensão de certificados...');
+    setProgressoDfe('Localizando certificados digitais no Windows...');
     try {
-      // O navegador nao expõe o CPF da chave privada ao site. Pedimos
-      // o identificador no clique, e a SEFAZ compara com o certificado TLS.
-      const informado = window.prompt(
-        'CPF ou CNPJ do certificado que vai selecionar no navegador (somente numeros):'
-      );
-      if (informado === null) return;
-      const interessado = informado.replace(/\D/g, '');
-      if (!/^(?:\d{11}|\d{14})$/.test(interessado)) {
-        throw new Error('Informe o CPF com 11 digitos ou o CNPJ com 14 digitos.');
+      const ping = await consultarExtensaoDfe('DFE_PING', {}, 9000);
+      if (!ping.ok || ping.versao !== '0.3.0') {
+        throw new Error('Atualize a extensão GFARM para a versão 0.3.0.');
       }
-      const ping = await consultarExtensaoDfe('DFE_PING', {}, 5000);
-      if (!ping.ok || !ping.versao || ping.versao === '0.1.0') {
-        throw new Error('Atualize a extensão GFARM para v0.2.0 antes de sincronizar.');
+      const resultado = await consultarExtensaoDfe('DFE_CERTIFICADOS', {}, 35000);
+      if (!resultado.ok) throw new Error(resultado.message ||
+        'A ponte de certificados Windows não respondeu. Instale a ponte GFARM.');
+      const certificados = Array.isArray(resultado.certificados) ? resultado.certificados : [];
+      if (!certificados.length) {
+        throw new Error('Nenhum certificado válido com CPF/CNPJ identificável foi encontrado no Windows.');
       }
-      const cuf = '21'; // UF padrao MA (codigo IBGE); consulta nao usa UF do emitente.
+      setCertificadosDfe(certificados);
+      setProgressoDfe('');
+    } catch (error) {
+      setProgressoDfe(error.message || 'Não foi possível listar certificados.');
+      toast({ variant: 'destructive', title: 'Certificados não disponíveis',
+        description: error.message });
+    } finally {
+      setSincronizandoDfe(false);
+    }
+  }
+
+  async function sincronizarXmlEmLote(certificado) {
+    if (sincronizandoDfe) return;
+    setCertificadosDfe([]);
+    setSincronizandoDfe(true);
+    setProgressoDfe('Preparando consulta fiscal com o certificado selecionado...');
+    try {
+      const interessado = String(certificado?.interessado || '');
+      const thumbprint = String(certificado?.thumbprint || '');
+      if (!/^(?:\d{11}|\d{14})$/.test(interessado) ||
+          !/^[0-9a-f]{40}$/i.test(thumbprint)) {
+        throw new Error('Certificado selecionado sem identificação fiscal válida.');
+      }
+      const cuf = '21'; // Codigo IBGE: MA.
       const inicial = await request('/dfe/estado?interessado=' + encodeURIComponent(interessado));
       if (inicial.aguarde_segundos > 0) {
         const minutos = Math.ceil(inicial.aguarde_segundos / 60);
@@ -115,7 +137,7 @@ export default function RecebimentosPendentes() {
         setProgressoDfe('Consultando SEFAZ pelo navegador: lote ' + (i + 1) +
           ' · ' + documentos + ' documento(s) recebido(s)...');
         const resposta = await consultarExtensaoDfe('DFE_CONSULTAR', {
-          interessado, cuf, anterior_nsu: nsu,
+          thumbprint, interessado, cuf, anterior_nsu: nsu,
         });
         if (!resposta.ok) throw new Error(resposta.message || 'Nao foi possivel consultar a SEFAZ.');
         const lote = await request('/dfe/lote', 'POST', {
@@ -494,7 +516,7 @@ export default function RecebimentosPendentes() {
           <option value="REJEITADO">Recusados</option>
         </select>
         {status === 'PENDENTE' && (
-          <Button variant="outline" onClick={sincronizarXmlEmLote}
+          <Button variant="outline" onClick={escolherCertificadoDfe}
             disabled={sincronizandoDfe || loading}>
             <RefreshCcw className={'mr-1 h-4 w-4 ' + (sincronizandoDfe ? 'animate-spin' : '')} />
             {sincronizandoDfe ? 'Sincronizando...' : 'Sincronizar XML'}
@@ -503,6 +525,31 @@ export default function RecebimentosPendentes() {
         <Button variant="outline" onClick={() => carregar()} disabled={loading}><RefreshCcw className="mr-1 h-4 w-4" /> Atualizar</Button>
       </div>
     </div>
+    {certificadosDfe.length > 0 && (
+      <Card className="space-y-2 border-border/70 p-3">
+        <div className="flex items-center justify-between">
+          <strong className="text-sm">Selecione o certificado do Windows</strong>
+          <button type="button" className="text-xs underline"
+            onClick={() => setCertificadosDfe([])}>Cancelar</button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          A consulta usa a chave privada protegida no próprio Windows. Nada é exportado.
+        </p>
+        <div className="grid gap-2 md:grid-cols-2">
+          {certificadosDfe.map(certificado => (
+            <button type="button" key={certificado.thumbprint}
+              disabled={sincronizandoDfe}
+              onClick={() => sincronizarXmlEmLote(certificado)}
+              className="rounded-md border border-border bg-background px-3 py-2 text-left hover:bg-muted">
+              <span className="block text-sm font-semibold">{certificado.titular}</span>
+              <span className="block text-xs text-muted-foreground">
+                {certificado.tipo} {certificado.interessado} · Válido até {certificado.vencimento}
+              </span>
+            </button>
+          ))}
+        </div>
+      </Card>
+    )}
     {progressoDfe && (
       <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs"
         role="status" aria-live="polite">{progressoDfe}</div>
