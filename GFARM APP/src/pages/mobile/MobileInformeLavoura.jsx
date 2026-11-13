@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Check, ChevronDown, ClipboardList, Loader2,
+  ArrowLeft, Check, ClipboardList, Loader2,
   Pencil, Plus, RefreshCw, Search, Send, ShieldCheck,
   Sprout, Trash2, X,
 } from 'lucide-react';
