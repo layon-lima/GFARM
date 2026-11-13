@@ -1,9 +1,75 @@
 // Chrome/Edge MV3: somente XML novo e com a chave da NF-e selecionada.
-importScripts('dfe-client.js');
+// A consulta por certificado roda em pagina visivel da extensao, nao no SW.
+// Sem WebContents o Chrome pode cancelar o seletor nativo de certificados.
 const GFARM = 'https://estoque.fazendanovohorizonte.com';
 const MAX_BYTES = 3 * 1024 * 1024;
 const SESSION_TTL_MS = 45 * 60 * 1000;
 
+const aguardandoJanelaDfe = new Map();
+let consultaDfeEmAndamento = false;
+
+async function obterJanelaDfe() {
+  const { dfeJanela } = await chrome.storage.session.get({ dfeJanela: null });
+  if (dfeJanela?.id) {
+    try {
+      await chrome.windows.get(dfeJanela.id);
+      await chrome.windows.update(dfeJanela.id, { focused: true });
+      return dfeJanela;
+    } catch { /* Janela fechada: criamos outra abaixo. */ }
+  }
+  const job = crypto.randomUUID();
+  let resolvePronta;
+  let rejectPronta;
+  const pronta = new Promise((resolve, reject) => {
+    resolvePronta = resolve;
+    rejectPronta = reject;
+  });
+  const timer = setTimeout(() => {
+    aguardandoJanelaDfe.delete(job);
+    rejectPronta(new Error('Janela de certificado nao abriu no navegador.'));
+  }, 12000);
+  aguardandoJanelaDfe.set(job, () => {
+    clearTimeout(timer);
+    aguardandoJanelaDfe.delete(job);
+    resolvePronta();
+  });
+  let janela;
+  try {
+    janela = await chrome.windows.create({
+      url: chrome.runtime.getURL('dfe-sync.html?job=' + job),
+      type: 'popup', focused: true, width: 520, height: 285,
+    });
+    await pronta;
+    const estado = { id: janela.id };
+    await chrome.storage.session.set({ dfeJanela: estado });
+    return estado;
+  } catch (error) {
+    clearTimeout(timer);
+    aguardandoJanelaDfe.delete(job);
+    if (janela?.id) await chrome.windows.remove(janela.id).catch(() => {});
+    throw error;
+  }
+}
+async function consultarDfeNaJanela(interessado, cuf, anterior_nsu) {
+  if (consultaDfeEmAndamento) throw Error('Outra consulta fiscal ainda esta em andamento.');
+  consultaDfeEmAndamento = true;
+  try {
+    await obterJanelaDfe();
+    // A janela tem WebContents e pode abrir o seletor de certificados.
+    return await chrome.runtime.sendMessage({
+      channel: 'GFARM_DFE_EXEC', interessado, cuf, anterior_nsu,
+    });
+  } finally {
+    consultaDfeEmAndamento = false;
+  }
+}
+async function fecharJanelaDfe() {
+  const { dfeJanela } = await chrome.storage.session.get({ dfeJanela: null });
+  await chrome.storage.session.remove('dfeJanela');
+  if (dfeJanela?.id) {
+    await chrome.windows.remove(dfeJanela.id).catch(() => {});
+  }
+}
 function digits(v) { return String(v || '').replace(/\D/g, ''); }
 function normalizeNumber(v) { return String(v || '').replace(/^0+/, '') || '0'; }
 
@@ -26,6 +92,10 @@ async function handleBridge(message, sender) {
   if (message.type === 'DFE_PING') {
     return { ok: true, versao: '0.2.0', dfe: true };
   }
+  if (message.type === 'DFE_CLOSE') {
+    await fecharJanelaDfe();
+    return { ok: true };
+  }
   if (message.type === 'DFE_CONSULTAR') {
     const interessado = String(message.interessado || '');
     const cuf = String(message.cuf || '');
@@ -43,7 +113,10 @@ async function handleBridge(message, sender) {
       return { ok: false, reason: 'A consulta deste CPF/CNPJ esta em intervalo da SEFAZ. Tente mais tarde.' };
     }
     try {
-      const result = await globalThis.GFARM_DFE.consultar(interessado, cuf, anterior);
+      const result = await consultarDfeNaJanela(interessado, cuf, anterior);
+      if (!result?.ok) {
+        throw new Error(result?.reason || 'A janela nao conseguiu consultar a SEFAZ.');
+      }
       let pauseMs = 0;
       if (result.cstat === '656') pauseMs = 125 * 60 * 1000;
       else if (result.cstat === '137' || result.ult_nsu >= result.max_nsu) {
@@ -82,6 +155,13 @@ async function handleBridge(message, sender) {
   return { ok: false };
 }
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+  if (msg?.channel === 'GFARM_DFE_POPUP' && msg.type === 'READY'
+      && sender.url?.startsWith(chrome.runtime.getURL('dfe-sync.html'))) {
+    const pronto = aguardandoJanelaDfe.get(msg.job);
+    if (pronto) pronto();
+    respond({ ok: Boolean(pronto) });
+    return;
+  }
   if (msg?.channel === 'GFARM_XML_UI') {
     handleBridge(msg, sender).then(respond).catch(() => respond({ ok: false, reason: 'Falha na extensão.' }));
     return true;
