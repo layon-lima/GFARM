@@ -1,4 +1,5 @@
 // Chrome/Edge MV3: somente XML novo e com a chave da NF-e selecionada.
+importScripts('dfe-client.js');
 const GFARM = 'https://estoque.fazendanovohorizonte.com';
 const MAX_BYTES = 3 * 1024 * 1024;
 const SESSION_TTL_MS = 45 * 60 * 1000;
@@ -22,6 +23,40 @@ async function handleBridge(message, sender) {
   const url = new URL(sender.url || sender.tab?.url || 'https://invalid.local/');
   if (url.origin !== GFARM || !sender.tab?.id) return { ok: false };
   const tab = String(sender.tab.id);
+  if (message.type === 'DFE_PING') {
+    return { ok: true, versao: '0.2.0', dfe: true };
+  }
+  if (message.type === 'DFE_CONSULTAR') {
+    const interessado = String(message.interessado || '');
+    const cuf = String(message.cuf || '');
+    const anterior = Number(message.anterior_nsu);
+    if (!/^(?:\d{11}|\d{14})$/.test(interessado)
+      || !/^\d{2}$/.test(cuf)
+      || !Number.isSafeInteger(anterior) || anterior < 0) {
+      return { ok: false, reason: 'CPF/CNPJ, UF ou NSU invalido.' };
+    }
+    const key = 'dfe_cooldown_' + interessado;
+    const now = Date.now();
+    const stored = await chrome.storage.local.get(key);
+    const pause = Number(stored[key] || 0);
+    if (pause > now) {
+      return { ok: false, reason: 'A consulta deste CPF/CNPJ esta em intervalo da SEFAZ. Tente mais tarde.' };
+    }
+    try {
+      const result = await globalThis.GFARM_DFE.consultar(interessado, cuf, anterior);
+      let pauseMs = 0;
+      if (result.cstat === '656') pauseMs = 125 * 60 * 1000;
+      else if (result.cstat === '137' || result.ult_nsu >= result.max_nsu) {
+        pauseMs = 65 * 60 * 1000;
+      }
+      if (pauseMs) {
+        await chrome.storage.local.set({ [key]: Date.now() + pauseMs });
+      }
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, reason: error.message || 'Erro na consulta fiscal.' };
+    }
+  }
   const current = await sessions();
   if (message.type === 'START') {
     const chave = digits(message.chave);
