@@ -7,7 +7,7 @@
     if (event.source !== window || event.origin !== ORIGIN) return;
     const data = event.data;
     if (data?.channel !== 'GFARM_XML_UI') return;
-    if (!['START', 'STOP', 'DFE_PING', 'DFE_CONSULTAR'].includes(data.type)) return;
+    if (!['START', 'STOP', 'DFE_PING', 'DFE_CONSULTAR', 'DFE_CLOSE'].includes(data.type)) return;
     const dfe = data.type.startsWith('DFE_');
     chrome.runtime.sendMessage({
       channel: 'GFARM_XML_UI', type: data.type,
