@@ -29,3 +29,29 @@ Extensão experimental para Chrome e Edge (Manifest V3).
 - `background.js`: verifica chave, número, data do download e tamanho; descarta documentos alheios.
 - `bridge.js`: comunicação restrita com `https://estoque.fazendanovohorizonte.com`.
 - `fsist.js`: tenta preencher somente o campo da chave no FSist; não clica nem desvia captcha.
+
+## Nova versão 0.2.0 — sincronizar pela SEFAZ no navegador
+
+Em **Recebimentos do Meus Controles**, clique **Sincronizar XML**. Informe o CPF/CNPJ
+do titular a consultar. O GFARM abre uma pequena janela do próprio Chrome/Edge
+e o navegador solicita o certificado Windows quando a SEFAZ exige TLS mútuo.
+Não existe aplicativo Windows separado nem exportação do PFX.
+
+A extensão consulta a SEFAZ por distNSU, recebe até 50 documentos por lote e
+repete as consultas até alcançar o último NSU disponível. O GFARM recebe
+os docZip na API autenticada, confere o destinatário e preenche notas pendentes
+somente quando o XML está completo. Não há manifestação ou aprovação automática.
+
+**Para atualizar:** baixe o ZIP atualizado em
+https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.2.0/gfarm-captura-xml-chrome.zip
+e extraia. Em edge://extensions ou chrome://extensions, atualize a extensão
+carregada sem compactação apontando para a pasta com o manifest.json novo.
+A extensão descompactada não atualiza sozinha.
+
+**Limites:** o Chrome/Edge pode memorizar o certificado para o domínio SEFAZ;
+para trocar de CPF pode ser necessário reiniciar o navegador ou usar outro
+perfil. É preciso manter o computador ligado durante as consultas. O
+cUFAutor padrão é MA=21. A SEFAZ pode fornecer apenas resNFe (resumo, sem itens
+e preço) e observa janela de distribuição e períodos de espera obrigatórios.
+
+Os testes da extensão são locais e não acessam a SEFAZ nem certificados reais.
