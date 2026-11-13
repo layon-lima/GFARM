@@ -391,6 +391,108 @@
   .mobile-app-shell [role="dialog"] { max-width: calc(100vw - 1rem); }
   .mobile-app-shell [data-radix-popper-content-wrapper] { max-width: calc(100vw - 1rem); }
 
+  /* Inventário: as oito etapas usam a mesma densidade e a mesma linguagem. */
+  .mobile-inventario-v6 {
+    padding: .65rem .8rem 1.15rem;
+  }
+  .mobile-inventario-v6.space-y-4 > :not([hidden]) ~ :not([hidden]),
+  .mobile-inventario-v6.space-y-5 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: .7rem;
+  }
+  .mobile-inventario-v6 :where(.rounded-2xl.border.bg-white, .rounded-3xl.border.bg-white) {
+    border-color: var(--glass-border);
+    background: var(--glass-bg);
+    box-shadow: var(--glass-shadow);
+    border-radius: 18px;
+  }
+  .mobile-inventario-v6 :where(.rounded-3xl.border.bg-white) { padding: .85rem; }
+  .mobile-inventario-v6 > div:first-child > h1 { font-size: 1.16rem; }
+  .mobile-inventario-v6 button:active { transform: scale(.99); }
+  .mobile-inventario-v6 :where(button.h-11, button.h-12) { min-height: 42px; }
+  .mobile-inventario-v6 .text-\[9px\].uppercase { font-size: .65rem; letter-spacing: 0; }
+
+  /* Perfil: somente ações não presentes na Home. */
+  .mobile-profile-v6 .mobile-profile-card {
+    border-radius: 19px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    box-shadow: var(--glass-shadow);
+    padding: .85rem;
+  }
+  .mobile-profile-v6 .mobile-profile-card h1 { font-size: .98rem; font-weight: 810; }
+  .mobile-profile-v6 .mobile-more-list { display: flex; flex-direction: column; gap: .55rem; }
+  .mobile-profile-v6 .mobile-more-row {
+    border: 1px solid var(--glass-border);
+    border-radius: 17px;
+    background: var(--glass-bg);
+    box-shadow: var(--glass-shadow);
+    padding: .7rem .8rem;
+  }
+  .mobile-profile-v6 .mobile-more-row__arrow { display: none; }
+  .mobile-profile-v6 .mobile-logout-button {
+    min-height: 46px;
+    border-radius: 17px;
+    background: rgba(255,255,255,.78);
+  }
+
+  /* Pedidos administrativos: cards úteis no lugar de painéis enormes. */
+  .mobile-admin-v6 { padding: .7rem .82rem 1.25rem; }
+  .mobile-admin-v6 .grid.grid-cols-2 > button {
+    min-height: 96px;
+    border-color: var(--glass-border);
+    border-radius: 18px;
+    background: var(--glass-bg);
+    box-shadow: var(--glass-shadow);
+  }
+  .mobile-admin-v6 .grid.grid-cols-2 > button strong {
+    font-size: .86rem;
+    font-weight: 810;
+  }
+  .mobile-admin-v6 :where(.rounded-2xl.border.bg-card) { padding: .85rem; }
+  .mobile-admin-v6 :where(button, input) { max-width: 100%; }
+
+  /* Busca/seleção de máquinas, produtos e movimentos. */
+  .mobile-app-content > .w-full > .space-y-4,
+  .mobile-app-content > .w-full > .space-y-3 { gap: .6rem; }
+  .mobile-app-content .mobile-sector-product--v5 { border-color: var(--glass-border); }
+  .mobile-app-content .mobile-product-location-row-v5 { gap: .5rem; }
+  .mobile-app-content .mobile-sector-product__main { padding: .65rem .75rem; }
+  .mobile-app-content .mobile-sector-product__details { padding: .55rem .75rem; }
+  .mobile-app-content .mobile-stock-action-list { gap: .48rem; }
+  .mobile-app-content .mobile-sector-result-summary { margin: .3rem .1rem; }
+  .mobile-app-content :where(.mobile-sector-search, .mobile-search-box) {
+    border-color: rgba(26, 105, 67, .16);
+    background: rgba(255,255,255,.78);
+    box-shadow: 0 1px 5px rgba(13,66,44,.04);
+  }
+
+  /* Aplicável a formulários em todas as rotas mobile: vidro sem excesso de padding. */
+  .mobile-app-content :where(.rounded-xl.border.bg-background, .rounded-2xl.border.bg-background) {
+    border-color: rgba(255,255,255,.90);
+    background: rgba(255,255,255,.76);
+    box-shadow: 0 2px 12px rgba(18, 75, 51, .04);
+  }
+  .mobile-app-content :where(.rounded-xl.border.bg-muted\/20, .rounded-2xl.border.bg-muted\/20) {
+    border-color: rgba(24,91,62,.1);
+  }
+  .mobile-app-content :where(button.bg-primary, button[class*="bg-emerald-700"]) {
+    border-radius: 14px;
+  }
+  .mobile-app-content :where(.mobile-informe-v6, .mobile-inventario-v6, .mobile-admin-v6)
+    :where(label, .text-xs.font-semibold) { line-height: 1.25; }
+
+  /* iOS/Android: a interface nunca cresce além da viewport horizontal. */
+  .mobile-app-shell :where(.mobile-app-content, .mobile-page, .mobile-home-access-grid,
+                           .mobile-sector-grid, .mobile-informe-lavouras, form) {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .mobile-app-shell :where(input, textarea) { box-sizing: border-box; }
+  .mobile-app-shell :where(.mobile-home-access-card,.mobile-sector-card,.mobile-informe-lavoura) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .mobile-app-shell *, .mobile-app-shell *::before, .mobile-app-shell *::after {
       animation-duration: .01ms !important;
