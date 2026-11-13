@@ -326,11 +326,13 @@ export default function Abastecimento() {
             </Badge>
           ) : null}
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          {podeConfirmar
-            ? 'Registre abastecimentos e confirme as baixas pendentes.'
-            : 'Leia o QR Code da máquina e registre o combustível abastecido.'}
-        </p>
+        {!isMobile && (
+          <p className="text-sm text-muted-foreground mt-1">
+            {podeConfirmar
+              ? 'Registre abastecimentos e confirme as baixas pendentes.'
+              : 'Leia o QR Code da máquina e registre o combustível abastecido.'}
+          </p>
+        )}
       </header>
 
       {!setorCombustivel && !loading && (
@@ -358,8 +360,8 @@ export default function Abastecimento() {
             onClick={() => setAba('pendentes')}
             className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${aba === 'pendentes' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
           >
-            Aguardando confirmação
-            {pendentes.length > 0 && (
+            {isMobile ? 'Revisar' : 'Aguardando confirmação'}
+            {!isMobile && pendentes.length > 0 && (
               <Badge className="bg-amber-500 hover:bg-amber-500 text-white">{pendentes.length}</Badge>
             )}
           </button>
@@ -435,10 +437,12 @@ export default function Abastecimento() {
 
       {podeConfirmar && aba === 'pendentes' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="w-4 h-4" />
-            Confirme a baixa após conferir a foto do painel do abastecedor.
-          </div>
+          {!isMobile && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="w-4 h-4" />
+              Confirme a baixa após conferir a foto do painel do abastecedor.
+            </div>
+          )}
           {loading ? (
             <p className="text-sm text-muted-foreground">Carregando…</p>
           ) : (
