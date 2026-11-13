@@ -7,6 +7,7 @@ import {
   FileBarChart,
   Fuel,
   PackagePlus,
+  Leaf,
   Scale,
   Settings,
   ShieldCheck,
@@ -108,6 +109,19 @@ export default function MobileHome() {
     hasPermission(user, 'mobile.estoque.entrada_manual_saldo')
     || hasPermission(user, 'admin.entrada_saldo_mobile.revisar');
 
+  const informePermitido =
+    hasPermission(user, 'mobile.informe_lavoura.solicitar')
+    || hasPermission(user, 'admin.informe_lavoura.revisar');
+
+  const atalhoInformeLavoura = {
+    key: 'informes-lavoura',
+    label: 'Saída para Lavoura',
+    description: 'Informar retirada de defensivos e adubos',
+    path: '/informes-lavoura',
+    icon: Leaf,
+    tone: 'green',
+  };
+
   const atalhoEntradaManual = {
     key: 'entrada-manual-saldo',
     label: 'Entrada Manual de Saldo',
@@ -121,9 +135,13 @@ export default function MobileHome() {
     ? [atalhoEntradaManual, ...atalhosPermitidos]
     : atalhosPermitidos;
 
-  const atalhosComAdmin = user?.role === 'admin'
-    ? [{ key: 'admin-mobile', label: 'Modo Admin', description: 'Cadastros para aprovação', path: '/admin-mobile', icon: ShieldCheck, tone: 'violet' }, ...atalhosComEntrada]
+  const atalhosComInforme = informePermitido
+    ? [atalhoInformeLavoura, ...atalhosComEntrada]
     : atalhosComEntrada;
+
+  const atalhosComAdmin = user?.role === 'admin'
+    ? [{ key: 'admin-mobile', label: 'Modo Admin', description: 'Cadastros para aprovação', path: '/admin-mobile', icon: ShieldCheck, tone: 'violet' }, ...atalhosComInforme]
+    : atalhosComInforme;
 
   const { data, loading } = useEntidades({
     Produto: {},
