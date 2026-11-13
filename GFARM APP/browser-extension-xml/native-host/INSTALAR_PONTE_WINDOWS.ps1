@@ -24,18 +24,50 @@ foreach ($base in $bases) {
     if (-not (Test-Path $base)) { continue }
     $perfis = Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "Default" -or $_.Name -match '^Profile \d+$' }
     foreach ($perfil in $perfis) {
-        $prefs = Join-Path $perfil.FullName "Preferences"
-        if (-not (Test-Path $prefs)) { continue }
-        try {
-            $json = Get-Content -Raw -Encoding UTF8 $prefs | ConvertFrom-Json
-            $config = $json.extensions.settings
-            foreach ($entry in $config.PSObject.Properties) {
-                $id = $entry.Name
-                $nome = [string]$entry.Value.manifest.name
-                if ($id -match '^[a-p]{32}$' -and $nome -match 'GFARM.*(Captura|XML)') { [void]$ids.Add($id) }
+        foreach ($arquivo in @("Preferences", "Secure Preferences")) {
+            $prefs = Join-Path $perfil.FullName $arquivo
+            if (-not (Test-Path $prefs)) { continue }
+            try {
+                $json = Get-Content -Raw -Encoding UTF8 $prefs | ConvertFrom-Json
+                $config = $json.extensions.settings
+                foreach ($entry in $config.PSObject.Properties) {
+                    $id = $entry.Name
+                    $nome = [string]$entry.Value.manifest.name
+                    if ($id -match '^[a-p]{32}
+    }
+}
+if ($ids.Count -eq 0) {
+    Write-Host "Nao foi possivel detectar o ID da extensao automaticamente." -ForegroundColor Yellow
+    $id = (Read-Host "Cole o ID da extensao GFARM mostrado em edge://extensions").Trim()
+    if ($id -notmatch '^[a-p]{32}$') { throw "ID da extensao invalido." }
+    [void]$ids.Add($id)
+}
+$manifesto = Join-Path $destino "com.gfarm.certificados.json"
+$data = @{
+    name = $nomeHost
+    description = "GFARM: usa certificados do Windows para TLS na SEFAZ"
+    path = $exe
+    type = "stdio"
+    allowed_origins = @($ids | ForEach-Object { "chrome-extension://$_/" })
+} | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText($manifesto, $data, (New-Object System.Text.UTF8Encoding($false)))
+foreach ($browser in @("Microsoft\Edge", "Google\Chrome")) {
+    $reg = "HKCU:\Software\$browser\NativeMessagingHosts\$nomeHost"
+    New-Item -Path $reg -Force | Out-Null
+    Set-Item -Path $reg -Value $manifesto
+}
+Write-Host ""
+Write-Host "PONTE GFARM INSTALADA!" -ForegroundColor Green
+Write-Host "Nenhuma chave privada foi exportada."
+Write-Host "Extensoes autorizadas: $($ids.Count)"
+Write-Host "Feche e abra o Edge/Chrome e clique em Sincronizar XML no GFARM."
+ -and $nome -match 'GFARM.*(Captura|XML)') {
+                        [void]$ids.Add($id)
+                    }
+                }
+            } catch {
+                # Alguns perfis guardam extensoes no outro arquivo; seguir.
             }
-        } catch {
-            Write-Host "Aviso: nao foi possivel ler perfil $($perfil.Name)." -ForegroundColor Yellow
         }
     }
 }
