@@ -722,6 +722,29 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Ao abrir o teclado, a área de resultados fica inteiramente visível
+     e rolável acima dele, sem cobrir o campo de pesquisa. */
+  .mobile-informe-picker-sheet.is-keyboard-open {
+    min-height: 0;
+    gap: .5rem;
+    padding-top: .4rem;
+    padding-bottom: .55rem;
+  }
+
+  .mobile-informe-picker-sheet.is-keyboard-open .mobile-informe-picker-handle,
+  .mobile-informe-picker-sheet.is-keyboard-open .mobile-informe-picker-heading,
+  .mobile-informe-picker-sheet.is-keyboard-open .mobile-informe-picker-search {
+    flex-shrink: 0;
+  }
+
+  .mobile-informe-picker-sheet.is-keyboard-open .mobile-informe-picker-results {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: .4rem;
+  }
+
   .mobile-informe-picker-handle {
     width: 38px;
     height: 4px;
