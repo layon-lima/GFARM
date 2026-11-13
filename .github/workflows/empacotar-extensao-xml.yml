@@ -23,24 +23,27 @@ jobs:
         run: |
           node --check "GFARM APP/browser-extension-xml/background.js"
           node --check "GFARM APP/browser-extension-xml/bridge.js"
+          node --check "GFARM APP/browser-extension-xml/dfe-client.js"
+          node --check "GFARM APP/browser-extension-xml/dfe-sync.js"
+          node --test "GFARM APP/tests/dfe-client-offline.test.mjs"
           node --check "GFARM APP/browser-extension-xml/fsist.js"
           node -e "const m=require('./GFARM APP/browser-extension-xml/manifest.json'); if(m.manifest_version!==3 || !m.permissions.includes('downloads')) process.exit(1); console.log(m.name,m.version)"
       - name: Empacotar arquivos da extensão
         run: |
           cd "GFARM APP/browser-extension-xml"
-          zip -q -j "$GITHUB_WORKSPACE/gfarm-captura-xml-chrome.zip" manifest.json background.js bridge.js fsist.js README.md
+          zip -q -j "$GITHUB_WORKSPACE/gfarm-captura-xml-chrome.zip" manifest.json background.js bridge.js fsist.js dfe-client.js dfe-sync.js dfe-sync.html README.md
           unzip -l "$GITHUB_WORKSPACE/gfarm-captura-xml-chrome.zip"
       - name: Publicar ZIP para instalação manual
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="gfarm-captura-xml-v0.1.0"
+          tag="gfarm-captura-xml-v0.2.0"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" gfarm-captura-xml-chrome.zip --clobber
           else
             gh release create "$tag" gfarm-captura-xml-chrome.zip \
               --target "$GITHUB_SHA" \
-              --title "GFARM — Captura de XML no Chrome/Edge (prévia)" \
-              --notes "Instalação manual (carregar sem compactação), extensão em fase de teste. Exige permissão explícita de arquivos locais." \
+              --title "GFARM — Sincronizar XML em lote com certificado do Chrome/Edge" \
+              --notes "Inclui consulta distNSU com seletor de certificado do navegador. Instalação manual e sem consultas reais nos testes. FSist continua disponível." \
               --prerelease
           fi
