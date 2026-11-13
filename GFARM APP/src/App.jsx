@@ -44,6 +44,15 @@ function ResponsiveInventario() {
   return isMobile ? <MobileInventario /> : <Inventario />;
 }
 
+function ResponsiveAplicacao() {
+  const isMobile = useIsMobile();
+  // Quem abrir um link antigo de Aplicação no celular vai para o informe.
+  // Ordens de Serviço permanecem intocadas no computador.
+  return isMobile
+    ? <Navigate to="/informes-lavoura" replace />
+    : <Aplicacao />;
+}
+
 const AuthenticatedApp = () => {
   const isMobile = useIsMobile();
   const {
@@ -152,7 +161,7 @@ const AuthenticatedApp = () => {
         <Route path="/recebimentos-pendentes" element={<RecebimentosPendentes />} />
         <Route path="/abastecimento" element={<Abastecimento />} />
         <Route path="/pesagem" element={<Pesagem />} />
-        <Route path="/aplicacao" element={<Aplicacao />} />
+        <Route path="/aplicacao" element={<ResponsiveAplicacao />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/inventario" element={<ResponsiveInventario />} />
         <Route path="/balanca" element={<Balanca />} />
