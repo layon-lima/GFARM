@@ -11,6 +11,7 @@ import {
   MonitorSmartphone,
   PackageMinus,
   PackagePlus,
+  Sprout,
   Save,
   Smartphone,
   UserRound,
@@ -121,6 +122,7 @@ export default function UsuarioPermissoes() {
   const [podeConfirmarAbastecimento, setPodeConfirmarAbastecimento] = useState(false);
   const [podeAbastecerSemFoto, setPodeAbastecerSemFoto] = useState(false);
   const [podeEntradaManualSaldoMobile, setPodeEntradaManualSaldoMobile] = useState(false);
+  const [podeInformeSaidaLavoura, setPodeInformeSaidaLavoura] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -183,6 +185,10 @@ export default function UsuarioPermissoes() {
           )
         );
         setPodeEntradaManualSaldoMobile(usuario.pode_entrada_manual_saldo_mobile === true);
+        setPodeInformeSaidaLavoura(
+          Array.isArray(usuario.permissoes)
+          && usuario.permissoes.includes('mobile.informe_lavoura.solicitar')
+        );
         setAcoesMobile([
           usuario.pode_baixar_mobile ? 'baixar' : null,
           usuario.pode_mudar_gaveta_mobile ? 'mudar_gaveta' : null,
@@ -246,6 +252,9 @@ export default function UsuarioPermissoes() {
               : null,
             podeEntradaManualSaldoMobile
               ? 'mobile.estoque.entrada_manual_saldo'
+              : null,
+            podeInformeSaidaLavoura
+              ? 'mobile.informe_lavoura.solicitar'
               : null,
             ...(role === 'subadmin' ? adminPermissoes : []),
           ].filter(Boolean);
@@ -420,7 +429,9 @@ export default function UsuarioPermissoes() {
               checked={paginas.includes(pagina.key)}
               onChange={() => toggleList(setPaginas, pagina.key)}
               title={pagina.label}
-              description="Acesso ao módulo"
+              description={pagina.key === 'aplicacao'
+                ? 'Ordens de Serviço no computador. No celular, libere Saída para Lavoura abaixo.'
+                : 'Acesso ao módulo'}
             />
           ))}
         </div>
@@ -493,6 +504,22 @@ export default function UsuarioPermissoes() {
           icon={PackagePlus}
           title="Permitir Entrada Manual de Saldo"
           description="Exibe o card de acesso rápido no mobile e permite enviar solicitações para aprovação no computador."
+        />
+      </PermissionSection>
+
+      <PermissionSection
+        icon={Sprout}
+        eyebrow="Somente celular"
+        title="Saída para Lavoura"
+        description="Substitui a antiga Aplicação no celular. O funcionário solicita a retirada de defensivos e adubos, e o ADM analisa antes da baixa. Não libera a baixa direta."
+        badge={podeInformeSaidaLavoura ? 'Liberado' : 'Bloqueado'}
+      >
+        <PermissionItem
+          checked={podeInformeSaidaLavoura}
+          onChange={setPodeInformeSaidaLavoura}
+          icon={Sprout}
+          title="Permitir Informe de Saída para Lavoura"
+          description="Exibe Saída para Lavoura no mobile e permite enviar solicitações. Selecione também os setores DEFENSIVOS e ADUBOS abaixo. O funcionário não vê custos."
         />
       </PermissionSection>
 
