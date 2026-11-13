@@ -12,7 +12,7 @@ Write-Host "Baixando fonte da ponte de certificados..."
 Invoke-WebRequest -UseBasicParsing -Uri $origem -OutFile $fonte
 Write-Host "Compilando ponte local do Windows (.NET Framework)..."
 if (Test-Path $exe) { Remove-Item $exe -Force }
-Add-Type -Path $fonte -OutputAssembly $exe -OutputType ConsoleApplication -ReferencedAssemblies @("System.Net.Http.dll", "System.Xml.dll", "System.Web.Extensions.dll") -ErrorAction Stop
+Add-Type -Path $fonte -OutputAssembly $exe -OutputType ConsoleApplication -ReferencedAssemblies @("System.Net.Http.dll", "System.Xml.dll", "System.Web.Extensions.dll", "System.Core.dll") -ErrorAction Stop
 if (-not (Test-Path $exe)) { throw "Falha na compilacao da ponte." }
 $ids = New-Object 'System.Collections.Generic.HashSet[string]'
 if ($ExtensionId) {
