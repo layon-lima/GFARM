@@ -85,13 +85,8 @@ export default function RecebimentosPendentes() {
     setSincronizandoDfe(true);
     setProgressoDfe('Verificando extensão de certificados...');
     try {
-      const ping = await consultarExtensaoDfe('DFE_PING', {}, 5000);
-      if (!ping.ok || !ping.versao || ping.versao === '0.1.0') {
-        throw new Error('Atualize a extensão GFARM para v0.2.0 antes de sincronizar.');
-      }
-      // JavaScript nao tem permissao para ler o CPF da chave privada no
-      // repositorio Windows. O CPF informado sera conferido pela SEFAZ
-      // contra o certificado selecionado na janela nativa do navegador.
+      // O navegador nao expõe o CPF da chave privada ao site. Pedimos
+      // o identificador no clique, e a SEFAZ compara com o certificado TLS.
       const informado = window.prompt(
         'CPF ou CNPJ do certificado que vai selecionar no navegador (somente numeros):'
       );
@@ -99,6 +94,10 @@ export default function RecebimentosPendentes() {
       const interessado = informado.replace(/\D/g, '');
       if (!/^(?:\d{11}|\d{14})$/.test(interessado)) {
         throw new Error('Informe o CPF com 11 digitos ou o CNPJ com 14 digitos.');
+      }
+      const ping = await consultarExtensaoDfe('DFE_PING', {}, 5000);
+      if (!ping.ok || !ping.versao || ping.versao === '0.1.0') {
+        throw new Error('Atualize a extensão GFARM para v0.2.0 antes de sincronizar.');
       }
       const cuf = '21'; // UF padrao MA (codigo IBGE); consulta nao usa UF do emitente.
       const inicial = await request('/dfe/estado?interessado=' + encodeURIComponent(interessado));
@@ -152,6 +151,8 @@ export default function RecebimentosPendentes() {
         description: error.message || 'Confira certificado, extensão e SEFAZ.' });
       setProgressoDfe(error.message || 'Sincronização interrompida.');
     } finally {
+      // Fecha a janela auxiliar da extensao sem interromper o GFARM.
+      await consultarExtensaoDfe('DFE_CLOSE', {}, 5000).catch(() => {});
       setSincronizandoDfe(false);
     }
   }
