@@ -42,6 +42,8 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
   const [selecionando, setSelecionando] = useState(null);
   const [buscaProduto, setBuscaProduto] = useState('');
   const [editandoQuantidade, setEditandoQuantidade] = useState(null);
+  const [sheetViewport, setSheetViewport] = useState(null);
+  const alturaInicialRef = useRef(0);
   const buscaRef = useRef(null);
   const quantidadeRef = useRef(null);
   const produtosMap = useMemo(
@@ -65,6 +67,59 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
     }
   }, [editandoQuantidade]);
 
+  // No Android, o teclado reduz o visualViewport mas não necessariamente
+  // o viewport usado pelo position: fixed. Mantenha o sheet acima dele.
+  useEffect(() => {
+    if (selecionando === null || typeof window === 'undefined') return undefined;
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+
+    let frame = null;
+    const medir = () => {
+      const alturaVisivel = Math.max(0, viewport.height);
+      const alturaLayout = window.innerHeight;
+      const cobertoPeloTeclado = Math.max(
+        0, Math.ceil(alturaLayout - viewport.offsetTop - alturaVisivel)
+      );
+      // Cobre também navegadores que redimensionam o próprio layout.
+      const alturaReduzida = alturaInicialRef.current - alturaVisivel > 110;
+      const tecladoAberto = viewport.scale <= 1.05
+        && (cobertoPeloTeclado > 110 || alturaReduzida);
+      const proximo = {
+        tecladoAberto,
+        deslocamentoInferior: Math.round(cobertoPeloTeclado),
+        alturaVisivel: Math.max(0, Math.floor(alturaVisivel - 8)),
+      };
+      setSheetViewport((atual) => (
+        atual?.tecladoAberto === proximo.tecladoAberto
+        && atual?.deslocamentoInferior === proximo.deslocamentoInferior
+        && atual?.alturaVisivel === proximo.alturaVisivel
+          ? atual : proximo
+      ));
+    };
+
+    const agendar = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        medir();
+      });
+    };
+
+    medir();
+    viewport.addEventListener('resize', agendar);
+    viewport.addEventListener('scroll', agendar);
+    window.addEventListener('resize', agendar);
+    window.addEventListener('orientationchange', agendar);
+    return () => {
+      viewport.removeEventListener('resize', agendar);
+      viewport.removeEventListener('scroll', agendar);
+      window.removeEventListener('resize', agendar);
+      window.removeEventListener('orientationchange', agendar);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [selecionando]);
+
   function patch(key, campo, valor) {
     onChange(itens.map((item) => item.key !== key ? item : {
       ...item,
@@ -76,6 +131,8 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
 
   function abrirProdutos(key) {
     if (bloqueado) return;
+    alturaInicialRef.current = window.visualViewport?.height || window.innerHeight;
+    setSheetViewport(null);
     setEditandoQuantidade(null);
     setBuscaProduto('');
     setSelecionando(key);
@@ -209,7 +266,15 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
         onOpenChange={(aberto) => { if (!aberto) fecharProdutos(); }}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="mobile-informe-picker-overlay" />
-          <DialogPrimitive.Content className="mobile-informe-picker-sheet"
+          <DialogPrimitive.Content
+            className={'mobile-informe-picker-sheet' +
+              (sheetViewport?.tecladoAberto ? ' is-keyboard-open' : '')}
+            style={sheetViewport?.tecladoAberto ? {
+              bottom: `${sheetViewport.deslocamentoInferior}px`,
+              height: `${sheetViewport.alturaVisivel}px`,
+              maxHeight: `${sheetViewport.alturaVisivel}px`,
+              minHeight: '0px',
+            } : undefined}
             aria-describedby={undefined}
             onOpenAutoFocus={(event) => {
               event.preventDefault();
