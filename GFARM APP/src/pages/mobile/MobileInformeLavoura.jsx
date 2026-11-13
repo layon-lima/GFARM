@@ -401,11 +401,12 @@ export default function MobileInformeLavoura() {
                 setFiltro(tab.key); setEditando(null); setConfirmarId(''); setRecusarId('');
               }} className={'rounded-lg px-1 py-2.5 text-xs font-semibold ' +
                 (filtro === tab.key ? 'bg-card shadow-sm' : 'text-muted-foreground')}>
-                {tab.label} ({fila.filter((x) => x.status === tab.key).length})
+                {tab.label} ({fila.filter((x) =>
+                  x.status === tab.key || (tab.key === 'PENDENTE' && x.status === 'PROCESSANDO')).length})
               </button>
             ))}
           </div>
-          {fila.filter((x) => x.status === filtro).map((item) => (
+          {fila.filter((x) => x.status === filtro || (filtro === 'PENDENTE' && x.status === 'PROCESSANDO')).map((item) => (
             <article key={item.id} className="space-y-3 rounded-2xl border bg-card p-3.5">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -459,6 +460,17 @@ export default function MobileInformeLavoura() {
                         <strong> Custo: {money(custos.informes[item.id])}</strong>}
                     </div>
                   )}
+                  {item.status === 'PROCESSANDO' && (
+                    <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs text-amber-900">
+                        Esta aprovação foi interrompida. A recuperação consulta o documento oficial para impedir baixa duplicada.
+                      </p>
+                      <Button type="button" variant="outline" className="w-full" disabled={busy}
+                        onClick={() => executar('aprovar', item)}>
+                        Verificar aprovação
+                      </Button>
+                    </div>
+                  )}
                   {item.status === 'PENDENTE' && confirmarId !== item.id && recusarId !== item.id && (
                     <div className="grid grid-cols-3 gap-2">
                       <Button type="button" variant="outline" className="px-1 text-xs" disabled={busy}
@@ -501,7 +513,7 @@ export default function MobileInformeLavoura() {
               )}
             </article>
           ))}
-          {!fila.some((item) => item.status === filtro) && (
+          {!fila.some((item) => item.status === filtro || (filtro === 'PENDENTE' && item.status === 'PROCESSANDO')) && (
             <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
               Nenhum informe nesta situação.
             </div>
