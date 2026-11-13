@@ -18,6 +18,8 @@ import { aplicarItensFiscaisXml } from '@/lib/atualizarRecebimentosXml';
 import { consultarExtensaoDfe } from '@/lib/sincronizarDfeNavegador';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 const FSIST_URL = 'https://www.fsist.com.br/';
+const PONTE_WINDOWS_URL =
+  'https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.3.0/gfarm-ponte-certificados-windows.zip';
 const EXTENSAO_GFARM_URL =
   'https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.3.0/gfarm-captura-xml-chrome.zip';
 
@@ -552,7 +554,13 @@ export default function RecebimentosPendentes() {
     )}
     {progressoDfe && (
       <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs"
-        role="status" aria-live="polite">{progressoDfe}</div>
+        role="status" aria-live="polite">
+        {progressoDfe}
+        {/ponte.*windows|ponte.*certificados/i.test(progressoDfe) && (
+          <a href={PONTE_WINDOWS_URL} target="_blank" rel="noopener noreferrer"
+            className="ml-2 font-semibold text-primary underline">Baixar ponte Windows</a>
+        )}
+      </div>
     )}
     {!!extensaoAusente && (
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/10 px-3 py-2 text-xs"
