@@ -123,13 +123,15 @@ internal static class GFARMNativeHost
                 catch { continue; }
                 foreach (X509Certificate2 cert in store.Certificates)
                 {
+                    bool valido = false;
                     try
                     {
-                        if (cert.HasPrivateKey && cert.NotAfter > DateTime.Now &&
+                        valido = cert.HasPrivateKey && cert.NotAfter > DateTime.Now &&
                             cert.NotBefore <= DateTime.Now &&
-                            encontrados.Add(cert.Thumbprint)) yield return cert;
+                            encontrados.Add(cert.Thumbprint);
                     }
                     catch { /* Certificado inacessivel: ignora. */ }
+                    if (valido) yield return cert;
                 }
             }
         }
