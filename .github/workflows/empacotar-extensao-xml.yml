@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   empacotar:
+    needs: validar-windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
