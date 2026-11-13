@@ -29,6 +29,7 @@ import MobileMais from '@/pages/mobile/MobileMais';
 import MobileAdmin from '@/pages/mobile/MobileAdmin';
 import MonitorBalancaADM from '@/pages/mobile/MonitorBalancaADM';
 import MobileEntradaSaldo from '@/pages/mobile/MobileEntradaSaldo';
+import MobileInformeLavoura from '@/pages/mobile/MobileInformeLavoura';
 import { BalancaProvider } from '@/lib/balancaContext';
 import { Toaster } from '@/components/ui/toaster';
 import { sincronizarAbastecimentosOffline } from '@/lib/abastecimentoOffline';
@@ -174,6 +175,10 @@ const AuthenticatedApp = () => {
               <MobileAdmin />
             </MobileOnly>
           }
+        />
+        <Route
+          path="/informes-lavoura"
+          element={<MobileOnly><MobileInformeLavoura /></MobileOnly>}
         />
         <Route
           path="/entrada-manual-saldo"
