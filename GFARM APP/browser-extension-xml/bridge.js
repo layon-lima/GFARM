@@ -26,7 +26,7 @@
         channel: 'GFARM_XML_EXTENSION', type: dfe ? 'DFE_RESULT' : 'STATUS',
         nonce: data.nonce, ok: !falhou && Boolean(response?.ok),
         message: falhou ? 'Extensão GFARM não respondeu ou precisa ser atualizada.'
-          : response?.reason || '',
+          : response?.message || response?.reason || '',
         ...(dfe && response ? {
           cstat: response.cstat, ult_nsu: response.ult_nsu,
           max_nsu: response.max_nsu, documentos: response.documentos,
