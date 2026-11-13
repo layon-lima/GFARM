@@ -220,6 +220,18 @@ A navegação mobile deve ser dinâmica conforme permissões do usuário.
 - “Abastecedor” permanece conforme regra específica já implementada.
 - Home/Mais devem respeitar a ordem e estrutura já aprovadas.
 
+## 5.2 Informe de Saída para Lavoura (primeira versão)
+
+- As Ordens de Serviço (OS) existentes ficam preservadas, mas não são pré-requisito para o novo informe de retirada.
+- No mobile, a tela **Saída para Lavoura** usa busca e cards de duas colunas para selecionar uma lavoura existente; o usuário pode solicitar vários defensivos/adubos em um único informe, informando a quantidade em unidade real do produto.
+- A solicitação inicia em `PENDENTE` e **jamais altera estoque ao ser criada ou editada**.
+- O ADM/revisor com `admin.informe_lavoura.revisar` pode corrigir lavoura, itens e quantidades, aprovar ou recusar com motivo. A edição só é permitida enquanto pendente e fica auditada.
+- A aprovação chama exclusivamente o **motor de estoque** com `SAIDA_CONSUMO`, `origem_modulo="informe_lavoura"` e identificador idempotente do informe; lotes e disponibilidade são validados pelo motor, sem saldo negativo.
+- Se o produto tiver mais de uma localização real, o usuário deve identificar a origem (depósito/gaveta) e o ADM pode corrigir antes de aprovar; não deduzir saldo arbitrariamente de outros locais.
+- Custos são lidos exclusivamente dos itens dos **documentos oficiais contabilizados**. Somente o **Administrador Total** pode visualizar custos por informe e lavoura; nenhum valor financeiro é incluído nas respostas mobile do operador.
+- A criação de informes requer `mobile.informe_lavoura.solicitar`; a revisão requer `admin.informe_lavoura.revisar` no catálogo central. Esses poderes são checados obrigatoriamente no backend.
+- Não gerar baixa na solicitação, não criar motor de custos paralelo, não alterar OS, documentos históricos nem saídas já aprovadas diretamente. Estornos posteriores devem usar o fluxo oficial de estoque.
+
 ## 5.2 PWA
 
 - Mobile deve permanecer PWA instalável.
