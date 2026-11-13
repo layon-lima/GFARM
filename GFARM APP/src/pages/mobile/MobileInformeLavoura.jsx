@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Check, Loader2,
@@ -18,7 +18,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 import { invalidateEntidade, invalidateEstoque } from '@/lib/useEntidades';
 
-const novoItem = () => ({ key: crypto.randomUUID(), produto_id: '', quantidade: '' });
+const novoItem = (produtoId = '') => ({ key: crypto.randomUUID(), produto_id: produtoId, quantidade: '' });
 const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataBR = (value) => value ? new Date(value).toLocaleString('pt-BR') : '';
 
@@ -35,13 +35,20 @@ const normalizarBusca = (valor) => String(valor || '')
   .replace(/[\u0300-\u036f]/g, '')
   .toLocaleLowerCase('pt-BR');
 
+
+const NOVO_PRODUTO = '__novo_produto__';
+
 function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
   const [selecionando, setSelecionando] = useState(null);
   const [buscaProduto, setBuscaProduto] = useState('');
+  const [editandoQuantidade, setEditandoQuantidade] = useState(null);
+  const buscaRef = useRef(null);
+  const quantidadeRef = useRef(null);
   const produtosMap = useMemo(
     () => new Map(produtos.map((produto) => [produto.id, produto])),
     [produtos]
   );
+
   const produtoAtual = itens.find((item) => item.key === selecionando);
   const produtosFiltrados = useMemo(() => {
     const busca = normalizarBusca(buscaProduto.trim());
@@ -49,6 +56,14 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
       normalizarBusca(`${produto.nome} ${produto.codigo || ''}`).includes(busca)
     ).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   }, [produtos, buscaProduto]);
+
+  useEffect(() => {
+    if (editandoQuantidade) {
+      const campo = quantidadeRef.current;
+      campo?.focus();
+      campo?.select();
+    }
+  }, [editandoQuantidade]);
 
   function patch(key, campo, valor) {
     onChange(itens.map((item) => item.key !== key ? item : {
@@ -61,6 +76,7 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
 
   function abrirProdutos(key) {
     if (bloqueado) return;
+    setEditandoQuantidade(null);
     setBuscaProduto('');
     setSelecionando(key);
   }
@@ -71,13 +87,29 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
   }
 
   function selecionarProduto(produto) {
-    if (!produtoAtual || bloqueado) return;
-    const emOutraLinha = itens.some((item) =>
-      item.key !== produtoAtual.key && item.produto_id === produto.id
+    if (bloqueado || !selecionando) return;
+    const adicionando = selecionando === NOVO_PRODUTO;
+    if (!adicionando && !produtoAtual) return;
+    const duplicado = itens.some((item) =>
+      item.key !== selecionando && item.produto_id === produto.id
     );
-    if (emOutraLinha) return;
-    patch(produtoAtual.key, 'produto_id', produto.id);
-    fecharProdutos();
+    if (duplicado) return;
+
+    if (adicionando) {
+      // Só cria o item quando um produto for escolhido.
+      // Cancelar a pesquisa não deixa um card vazio na tela.
+      const novo = novoItem(produto.id);
+      onChange([...itens, novo]);
+      fecharProdutos();
+      setEditandoQuantidade(novo.key);
+    } else {
+      const mudou = produtoAtual.produto_id !== produto.id;
+      if (mudou) patch(produtoAtual.key, 'produto_id', produto.id);
+      fecharProdutos();
+      if (mudou || !produtoAtual.quantidade) {
+        setEditandoQuantidade(produtoAtual.key);
+      }
+    }
   }
 
   return (
@@ -85,35 +117,61 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
       {itens.map((item, indice) => {
         const produto = produtosMap.get(item.produto_id);
         const locais = produto?.locais || [];
+        const modoQuantidade = editandoQuantidade === item.key;
         return (
           <section key={item.key} className="mobile-informe-product-line">
-            <div className="mobile-informe-product-line__heading">
-              <span>Produto{itens.length > 1 ? ` ${indice + 1}` : ''}</span>
-              {itens.length > 1 && (
-                <button type="button" className="mobile-informe-product-line__remove"
-                  aria-label={`Remover produto ${indice + 1}`}
-                  disabled={bloqueado}
-                  onClick={() => onChange(itens.filter((linha) => linha.key !== item.key))}>
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )}
+            <div className="mobile-informe-product-card">
+              <button type="button" className="mobile-informe-product-picker"
+                disabled={bloqueado} onClick={() => abrirProdutos(item.key)}
+                aria-label={produto ? `Trocar produto ${produto.nome}` : 'Escolher produto'}>
+                <span className="mobile-informe-product-picker__icon">
+                  <Package className="h-5 w-5" />
+                </span>
+                <span className="mobile-informe-product-picker__copy">
+                  <strong>{produto?.nome || 'Escolher produto'}</strong>
+                  {produto?.codigo && <small>{produto.codigo}</small>}
+                </span>
+              </button>
+              <div className="mobile-informe-product-card__right">
+                {modoQuantidade ? (
+                  <div className="mobile-informe-quantity-inline is-editing">
+                    <input ref={quantidadeRef} type="text" inputMode="decimal"
+                      autoComplete="off" spellCheck={false} enterKeyHint="done"
+                      aria-label={`Quantidade retirada de ${produto?.nome || `produto ${indice + 1}`}`}
+                      placeholder="0,000" value={item.quantidade}
+                      disabled={bloqueado}
+                      onChange={(event) => patch(item.key, 'quantidade', event.target.value)}
+                      onBlur={() => setEditandoQuantidade((key) => key === item.key ? null : key)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                      }} />
+                    <small>{produto?.unidade || '—'}</small>
+                  </div>
+                ) : (
+                  <button type="button" className="mobile-informe-quantity-inline"
+                    disabled={bloqueado}
+                    onClick={() => setEditandoQuantidade(item.key)}
+                    aria-label={`Quantidade de ${produto?.nome || 'produto'}: ${item.quantidade || 'não informada'}. Toque para alterar.`}>
+                    <strong>{item.quantidade || 'Qtd.'}</strong>
+                    <small>{produto?.unidade || '—'}</small>
+                  </button>
+                )}
+                {itens.length > 1 && (
+                  <button type="button" className="mobile-informe-product-line__remove"
+                    aria-label={`Remover produto ${indice + 1}`}
+                    disabled={bloqueado}
+                    onClick={() => {
+                      if (modoQuantidade) setEditandoQuantidade(null);
+                      onChange(itens.filter((linha) => linha.key !== item.key));
+                    }}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
-
-            <button type="button" className="mobile-informe-product-picker"
-              disabled={bloqueado} onClick={() => abrirProdutos(item.key)}
-              aria-label={produto ? `Trocar produto ${produto.nome}` : 'Escolher produto'}>
-              <span className="mobile-informe-product-picker__icon">
-                <Package className="h-5 w-5" />
-              </span>
-              <span className="mobile-informe-product-picker__copy">
-                <strong>{produto?.nome || 'Escolher produto'}</strong>
-                {produto?.codigo && <small>{produto.codigo}</small>}
-              </span>
-              {produto && (
-                <span className="mobile-informe-product-picker__unit">{produto.unidade || 'un'}</span>
-              )}
-              <ChevronRight className="mobile-informe-product-picker__chevron h-4 w-4" />
-            </button>
 
             {locais.length > 1 && (
               <div className="mobile-informe-product-line__location">
@@ -136,21 +194,6 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
                 />
               </div>
             )}
-
-            <div className="mobile-informe-product-line__quantity">
-              <Label htmlFor={`qtd-informe-${item.key}`}>Quantidade retirada</Label>
-              <div className="mobile-informe-quantity-field">
-                <input id={`qtd-informe-${item.key}`} type="text"
-                  inputMode="decimal" autoComplete="off"
-                  aria-label={`Quantidade retirada ${produto?.nome || `do produto ${indice + 1}`}`}
-                  placeholder="0,000" value={item.quantidade} disabled={bloqueado}
-                  onChange={(event) => patch(item.key, 'quantidade', event.target.value)}
-                />
-                <span className="mobile-informe-quantity-field__unit">
-                  {produto?.unidade || '—'}
-                </span>
-              </div>
-            </div>
           </section>
         );
       })}
@@ -158,8 +201,8 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
       <Button type="button" variant="outline"
         className="mobile-informe-add-product h-11 w-full gap-2"
         disabled={bloqueado || itens.length >= 50}
-        onClick={() => onChange([...itens, novoItem()])}>
-        <Plus className="h-4 w-4" /> Adicionar produto
+        onClick={() => abrirProdutos(NOVO_PRODUTO)}>
+        <Plus className="h-4 w-4" /> {itens.length ? 'Adicionar produto' : 'Escolher produto'}
       </Button>
 
       <DialogPrimitive.Root open={selecionando !== null}
@@ -167,7 +210,16 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="mobile-informe-picker-overlay" />
           <DialogPrimitive.Content className="mobile-informe-picker-sheet"
-            aria-describedby={undefined}>
+            aria-describedby={undefined}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              buscaRef.current?.focus();
+            }}
+            onCloseAutoFocus={(event) => {
+              // Não devolver foco para o botão Adicionar: o próximo passo
+              // após escolher é digitar a quantidade no próprio card.
+              if (editandoQuantidade) event.preventDefault();
+            }}>
             <div className="mobile-informe-picker-handle" aria-hidden="true" />
             <div className="mobile-informe-picker-heading">
               <DialogPrimitive.Title>Escolher produto</DialogPrimitive.Title>
@@ -178,7 +230,7 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
             </div>
             <div className="mobile-informe-picker-search">
               <Search className="h-4 w-4" aria-hidden="true" />
-              <input type="search" aria-label="Buscar produto"
+              <input ref={buscaRef} type="search" aria-label="Buscar produto"
                 placeholder="Buscar produto..." value={buscaProduto}
                 onChange={(event) => setBuscaProduto(event.target.value)} />
             </div>
@@ -267,7 +319,7 @@ export default function MobileInformeLavoura() {
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState('PENDENTE');
   const [form, setForm] = useState({
-    chave: crypto.randomUUID(), lavoura_id: '', itens: [novoItem()], observacao: '',
+    chave: crypto.randomUUID(), lavoura_id: '', itens: [], observacao: '',
   });
   const [editando, setEditando] = useState(null);
   const [confirmarId, setConfirmarId] = useState('');
@@ -322,7 +374,7 @@ export default function MobileInformeLavoura() {
     setAviso(null);
     try {
       await informesLavouraApi.solicitar({ chave: form.chave, ...payload });
-      setForm({ chave: crypto.randomUUID(), lavoura_id: '', itens: [novoItem()], observacao: '' });
+      setForm({ chave: crypto.randomUUID(), lavoura_id: '', itens: [], observacao: '' });
       setBusca('');
       setMinhas(await informesLavouraApi.minhas());
       setAba('meus');
