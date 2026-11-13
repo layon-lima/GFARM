@@ -23,6 +23,7 @@ jobs:
       - name: Validar JavaScript e manifest
         run: |
           node --check "GFARM APP/browser-extension-xml/background.js"
+          node --test "GFARM APP/tests/dfe-native-bridge-offline.test.mjs"
           node --check "GFARM APP/browser-extension-xml/bridge.js"
           node --check "GFARM APP/browser-extension-xml/dfe-client.js"
           node --check "GFARM APP/browser-extension-xml/dfe-sync.js"
@@ -34,17 +35,36 @@ jobs:
           cd "GFARM APP/browser-extension-xml"
           zip -q -j "$GITHUB_WORKSPACE/gfarm-captura-xml-chrome.zip" manifest.json background.js bridge.js fsist.js dfe-client.js dfe-sync.js dfe-sync.html README.md
           unzip -l "$GITHUB_WORKSPACE/gfarm-captura-xml-chrome.zip"
+          cd native-host
+          zip -q -j "$GITHUB_WORKSPACE/gfarm-ponte-certificados-windows.zip" NativeHost.cs INSTALAR_PONTE_WINDOWS.ps1
+          unzip -l "$GITHUB_WORKSPACE/gfarm-ponte-certificados-windows.zip"
       - name: Publicar ZIP para instalação manual
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="gfarm-captura-xml-v0.2.0"
+          tag="gfarm-captura-xml-v0.3.0"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" gfarm-captura-xml-chrome.zip --clobber
+            gh release upload "$tag" gfarm-captura-xml-chrome.zip gfarm-ponte-certificados-windows.zip --clobber
           else
-            gh release create "$tag" gfarm-captura-xml-chrome.zip \
+            gh release create "$tag" gfarm-captura-xml-chrome.zip gfarm-ponte-certificados-windows.zip \
               --target "$GITHUB_SHA" \
               --title "GFARM — Sincronizar XML em lote com certificado do Chrome/Edge" \
-              --notes "Inclui consulta distNSU com seletor de certificado do navegador. Instalação manual e sem consultas reais nos testes. FSist continua disponível." \
+              --notes "Versão 0.3.0: seleção de certificados do Windows por ponte nativa, identificação automática CPF/CNPJ, reconexão da extensão ao GFARM e consulta distNSU. Instalação local no Windows; nenhum teste acessa a SEFAZ." \
               --prerelease
           fi
+
+
+  validar-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar ponte local (sem acessar certificados nem SEFAZ)
+        shell: powershell
+        run: |
+          $destino = Join-Path $env:TEMP 'GFARM-Certificados-Teste.exe'
+          Add-Type -Path "GFARM APP/browser-extension-xml/native-host/NativeHost.cs" -OutputAssembly $destino -OutputType ConsoleApplication -ReferencedAssemblies @("System.Net.Http.dll", "System.Xml.dll", "System.Web.Extensions.dll") -ErrorAction Stop
+          if (-not (Test-Path $destino)) { throw "Ponte nao compilou" }
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("GFARM APP/browser-extension-xml/native-host/INSTALAR_PONTE_WINDOWS.ps1", [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
