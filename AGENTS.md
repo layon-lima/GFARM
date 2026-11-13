@@ -222,7 +222,10 @@ A navegação mobile deve ser dinâmica conforme permissões do usuário.
 
 ## 5.2 Informe de Saída para Lavoura (primeira versão)
 
-- As Ordens de Serviço (OS) existentes ficam preservadas, mas não são pré-requisito para o novo informe de retirada.
+- As Ordens de Serviço (OS) existentes ficam preservadas no **GFARM Desktop**, mas não são pré-requisito para o novo informe de retirada.
+- **Saída para Lavoura substitui o card e o menu de Aplicação no mobile**, na mesma posição; não criar atalho adicional duplicado. Links antigos para /aplicacao redirecionam para o informe somente no mobile. O módulo Aplicação no desktop permanece funcional.
+- Em **Cadastros > Usuários > Permissões** do desktop deve existir a opção específica `Permitir Informe de Saída para Lavoura`, que persiste `mobile.informe_lavoura.solicitar` no banco central. A permissão de `page.aplicacao` continua sendo para as OS no PC; uma não substitui a outra.
+- A permissão de aprovação/revisão `admin.informe_lavoura.revisar` só pode ser concedida pelo Administrador Total a um Sub Administrador. Usuário comum nunca ganha aprovação por habilitar o informe.
 - No mobile, a tela **Saída para Lavoura** usa busca e cards de duas colunas para selecionar uma lavoura existente; o usuário pode solicitar vários defensivos/adubos em um único informe, informando a quantidade em unidade real do produto.
 - A solicitação inicia em `PENDENTE` e **jamais altera estoque ao ser criada ou editada**.
 - O ADM/revisor com `admin.informe_lavoura.revisar` pode corrigir lavoura, itens e quantidades, aprovar ou recusar com motivo. A edição só é permitida enquanto pendente e fica auditada.
