@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GFARM · Sincronização XML na SEFAZ</title>
+  <style>
+    body { font: 14px system-ui, Arial, sans-serif; background:#f8fafc; color:#17223c; padding:22px; margin:0; }
+    h1 { font-size:17px; margin:0 0 12px; } p { line-height:1.55; }
+    #estado { padding:12px; background:#fff; border:1px solid #dde4ee; border-radius:8px; }
+    small { color:#526079; }
+  </style>
+</head>
+<body>
+  <h1>GFARM · Sincronizando XML</h1>
+  <p id="estado" role="status">Preparando consulta no navegador...</p>
+  <small>Se o navegador solicitar, selecione o certificado digital do titular informado.
+    Mantenha esta janela aberta até a conclusão. O certificado não é enviado ao GFARM.</small>
+  <script src="dfe-client.js"></script>
+  <script src="dfe-sync.js"></script>
+</body>
+</html>
