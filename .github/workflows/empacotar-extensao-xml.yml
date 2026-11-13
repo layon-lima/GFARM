@@ -87,7 +87,7 @@ jobs:
         shell: powershell
         run: |
           $destino = Join-Path $env:TEMP 'GFARM-Certificados-Teste.exe'
-          Add-Type -Path "GFARM APP/browser-extension-xml/native-host/NativeHost.cs" -OutputAssembly $destino -OutputType ConsoleApplication -ReferencedAssemblies @("System.Net.Http.dll", "System.Xml.dll", "System.Web.Extensions.dll") -ErrorAction Stop
+          Add-Type -Path "GFARM APP/browser-extension-xml/native-host/NativeHost.cs" -OutputAssembly $destino -OutputType ConsoleApplication -ReferencedAssemblies @("System.Net.Http.dll", "System.Xml.dll", "System.Web.Extensions.dll", "System.Core.dll") -ErrorAction Stop
           if (-not (Test-Path $destino)) { throw "Ponte nao compilou" }
           $tokens = $null
           $errors = $null
