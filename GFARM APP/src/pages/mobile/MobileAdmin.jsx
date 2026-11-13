@@ -183,23 +183,9 @@ export default function MobileAdmin() {
 
   if (!tipo) {
     return (
-      <div className="mobile-page space-y-4 px-4 py-5">
-        <header>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-            Função administrativa
-          </p>
-          <h1 className="text-2xl font-bold">Modo Admin</h1>
-          <p className="text-sm text-muted-foreground">
-            Envie cadastros para revisão no computador.
-          </p>
-        </header>
-
-        <Card className="flex items-center justify-between rounded-2xl p-4">
-          <span className="font-semibold">Pendentes</span>
-          <strong className="text-2xl text-primary">{pendentes}</strong>
-        </Card>
-
-        <div className="grid grid-cols-2 gap-3">
+      <div className="mobile-page mobile-admin-v6 space-y-3">
+        <h1 className="mobile-glass-section-title">Modo Admin</h1>
+        <div className="grid grid-cols-2 gap-2.5">
           {Object.entries(CONFIG).map(([key, config]) => {
             const Icon = config.icon;
             return (
@@ -207,10 +193,10 @@ export default function MobileAdmin() {
                 type="button"
                 key={key}
                 onClick={() => abrirTipo(key)}
-                className="flex min-h-36 flex-col items-start justify-between rounded-2xl border bg-card p-4 text-left shadow-sm"
+                className="flex min-h-[100px] flex-col items-start justify-center gap-3 rounded-2xl border bg-card p-3.5 text-left shadow-sm"
               >
-                <span className={`rounded-xl p-3 ${config.tone}`}>
-                  <Icon className="h-6 w-6" />
+                <span className={`rounded-xl p-2.5 ${config.tone}`}>
+                  <Icon className="h-5 w-5" />
                 </span>
                 <strong>{config.label}</strong>
               </button>
@@ -222,16 +208,13 @@ export default function MobileAdmin() {
   }
 
   return (
-    <div className="mobile-page px-4 py-4">
-      <div className="mb-4 flex items-center gap-3">
+    <div className="mobile-page mobile-admin-v6">
+      <div className="mb-2 flex items-center gap-3">
         <Button type="button" variant="outline" size="icon" onClick={voltar}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
 
-        <div>
-          <p className="text-xs font-bold uppercase text-primary">Solicitação mobile</p>
-          <h1 className="text-xl font-semibold">Novo {CONFIG[tipo].singular}</h1>
-        </div>
+        <h1 className="text-lg font-semibold">Novo {CONFIG[tipo].singular}</h1>
       </div>
 
       {form ? (
