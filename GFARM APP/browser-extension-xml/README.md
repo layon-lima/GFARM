@@ -55,3 +55,25 @@ cUFAutor padrão é MA=21. A SEFAZ pode fornecer apenas resNFe (resumo, sem iten
 e preço) e observa janela de distribuição e períodos de espera obrigatórios.
 
 Os testes da extensão são locais e não acessam a SEFAZ nem certificados reais.
+
+
+## Versão 0.3.0 — selecionar o certificado do Windows sem digitar CPF
+
+A extensão 0.2.0 não conseguia identificar automaticamente o CPF/CNPJ do
+certificado e podia deixar de ser detectada em abas abertas antes da ativação.
+Na versão 0.3.0, a ponte é injetada em abas GFARM existentes quando possível,
+e a seleção de certificado passa a ser explícita na tela.
+
+**São duas instalações no computador Windows (uma única vez):**
+
+1. Baixe o [ZIP da extensão 0.3.0](https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.3.0/gfarm-captura-xml-chrome.zip), extraia, abra \`edge://extensions\` ou \`chrome://extensions\`, remova a versão antiga e **Carregar sem compactação** com a pasta nova. Deixe a extensão ativa e permita acesso ao site \`estoque.fazendanovohorizonte.com\`.
+2. Baixe o [ZIP da ponte Windows](https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.3.0/gfarm-ponte-certificados-windows.zip), extraia e execute \`INSTALAR_PONTE_WINDOWS.ps1\` no Windows PowerShell. O instalador baixa \`NativeHost.cs\` do repositório, compila \`GFARM-Certificados.exe\` no seu PC e registra a ponte no HKCU (sem administrador).
+3. Feche e abra o navegador. No GFARM, em **Recebimentos do Meus Controles**, clique **Sincronizar XML**: aparecem os certificados com chave privada instalados e válidos. Clique no certificado desejado.
+4. O CPF/CNPJ vem do **CN público** do certificado ICP-Brasil (por exemplo, \`NOME:00000000000\`). Se o certificado não tiver essa identificação verificável, ele não aparece na seleção automática. A chave privada não é exportada, copiada nem transmitida ao GFARM.
+5. A ponte faz a requisição HTTPS à SEFAZ **do seu próprio Windows**, com o certificado escolhido, e envia somente a resposta fiscal pela extensão ao GFARM autenticado. O cursor NSU e os bloqueios 137/656 continuam administrados no servidor e no navegador. Não há aprovação nem movimentação automática de estoque.
+
+**Se a extensão parecer ausente:** confira se ela está ativada, em **Detalhes → Acesso ao site** permita execução em \`estoque.fazendanovohorizonte.com\`, recarregue o GFARM com Ctrl+F5 e tente novamente. Se a extensão responder mas a ponte não existir, a tela mostrará o link para instalar a ponte.
+
+**Limites:** o instalador identifica os IDs das extensões nos perfis padrão Edge e Chrome; se não encontrar, pedirá apenas o **ID da extensão**, nunca o CPF. O helper requer Windows com .NET Framework e certificados ICP-Brasil acessíveis. Certificados com CPF/CNPJ ocultos ou outros formatos exigem adaptação específica; não inferimos a identidade pela OU da autoridade certificadora.
+
+**Segurança:** o host nativo só recebe comandos da extensão autorizada pelo ID exato no manifesto do Windows. TLS é fixo para o endpoint da SEFAZ; a chave privada é usada apenas pelo provedor criptográfico do Windows. O servidor não recebe \`.pfx\`, senha, PIN ou chave privada. Todo o fluxo foi preparado para testes offline; somente o clique do usuário faz consulta real à SEFAZ.
