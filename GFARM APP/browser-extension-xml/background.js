@@ -10,6 +10,7 @@ const NATIVE_HOST = 'com.gfarm.certificados';
 function chamarPonteWindows(pedido, timeoutMs = 120000) {
   return new Promise((resolve, reject) => {
     const pedacos = [];
+    let tamanhoRecebido = 0;
     let completo = false;
     let porta;
     let timer;
