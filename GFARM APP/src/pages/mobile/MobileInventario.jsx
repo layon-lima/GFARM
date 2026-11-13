@@ -5,7 +5,6 @@ import {
   Boxes,
   Check,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   Package,
   Plus,
@@ -1718,7 +1717,7 @@ export default function MobileInventario() {
 
   if (view === 'novo') {
     return (
-      <div className="mobile-page space-y-5 px-4 py-4">
+      <div className="mobile-page mobile-inventario-v6 space-y-5 px-4 py-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -1909,7 +1908,7 @@ export default function MobileInventario() {
     criterios
   ) {
     return (
-      <div className="mobile-page space-y-4 px-4 py-4">
+      <div className="mobile-page mobile-inventario-v6 space-y-4 px-4 py-4">
         {cabecalhoContagem}
 
         <div className="space-y-2">
@@ -1981,7 +1980,7 @@ export default function MobileInventario() {
                       'gaveta'
                     );
                   }}
-                  className="flex w-full items-center gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm"
+                  className="flex w-full items-center gap-2.5 rounded-2xl border bg-white p-3 text-left shadow-sm"
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
                     <Boxes className="h-5 w-5" />
@@ -2010,7 +2009,7 @@ export default function MobileInventario() {
                   {concluida ? (
                     <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    
                   )}
                 </button>
               );
@@ -2089,7 +2088,7 @@ export default function MobileInventario() {
           );
 
     return (
-      <div className="mobile-page space-y-4 px-4 py-4">
+      <div className="mobile-page mobile-inventario-v6 space-y-4 px-4 py-4">
         {cabecalhoContagem}
 
         <div className="flex items-center justify-between gap-3">
@@ -2334,7 +2333,7 @@ export default function MobileInventario() {
         : produtosAlvo;
 
     return (
-      <div className="mobile-page space-y-4 px-4 py-4">
+      <div className="mobile-page mobile-inventario-v6 space-y-4 px-4 py-4">
         {cabecalhoContagem}
 
         <div className="flex items-center justify-between gap-3">
@@ -2576,7 +2575,7 @@ export default function MobileInventario() {
       );
 
     return (
-      <div className="mobile-page space-y-4 px-4 py-4">
+      <div className="mobile-page mobile-inventario-v6 space-y-4 px-4 py-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -2731,7 +2730,7 @@ export default function MobileInventario() {
     resultado
   ) {
     return (
-      <div className="mobile-page space-y-5 px-4 py-5">
+      <div className="mobile-page mobile-inventario-v6 space-y-5 px-4 py-5">
         <div className="rounded-3xl border bg-white p-5 text-center">
           <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
           <h1 className="mt-3 text-xl font-bold">
@@ -2794,7 +2793,7 @@ export default function MobileInventario() {
     }
 
     return (
-      <div className="mobile-page space-y-4 px-4 py-4">
+      <div className="mobile-page mobile-inventario-v6 space-y-4 px-4 py-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -2931,7 +2930,7 @@ export default function MobileInventario() {
   }
 
   return (
-    <div className="mobile-page space-y-4 px-4 py-4">
+    <div className="mobile-page mobile-inventario-v6 space-y-4 px-4 py-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold">
           Inventários
@@ -2988,10 +2987,10 @@ export default function MobileInventario() {
                       inventario
                     )
                   }
-                  className="flex w-full items-center gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm"
+                  className="flex w-full items-center gap-2.5 rounded-2xl border bg-white p-3 text-left shadow-sm"
                 >
                   <span
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
                       aberto
                         ? 'bg-amber-50 text-amber-700'
                         : 'bg-emerald-50 text-emerald-700'
@@ -3026,7 +3025,7 @@ export default function MobileInventario() {
                       )}
                     </span>
 
-                    <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span className="mt-1 block text-[11px] font-semibold text-muted-foreground">
                       {aberto
                         ? `Em contagem · ${modoLabel(
                             escopo.modo_contagem
@@ -3035,7 +3034,7 @@ export default function MobileInventario() {
                     </span>
                   </span>
 
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  
                 </button>
               );
             }
