@@ -890,3 +890,170 @@
   }
   .mobile-informe-picker-results { min-height: 0; overflow: auto; }
 }
+
+
+/* Informe de Saída — quantidade tocável no card e sem formulários extras. */
+@media (max-width: 767px) {
+  .mobile-informe-v6 .mobile-informe-product-line {
+    padding: .5rem;
+    gap: .35rem;
+    border: 1px solid rgba(255,255,255,.94);
+    border-radius: 19px;
+    background: rgba(255,255,255,.83);
+    box-shadow: 0 8px 23px rgba(22,80,56,.065), inset 0 1px rgba(255,255,255,.96);
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card {
+    display: flex;
+    min-width: 0;
+    width: 100%;
+    align-items: center;
+    gap: .15rem;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card .mobile-informe-product-picker {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    min-height: 59px;
+    gap: .5rem;
+    padding: .33rem .26rem;
+    border: 0;
+    border-radius: 13px;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card .mobile-informe-product-picker:focus-visible,
+  .mobile-informe-v6 .mobile-informe-quantity-inline:focus-visible {
+    outline: 2px solid #149a67;
+    outline-offset: 1px;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card .mobile-informe-product-picker__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card .mobile-informe-product-picker__copy {
+    gap: .12rem;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card .mobile-informe-product-picker__copy strong {
+    font-size: .89rem;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card__right {
+    display: flex;
+    flex: 0 0 auto;
+    min-width: 0;
+    align-items: center;
+    gap: .12rem;
+  }
+
+  .mobile-informe-v6 .mobile-informe-quantity-inline {
+    display: flex;
+    flex: 0 0 auto;
+    width: 77px;
+    min-height: 49px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .08rem;
+    padding: .35rem .25rem;
+    border: 1px solid rgba(13,137,84,.13);
+    border-radius: 13px;
+    background: #e5f6eb;
+    color: #106844;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-informe-v6 .mobile-informe-quantity-inline > strong {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    font-size: .86rem;
+    font-weight: 820;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-informe-v6 .mobile-informe-quantity-inline > small {
+    font-size: .66rem;
+    font-weight: 740;
+    line-height: 1.05;
+    text-transform: uppercase;
+  }
+
+  .mobile-informe-v6 .mobile-informe-quantity-inline.is-editing {
+    border-color: #129765;
+    background: rgba(255,255,255,.97);
+    box-shadow: 0 0 0 2px rgba(10,151,100,.12);
+  }
+
+  .mobile-informe-v6 .mobile-informe-quantity-inline input {
+    width: 100%;
+    min-width: 0;
+    height: 26px;
+    min-height: 0;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    outline: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #115e3f;
+    font-size: 16px !important;
+    font-weight: 790;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-card .mobile-informe-product-line__remove {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 36px;
+    padding: 0;
+    background: transparent;
+    color: #9a7777;
+  }
+
+  .mobile-informe-v6 .mobile-informe-product-line__location {
+    margin: .15rem .25rem .25rem;
+  }
+
+  .mobile-informe-v6 .mobile-informe-items { gap: .52rem; }
+}
+
+@media (min-width: 768px) {
+  .mobile-informe-product-card {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+  }
+  .mobile-informe-product-card .mobile-informe-product-picker {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .mobile-informe-product-card__right {
+    display: flex;
+    align-items: center;
+  }
+  .mobile-informe-quantity-inline {
+    display: flex;
+    min-width: 110px;
+    flex-direction: column;
+    align-items: center;
+    border-radius: 12px;
+    background: #e9f7ef;
+    padding: .5rem;
+  }
+  .mobile-informe-quantity-inline > input {
+    width: 95px;
+    text-align: center;
+  }
+}
