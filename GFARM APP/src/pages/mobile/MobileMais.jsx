@@ -1,97 +1,52 @@
 import {
-  ArrowLeftRight,
-  ClipboardList,
-  LogOut,
-  PackageSearch,
-  Scale,
-  Settings,
-  Sprout,
-  UserRound,
-  ShieldCheck,
-  Activity,
+  Activity, LogOut, Scale, ShieldCheck, UserRound,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { canAccessBalanca, hasPermission, podeMonitorarBalancaADM } from '@/lib/permissions';
-import { mobilePageAllowed } from '@/lib/mobileAccess';
 import { getDisplayInitial, getDisplayName } from '@/lib/userName';
-
-const LINKS = [
-  { key: 'dashboard', to: '/', label: 'Pesquisa de estoque', icon: PackageSearch },
-  { key: 'movimentacoes', to: '/movimentacoes', label: 'Movimentos', icon: ArrowLeftRight },
-  { key: 'informes-lavoura', to: '/informes-lavoura', label: 'Saída para Lavoura', icon: Sprout },
-  { key: 'pesagem', to: '/pesagem', label: 'Pesagem', icon: Scale },
-  { key: 'inventario', to: '/inventario', label: 'Inventário', icon: ClipboardList },
-  { key: 'cadastros', to: '/cadastros', label: 'Cadastros', icon: Settings },
-];
 
 export default function MobileMais() {
   const { user, logout } = useAuth();
 
-  const links = LINKS.filter((item) => item.key === 'informes-lavoura'
-    ? hasPermission(user, 'mobile.informe_lavoura.solicitar')
-      || hasPermission(user, 'admin.informe_lavoura.revisar')
-    : mobilePageAllowed(user, item.key));
+  const extras = [
+    ...(podeMonitorarBalancaADM(user)
+      ? [{ key: 'monitor', to: '/monitor-balanca', label: 'Monitor da balança', icon: Activity }]
+      : []),
+    ...(user?.role !== 'admin' && hasPermission(user, 'admin.cadastros_mobile.solicitar')
+      ? [{ key: 'admin', to: '/admin-mobile', label: 'Modo Admin', icon: ShieldCheck }]
+      : []),
+    ...(canAccessBalanca(user)
+      ? [{ key: 'balanca', to: '/balanca', label: 'Balança', icon: Scale }]
+      : []),
+  ];
 
   return (
-    <div className="mobile-page">
+    <div className="mobile-page mobile-profile-v6 space-y-3">
       <section className="mobile-profile-card">
         <div className="mobile-profile-card__avatar">
           {user ? getDisplayInitial(user) : <UserRound className="h-5 w-5" />}
         </div>
         <div className="min-w-0">
-          <span className="mobile-eyebrow">Usuário conectado</span>
           <h1>{getDisplayName(user) || 'Usuário'}</h1>
-          <p>{user?.email || ''}</p>
+          {user?.email && <p>{user.email}</p>}
         </div>
       </section>
-
-      <section>
-        <div className="mobile-section-heading">
-          <div>
-            <span className="mobile-eyebrow">Outras funções</span>
-            <h2>Mais opções</h2>
-          </div>
-        </div>
-
-        <div className="mobile-more-list">
-          {podeMonitorarBalancaADM(user) && (
-            <Link to="/monitor-balanca" className="mobile-more-row">
-              <span className="mobile-more-row__icon"><Activity className="h-5 w-5" /></span>
-              <strong>Monitor da Balança — ADM</strong>
-              <span className="mobile-more-row__arrow">›</span>
-            </Link>
-          )}
-          {hasPermission(user, 'admin.cadastros_mobile.solicitar') && (
-            <Link to="/admin-mobile" className="mobile-more-row">
-              <span className="mobile-more-row__icon"><ShieldCheck className="h-5 w-5" /></span>
-              <strong>Modo Admin</strong>
-              <span className="mobile-more-row__arrow">›</span>
-            </Link>
-          )}
-          {links.map((item) => {
+      {extras.length > 0 && (
+        <section className="mobile-more-list" aria-label="Outras funções">
+          {extras.map((item) => {
             const Icon = item.icon;
             return (
-              <Link key={item.to} to={item.to} className="mobile-more-row">
+              <Link key={item.key} to={item.to} className="mobile-more-row">
                 <span className="mobile-more-row__icon"><Icon className="h-5 w-5" /></span>
                 <strong>{item.label}</strong>
-                <span className="mobile-more-row__arrow">›</span>
               </Link>
             );
           })}
-
-          {canAccessBalanca(user) && (
-            <Link to="/balanca" className="mobile-more-row">
-              <span className="mobile-more-row__icon"><Scale className="h-5 w-5" /></span>
-              <strong>Balança</strong>
-              <span className="mobile-more-row__arrow">›</span>
-            </Link>
-          )}
-        </div>
-      </section>
-
+        </section>
+      )}
       <button type="button" className="mobile-logout-button" onClick={logout}>
-        <LogOut className="h-5 w-5" />
+        <LogOut className="h-4 w-4" />
         Sair da conta
       </button>
     </div>
