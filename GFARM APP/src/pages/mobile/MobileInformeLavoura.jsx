@@ -39,7 +39,11 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
     [produtos]
   );
   function patch(key, campo, valor) {
-    onChange(itens.map((item) => item.key === key ? { ...item, [campo]: valor } : item));
+    onChange(itens.map((item) => item.key !== key ? item : {
+      ...item,
+      [campo]: valor,
+      ...(campo === 'produto_id' ? { deposito_id: '', gaveta_id: '' } : {}),
+    }));
   }
   return (
     <div className="space-y-3">
@@ -63,6 +67,26 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
             options={options}
             disabled={bloqueado}
           />
+          {(produtosMap.get(item.produto_id)?.locais || []).length > 1 && (
+            <div className="space-y-1.5">
+              <Label>Local de retirada</Label>
+              <SearchSelect
+                value={item.deposito_id
+                  ? [item.deposito_id, item.gaveta_id || ''].join('|') : 'all'}
+                onChange={(value) => {
+                  const [deposito_id, gaveta_id] = value === 'all' ? ['', ''] : value.split('|');
+                  onChange(itens.map((linha) => linha.key === item.key
+                    ? { ...linha, deposito_id, gaveta_id } : linha));
+                }}
+                disabled={bloqueado}
+                allLabel="Selecionar depósito/gaveta"
+                options={produtosMap.get(item.produto_id).locais.map((loc) => ({
+                  value: [loc.deposito_id, loc.gaveta_id || ''].join('|'),
+                  label: loc.nome,
+                }))}
+              />
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <div className="min-w-0 flex-1 space-y-1">
               <Label>Quantidade retirada</Label>
@@ -94,11 +118,18 @@ function validarFormulario(form, produtos) {
     const qtd = parseNumero(item.quantidade);
     if (!produto) throw new Error('Selecione um produto válido em todas as linhas.');
     if (ids.has(produto.id)) throw new Error('Produto repetido. Some as quantidades na mesma linha.');
-    if (qtd <= 0 || Math.round(qtd * 1000) !== qtd * 1000) {
+    if (qtd <= 0 || Number(qtd.toFixed(3)) !== qtd) {
       throw new Error('Quantidade deve ser positiva e ter até três casas decimais.');
     }
+    if ((produto.locais || []).length > 1 && !item.deposito_id) {
+      throw new Error(`Escolha o local de retirada do produto ${produto.nome}.`);
+    }
     ids.add(produto.id);
-    return { produto_id: produto.id, quantidade: qtd };
+    return {
+      produto_id: produto.id, quantidade: qtd,
+      deposito_id: item.deposito_id || null,
+      gaveta_id: item.gaveta_id || null,
+    };
   });
   return {
     lavoura_id: form.lavoura_id,
@@ -194,6 +225,7 @@ export default function MobileInformeLavoura() {
       id: item.id, lavoura_id: item.lavoura_id, observacao: item.observacao || '',
       itens: (item.itens || []).map((it) => ({
         key: crypto.randomUUID(), produto_id: it.produto_id, quantidade: it.quantidade,
+        deposito_id: it.deposito_id || '', gaveta_id: it.gaveta_id || '',
       })),
     });
     setConfirmarId('');
