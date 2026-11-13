@@ -2,7 +2,7 @@ name: Empacotar extensão XML do GFARM
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/certificados-windows-extensao-v03]
     paths:
       - 'GFARM APP/browser-extension-xml/**'
       - 'GFARM APP/tests/dfe-client-offline.test.mjs'
@@ -18,9 +18,27 @@ permissions:
   contents: write
 
 jobs:
+  validar-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Testar extensao, parser DFe e selecao de certificado sem SEFAZ
+        run: |
+          node --check "GFARM APP/browser-extension-xml/background.js"
+          node --check "GFARM APP/browser-extension-xml/bridge.js"
+          node --test "GFARM APP/tests/dfe-client-offline.test.mjs" "GFARM APP/tests/dfe-native-bridge-offline.test.mjs"
+      - name: Verificar build da pagina de recebimentos
+        working-directory: GFARM APP
+        run: |
+          npm ci
+          npm run build
+
   empacotar:
-    if: github.event_name != 'pull_request'
-    needs: validar-windows
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [validar-windows, validar-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
