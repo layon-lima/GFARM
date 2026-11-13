@@ -89,6 +89,24 @@ class EntradaSaldoMobilePendente(EntityBaseMixin, Base):
     data_validade = mapped_column(Date, nullable=True)
 
 
+class InformeSaidaLavoura(EntityBaseMixin, Base):
+    """Pedido de baixa por lavoura. Não é saldo nem Ordem de Serviço."""
+
+    __tablename__ = "informes_saida_lavoura"
+
+    lavoura_id = mapped_column(String(100), nullable=False, index=True)
+    lavoura_nome = mapped_column(String(255), nullable=False)
+    itens = mapped_column(JSON, nullable=False)
+    observacao = mapped_column(Text, nullable=True)
+    status = mapped_column(String(30), nullable=False, default="PENDENTE", index=True)
+    solicitante_nome = mapped_column(String(255), nullable=True)
+    analisado_por_id = mapped_column(String(100), nullable=True)
+    analisado_por_nome = mapped_column(String(255), nullable=True)
+    analisado_em = mapped_column(DateTime(timezone=True), nullable=True)
+    motivo_recusa = mapped_column(Text, nullable=True)
+    documento_estoque_id = mapped_column(String(100), nullable=True, index=True)
+
+
 class Inventario(EntityBaseMixin, Base):
     __tablename__ = "inventarios"
 
