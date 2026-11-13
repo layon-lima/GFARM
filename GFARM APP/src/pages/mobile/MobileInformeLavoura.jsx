@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Check, Loader2,
-  Pencil, Plus, Search, Send, ShieldCheck,
+  ChevronRight, Package, Pencil, Plus, Search, Send, ShieldCheck,
   Sprout, Trash2, X,
 } from 'lucide-react';
+
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 
 import { informesLavouraApi } from '@/api/informesLavouraClient';
 import SearchSelect from '@/components/SearchSelect';
@@ -27,86 +29,193 @@ function parseNumero(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+
+const normalizarBusca = (valor) => String(valor || '')
+  .normalize('NFD')
+  .replace(/[\\u0300-\\u036f]/g, '')
+  .toLocaleLowerCase('pt-BR');
+
 function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
+  const [selecionando, setSelecionando] = useState(null);
+  const [buscaProduto, setBuscaProduto] = useState('');
   const produtosMap = useMemo(
     () => new Map(produtos.map((produto) => [produto.id, produto])),
     [produtos]
   );
-  const options = useMemo(
-    () => produtos.map((produto) => ({
-      value: produto.id, label: produto.nome + (produto.codigo ? ` · ${produto.codigo}` : ''),
-    })),
-    [produtos]
-  );
+  const produtoAtual = itens.find((item) => item.key === selecionando);
+  const produtosFiltrados = useMemo(() => {
+    const busca = normalizarBusca(buscaProduto.trim());
+    return produtos.filter((produto) =>
+      normalizarBusca(`${produto.nome} ${produto.codigo || ''}`).includes(busca)
+    ).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  }, [produtos, buscaProduto]);
+
   function patch(key, campo, valor) {
     onChange(itens.map((item) => item.key !== key ? item : {
       ...item,
       [campo]: valor,
-      ...(campo === 'produto_id' ? { deposito_id: '', gaveta_id: '' } : {}),
+      ...(campo === 'produto_id' && valor !== item.produto_id
+        ? { quantidade: '', deposito_id: '', gaveta_id: '' } : {}),
     }));
   }
+
+  function abrirProdutos(key) {
+    if (bloqueado) return;
+    setBuscaProduto('');
+    setSelecionando(key);
+  }
+
+  function fecharProdutos() {
+    setSelecionando(null);
+    setBuscaProduto('');
+  }
+
+  function selecionarProduto(produto) {
+    if (!produtoAtual || bloqueado) return;
+    const emOutraLinha = itens.some((item) =>
+      item.key !== produtoAtual.key && item.produto_id === produto.id
+    );
+    if (emOutraLinha) return;
+    patch(produtoAtual.key, 'produto_id', produto.id);
+    fecharProdutos();
+  }
+
   return (
-    <div className="space-y-2">
-      {itens.map((item, indice) => (
-        <div key={item.key} className="mobile-informe-product space-y-2 rounded-xl border bg-card p-3">
-          <div className="mobile-informe-item-head">
-            <span className="text-xs font-semibold text-muted-foreground">
-              {itens.length > 1 ? `Produto ${indice + 1}` : 'Produto'}
-            </span>
-            {itens.length > 1 && (
-              <button type="button" aria-label="Remover produto" disabled={bloqueado}
-                onClick={() => onChange(itens.filter((entrada) => entrada.key !== item.key))}
-                className="rounded-lg p-1.5 text-muted-foreground hover:text-destructive">
-                <Trash2 className="h-4 w-4" />
-              </button>
+    <div className="mobile-informe-items">
+      {itens.map((item, indice) => {
+        const produto = produtosMap.get(item.produto_id);
+        const locais = produto?.locais || [];
+        return (
+          <section key={item.key} className="mobile-informe-product-line">
+            <div className="mobile-informe-product-line__heading">
+              <span>Produto{itens.length > 1 ? ` ${indice + 1}` : ''}</span>
+              {itens.length > 1 && (
+                <button type="button" className="mobile-informe-product-line__remove"
+                  aria-label={`Remover produto ${indice + 1}`}
+                  disabled={bloqueado}
+                  onClick={() => onChange(itens.filter((linha) => linha.key !== item.key))}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            <button type="button" className="mobile-informe-product-picker"
+              disabled={bloqueado} onClick={() => abrirProdutos(item.key)}
+              aria-label={produto ? `Trocar produto ${produto.nome}` : 'Escolher produto'}>
+              <span className="mobile-informe-product-picker__icon">
+                <Package className="h-5 w-5" />
+              </span>
+              <span className="mobile-informe-product-picker__copy">
+                <strong>{produto?.nome || 'Escolher produto'}</strong>
+                {produto?.codigo && <small>{produto.codigo}</small>}
+              </span>
+              {produto && (
+                <span className="mobile-informe-product-picker__unit">{produto.unidade || 'un'}</span>
+              )}
+              <ChevronRight className="mobile-informe-product-picker__chevron h-4 w-4" />
+            </button>
+
+            {locais.length > 1 && (
+              <div className="mobile-informe-product-line__location">
+                <Label>Local de retirada</Label>
+                <SearchSelect
+                  value={item.deposito_id
+                    ? [item.deposito_id, item.gaveta_id || ''].join('|') : 'all'}
+                  onChange={(value) => {
+                    const [deposito_id, gaveta_id] = value === 'all'
+                      ? ['', ''] : value.split('|');
+                    onChange(itens.map((linha) => linha.key === item.key
+                      ? { ...linha, deposito_id, gaveta_id } : linha));
+                  }}
+                  disabled={bloqueado}
+                  allLabel="Escolher depósito/gaveta"
+                  options={locais.map((loc) => ({
+                    value: [loc.deposito_id, loc.gaveta_id || ''].join('|'),
+                    label: loc.nome,
+                  }))}
+                />
+              </div>
             )}
-          </div>
-          <SearchSelect
-            value={item.produto_id || 'all'}
-            onChange={(value) => patch(item.key, 'produto_id', value === 'all' ? '' : value)}
-            allLabel="Selecionar defensivo ou adubo"
-            placeholder="Buscar produto"
-            options={options}
-            disabled={bloqueado}
-          />
-          {(produtosMap.get(item.produto_id)?.locais || []).length > 1 && (
-            <div className="space-y-1.5">
-              <Label>Local de retirada</Label>
-              <SearchSelect
-                value={item.deposito_id
-                  ? [item.deposito_id, item.gaveta_id || ''].join('|') : 'all'}
-                onChange={(value) => {
-                  const [deposito_id, gaveta_id] = value === 'all' ? ['', ''] : value.split('|');
-                  onChange(itens.map((linha) => linha.key === item.key
-                    ? { ...linha, deposito_id, gaveta_id } : linha));
-                }}
-                disabled={bloqueado}
-                allLabel="Selecionar depósito/gaveta"
-                options={produtosMap.get(item.produto_id).locais.map((loc) => ({
-                  value: [loc.deposito_id, loc.gaveta_id || ''].join('|'),
-                  label: loc.nome,
-                }))}
-              />
+
+            <div className="mobile-informe-product-line__quantity">
+              <Label htmlFor={`qtd-informe-${item.key}`}>Quantidade retirada</Label>
+              <div className="mobile-informe-quantity-field">
+                <input id={`qtd-informe-${item.key}`} type="text"
+                  inputMode="decimal" autoComplete="off"
+                  aria-label={`Quantidade retirada ${produto?.nome || `do produto ${indice + 1}`}`}
+                  placeholder="0,000" value={item.quantidade} disabled={bloqueado}
+                  onChange={(event) => patch(item.key, 'quantidade', event.target.value)}
+                />
+                <span className="mobile-informe-quantity-field__unit">
+                  {produto?.unidade || '—'}
+                </span>
+              </div>
             </div>
-          )}
-          <div className="flex items-end gap-2">
-            <div className="min-w-0 flex-1 space-y-1">
-              <Label>Quantidade retirada</Label>
-              <Input inputMode="decimal" placeholder="0,000" className="h-11 rounded-xl text-base"
-                value={item.quantidade} disabled={bloqueado}
-                onChange={(event) => patch(item.key, 'quantidade', event.target.value)} />
-            </div>
-            <span className="w-16 pb-3 text-right text-xs font-semibold text-muted-foreground">
-              {produtosMap.get(item.produto_id)?.unidade || '—'}
-            </span>
-          </div>
-        </div>
-      ))}
-      <Button type="button" variant="outline" className="h-11 w-full gap-2 rounded-xl"
+          </section>
+        );
+      })}
+
+      <Button type="button" variant="outline"
+        className="mobile-informe-add-product h-11 w-full gap-2"
         disabled={bloqueado || itens.length >= 50}
         onClick={() => onChange([...itens, novoItem()])}>
         <Plus className="h-4 w-4" /> Adicionar produto
       </Button>
+
+      <DialogPrimitive.Root open={selecionando !== null}
+        onOpenChange={(aberto) => { if (!aberto) fecharProdutos(); }}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="mobile-informe-picker-overlay" />
+          <DialogPrimitive.Content className="mobile-informe-picker-sheet"
+            aria-describedby={undefined}>
+            <div className="mobile-informe-picker-handle" aria-hidden="true" />
+            <div className="mobile-informe-picker-heading">
+              <DialogPrimitive.Title>Escolher produto</DialogPrimitive.Title>
+              <DialogPrimitive.Close className="mobile-informe-picker-close"
+                aria-label="Fechar seleção">
+                <X className="h-4 w-4" />
+              </DialogPrimitive.Close>
+            </div>
+            <div className="mobile-informe-picker-search">
+              <Search className="h-4 w-4" aria-hidden="true" />
+              <input type="search" aria-label="Buscar produto"
+                placeholder="Buscar produto..." value={buscaProduto}
+                onChange={(event) => setBuscaProduto(event.target.value)} />
+            </div>
+
+            <div className="mobile-informe-picker-results" role="list">
+              {produtosFiltrados.map((produto) => {
+                const escolhido = produto.id === produtoAtual?.produto_id;
+                const indisponivel = itens.some((item) =>
+                  item.key !== selecionando && item.produto_id === produto.id
+                );
+                return (
+                  <button type="button" role="listitem" key={produto.id}
+                    className={'mobile-informe-picker-result' +
+                      (escolhido ? ' is-selected' : '')}
+                    disabled={bloqueado || indisponivel}
+                    onClick={() => selecionarProduto(produto)}>
+                    <span className="mobile-informe-picker-result__icon">
+                      <Package className="h-[19px] w-[19px]" />
+                    </span>
+                    <span className="mobile-informe-picker-result__copy">
+                      <strong>{produto.nome}</strong>
+                      <small>{indisponivel ? 'Já adicionado' : produto.codigo || 'Produto'}</small>
+                    </span>
+                    <span className="mobile-informe-picker-result__unit">
+                      {produto.unidade || 'un'}
+                    </span>
+                    {escolhido && <Check className="h-[18px] w-[18px] text-emerald-700" />}
+                  </button>
+                );
+              })}
+              {!produtosFiltrados.length && (
+                <p className="mobile-informe-picker-empty">Nenhum produto encontrado.</p>
+              )}
+            </div>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </div>
   );
 }
@@ -164,7 +273,6 @@ export default function MobileInformeLavoura() {
   const [confirmarId, setConfirmarId] = useState('');
   const [recusarId, setRecusarId] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [observacaoAberta, setObservacaoAberta] = useState(false);
 
   const lavouras = referencias.lavouras || [];
   const produtos = referencias.produtos || [];
@@ -216,7 +324,6 @@ export default function MobileInformeLavoura() {
       await informesLavouraApi.solicitar({ chave: form.chave, ...payload });
       setForm({ chave: crypto.randomUUID(), lavoura_id: '', itens: [novoItem()], observacao: '' });
       setBusca('');
-      setObservacaoAberta(false);
       setMinhas(await informesLavouraApi.minhas());
       setAba('meus');
       setAviso({ erro: false, texto: 'Solicitação enviada. Aguardando aprovação.' });
@@ -372,19 +479,6 @@ export default function MobileInformeLavoura() {
               </button>
               <ItensEditor itens={form.itens} produtos={produtos}
                 bloqueado={busy} onChange={(itens) => setForm((prev) => ({ ...prev, itens }))} />
-              <div className="mobile-informe-optional">
-                <button type="button" className="w-full py-1 text-left text-xs font-semibold text-muted-foreground"
-                  aria-expanded={observacaoAberta || Boolean(form.observacao)}
-                  onClick={() => setObservacaoAberta((value) => !value)}>
-                  {observacaoAberta || form.observacao ? 'Observação' : '+ Adicionar observação (opcional)'}
-                </button>
-                {(observacaoAberta || Boolean(form.observacao)) && (
-                  <Textarea rows={2} className="mt-2 resize-none rounded-xl"
-                    placeholder="Informação adicional"
-                    disabled={busy} value={form.observacao}
-                    onChange={(e) => setForm((prev) => ({ ...prev, observacao: e.target.value }))} />
-                )}
-              </div>
               <Button type="submit" disabled={busy} className="mobile-informe-submit h-12 w-full gap-2 rounded-xl text-sm font-semibold">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Enviar solicitação de baixa
