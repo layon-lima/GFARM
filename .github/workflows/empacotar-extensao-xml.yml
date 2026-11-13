@@ -7,6 +7,11 @@ on:
       - 'GFARM APP/browser-extension-xml/**'
       - 'GFARM APP/tests/dfe-client-offline.test.mjs'
       - '.github/workflows/empacotar-extensao-xml.yml'
+  pull_request:
+    paths:
+      - 'GFARM APP/browser-extension-xml/**'
+      - 'GFARM APP/tests/dfe-native-bridge-offline.test.mjs'
+      - '.github/workflows/empacotar-extensao-xml.yml'
   workflow_dispatch:
 
 permissions:
@@ -14,6 +19,7 @@ permissions:
 
 jobs:
   empacotar:
+    if: github.event_name != 'pull_request'
     needs: validar-windows
     runs-on: ubuntu-latest
     steps:
