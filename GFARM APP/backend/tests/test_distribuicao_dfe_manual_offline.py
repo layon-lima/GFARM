@@ -62,8 +62,10 @@ class LoteManualOfflineTest(unittest.TestCase):
             lote(ult_nsu=151, documentos=docs)
 
     def test_nao_aceita_cpf_cnpj_ou_nsu_invalidos(self):
+        with self.assertRaises(ValidationError):
+            lote(interessado="1234")
         with self.assertRaises(HTTPException):
-            validar_lote(lote(interessado="1234"))
+            validar_lote(lote(interessado="abcdefghijk"))
         with self.assertRaises(ValidationError):
             lote(anterior_nsu=-1)
 
