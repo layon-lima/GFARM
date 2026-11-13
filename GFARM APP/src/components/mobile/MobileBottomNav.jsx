@@ -41,9 +41,9 @@ export default function MobileBottomNav() {
   );
 
   // O Início fica fixo na primeira posição.
-  // Até quatro setores ficam visíveis na barra para manter boa leitura.
-  // Todos os setores continuam acessíveis pela tela Início e pelo swipe.
-  const setoresNaBarra = setoresVisiveis.slice(0, 4);
+  // Barra com três destinos no máximo: Início e dois setores.
+  // Todos os demais continuam na Home, sem rolagem horizontal.
+  const setoresNaBarra = setoresVisiveis.slice(0, 2);
 
   const tabs = [
     {
