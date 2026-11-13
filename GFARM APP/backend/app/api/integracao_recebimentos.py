@@ -152,7 +152,7 @@ def receber(dados: Recebimento, x_integracao_token: str | None = Header(None),
         raise HTTPException(409, "Recebimento em revisão no GFARM; não é possível atualizar.")
     # Se a Central Fiscal ja arquivou o XML, preencher o recebimento sem
     # consultar a SEFAZ, sem acao do navegador e sem afetar o estoque.
-    if dfe_habilitada() and dados.chave_acesso:
+    if dados.chave_acesso:
         try:
             with db.begin_nested():
                 aplicar_cache_a_nota_pendente(db, dados.chave_acesso)
