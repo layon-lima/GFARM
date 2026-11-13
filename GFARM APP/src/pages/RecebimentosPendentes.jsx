@@ -15,6 +15,7 @@ import { encontrarProdutoExatoDaNota } from '@/lib/correspondenciaProdutoNfe';
 import { precoFiscalNaUnidadeBase, precoFiscalParaInput } from '@/lib/custoRecebimentoNfe';
 import { convertQty, normalizarUnidade } from '@/lib/units';
 import { aplicarItensFiscaisXml } from '@/lib/atualizarRecebimentosXml';
+import { consultarExtensaoDfe } from '@/lib/sincronizarDfeNavegador';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 const FSIST_URL = 'https://www.fsist.com.br/';
 const EXTENSAO_GFARM_URL =
@@ -74,8 +75,86 @@ export default function RecebimentosPendentes() {
   const [criandoProdutoDe, setCriandoProdutoDe] = useState(null);
   const [consultandoNota, setConsultandoNota] = useState(null);
   const [extensaoAusente, setExtensaoAusente] = useState('');
+  const [sincronizandoDfe, setSincronizandoDfe] = useState(false);
+  const [progressoDfe, setProgressoDfe] = useState('');
   const [avisosXml, setAvisosXml] = useState({});
   const abaFSistRef = useRef(null);
+
+  async function sincronizarXmlEmLote() {
+    if (sincronizandoDfe) return;
+    setSincronizandoDfe(true);
+    setProgressoDfe('Verificando extensão de certificados...');
+    try {
+      const ping = await consultarExtensaoDfe('DFE_PING', {}, 5000);
+      if (!ping.ok || !ping.versao || ping.versao === '0.1.0') {
+        throw new Error('Atualize a extensão GFARM para v0.2.0 antes de sincronizar.');
+      }
+      // JavaScript nao tem permissao para ler o CPF da chave privada no
+      // repositorio Windows. O CPF informado sera conferido pela SEFAZ
+      // contra o certificado selecionado na janela nativa do navegador.
+      const informado = window.prompt(
+        'CPF ou CNPJ do certificado que vai selecionar no navegador (somente numeros):'
+      );
+      if (informado === null) return;
+      const interessado = informado.replace(/\D/g, '');
+      if (!/^(?:\d{11}|\d{14})$/.test(interessado)) {
+        throw new Error('Informe o CPF com 11 digitos ou o CNPJ com 14 digitos.');
+      }
+      const cuf = '21'; // UF padrao MA (codigo IBGE); consulta nao usa UF do emitente.
+      const inicial = await request('/dfe/estado?interessado=' + encodeURIComponent(interessado));
+      if (inicial.aguarde_segundos > 0) {
+        const minutos = Math.ceil(inicial.aguarde_segundos / 60);
+        throw new Error('A SEFAZ exige aguardar mais ' + minutos + ' minuto(s) para este CPF/CNPJ.');
+      }
+      let nsu = inicial.ult_nsu;
+      let documentos = 0;
+      let completos = 0;
+      let preenchidos = 0;
+      let lotes = 0;
+      let terminou = false;
+      for (let i = 0; i < 120; i++) {
+        setProgressoDfe('Consultando SEFAZ pelo navegador: lote ' + (i + 1) +
+          ' · ' + documentos + ' documento(s) recebido(s)...');
+        const resposta = await consultarExtensaoDfe('DFE_CONSULTAR', {
+          interessado, cuf, anterior_nsu: nsu,
+        });
+        if (!resposta.ok) throw new Error(resposta.message || 'Nao foi possivel consultar a SEFAZ.');
+        const lote = await request('/dfe/lote', 'POST', {
+          interessado, anterior_nsu: nsu,
+          ult_nsu: resposta.ult_nsu, max_nsu: resposta.max_nsu,
+          cstat: resposta.cstat, documentos: resposta.documentos || [],
+        });
+        lotes += 1;
+        documentos += lote.documentos;
+        completos += lote.xml_completos;
+        preenchidos += lote.pendencias_atualizadas;
+        nsu = lote.ult_nsu;
+        setProgressoDfe('Sincronizados ' + documentos + ' documentos, ' +
+          completos + ' XMLs completos e ' + preenchidos + ' pendências preenchidas.');
+        if (lote.status === '656') {
+          throw new Error('SEFAZ retornou consumo indevido (656). A consulta foi pausada automaticamente.');
+        }
+        if (!lote.continuar) {
+          terminou = true;
+          break;
+        }
+        // Lotes por NSU: consultas sequenciais, sem repeticao de chaves.
+        await new Promise(resolve => setTimeout(resolve, 1600));
+      }
+      await carregar();
+      toast({
+        title: terminou ? 'Sincronização de XML concluída' : 'Sincronização pausada por limite de lotes',
+        description: documentos + ' documentos, ' + completos + ' XMLs completos, ' +
+          preenchidos + ' pendências atualizadas em ' + lotes + ' consulta(s).',
+      });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Sincronização não concluída',
+        description: error.message || 'Confira certificado, extensão e SEFAZ.' });
+      setProgressoDfe(error.message || 'Sincronização interrompida.');
+    } finally {
+      setSincronizandoDfe(false);
+    }
+  }
 
   function abrirFSist(item) {
     if (!/^[0-9]{44}$/.test(String(item.dados.chave_acesso || ''))) {
@@ -413,9 +492,20 @@ export default function RecebimentosPendentes() {
           <option value="APROVADO">Aprovados</option>
           <option value="REJEITADO">Recusados</option>
         </select>
+        {status === 'PENDENTE' && (
+          <Button variant="outline" onClick={sincronizarXmlEmLote}
+            disabled={sincronizandoDfe || loading}>
+            <RefreshCcw className={'mr-1 h-4 w-4 ' + (sincronizandoDfe ? 'animate-spin' : '')} />
+            {sincronizandoDfe ? 'Sincronizando...' : 'Sincronizar XML'}
+          </Button>
+        )}
         <Button variant="outline" onClick={() => carregar()} disabled={loading}><RefreshCcw className="mr-1 h-4 w-4" /> Atualizar</Button>
       </div>
     </div>
+    {progressoDfe && (
+      <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs"
+        role="status" aria-live="polite">{progressoDfe}</div>
+    )}
     {!!extensaoAusente && (
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/10 px-3 py-2 text-xs"
         role="status">
