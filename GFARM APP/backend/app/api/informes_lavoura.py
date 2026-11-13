@@ -6,7 +6,7 @@ A aprovação chama exclusivamente o motor de estoque; custos vêm dos documento
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
@@ -426,8 +426,42 @@ def aprovar(
     )
     if item is None:
         raise HTTPException(404, "Informe não encontrado.")
+    if item.status == "PROCESSANDO":
+        # Queda de rede entre a baixa oficial e a marcação como aprovado:
+        # apenas reconciliar o documento já contabilizado, sem outra saída.
+        doc = db.scalar(
+            select(EstoqueDocumento).where(
+                EstoqueDocumento.origem_modulo == "informe_lavoura",
+                EstoqueDocumento.documento_origem_id == item_id,
+                EstoqueDocumento.tipo_movimento == "SAIDA_CONSUMO",
+                EstoqueDocumento.status == "contabilizado",
+            )
+        )
+        if doc is not None:
+            item.status = "APROVADO"
+            item.documento_estoque_id = doc.id
+            item.analisado_por_id = user.id
+            item.analisado_por_nome = _nome(user)
+            item.analisado_em = datetime.now(timezone.utc)
+            registrar_auditoria(
+                db, usuario=user, acao="reconciliar", entidade="InformeSaidaLavoura",
+                registro_id=item.id, depois=_resumo(item),
+                detalhe=f"Recuperação sem nova baixa do documento oficial {doc.id}.",
+            )
+            db.commit()
+            db.refresh(item)
+            return _resumo(item)
+        atualizado = item.updated_date
+        if atualizado is not None:
+            if atualizado.tzinfo is None:
+                atualizado = atualizado.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - atualizado > timedelta(minutes=2):
+                item.status = "PENDENTE"
+                db.commit()
+                raise HTTPException(409, "Processamento anterior não concluiu. Solicitação liberada, tente novamente.")
+        raise HTTPException(409, "Solicitação em processamento. Aguarde antes de tentar novamente.")
     if item.status != "PENDENTE":
-        raise HTTPException(409, "Esta solicitação já foi processada ou está em processamento.")
+        raise HTTPException(409, "Esta solicitação já foi analisada.")
 
     # Trava a solicitação para impedir aprovação concorrente.
     item.status = "PROCESSANDO"
