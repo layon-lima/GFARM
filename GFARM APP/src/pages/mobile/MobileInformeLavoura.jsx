@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Check, Loader2,
-  ChevronRight, Package, Pencil, Plus, Search, Send, ShieldCheck,
+  Package, Pencil, Plus, Search, Send, ShieldCheck,
   Sprout, Trash2, X,
 } from 'lucide-react';
 
