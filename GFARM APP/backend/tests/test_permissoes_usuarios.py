@@ -122,6 +122,56 @@ class PermissoesUsuariosTest(unittest.TestCase):
             400,
         )
 
+    def test_usuario_comum_pode_ser_habilitado_para_informe_mobile(self):
+        resposta = atualizar_permissoes(
+            "alvo",
+            AtualizarPermissoesRequest(
+                role="user",
+                permissoes=["mobile.informe_lavoura.solicitar"],
+                setores_permitidos=[],
+            ),
+            self.admin,
+            self.db,
+        )
+
+        self.assertIn(
+            "mobile.informe_lavoura.solicitar",
+            resposta["permissoes"],
+        )
+        self.assertNotIn(
+            "admin.informe_lavoura.revisar",
+            resposta["permissoes"],
+        )
+        self.assertTrue(
+            tem_permissao(self.alvo, "mobile.informe_lavoura.solicitar")
+        )
+        self.assertFalse(
+            tem_permissao(self.alvo, "admin.informe_lavoura.revisar")
+        )
+
+    def test_subadmin_pode_receber_revisao_de_informes(self):
+        resposta = atualizar_permissoes(
+            "alvo",
+            AtualizarPermissoesRequest(
+                role="subadmin",
+                permissoes=[
+                    "mobile.informe_lavoura.solicitar",
+                    "admin.informe_lavoura.revisar",
+                ],
+                setores_permitidos=[],
+            ),
+            self.admin,
+            self.db,
+        )
+
+        self.assertIn(
+            "admin.informe_lavoura.revisar",
+            resposta["permissoes"],
+        )
+        self.assertTrue(
+            tem_permissao(self.alvo, "admin.informe_lavoura.revisar")
+        )
+
     def test_permissoes_sao_persistidas_no_banco_central(self):
         atualizar_permissoes(
             "alvo",
