@@ -53,6 +53,7 @@ PERMISSION_CATALOG = (
     {"key": "mobile.estoque.mudar_gaveta", "group": "mobile", "label": "Mudar gaveta pelo celular", "description": "Transferir saldo entre gavetas."},
     {"key": "mobile.estoque.mudar_deposito", "group": "mobile", "label": "Mudar depósito pelo celular", "description": "Transferir saldo para outro depósito."},
     {"key": "mobile.estoque.entrada_manual_saldo", "group": "mobile", "label": "Solicitar entrada manual de saldo", "description": "Enviar solicitação mobile para revisão administrativa."},
+    {"key": "mobile.informe_lavoura.solicitar", "group": "mobile", "label": "Solicitar saída para lavoura", "description": "Registrar pedidos de baixa de defensivos e adubos, sem contabilizar estoque."},
 
     {"key": "admin.usuarios.visualizar", "group": "administracao", "label": "Visualizar usuários", "description": "Abrir a lista de usuários."},
     {"key": "admin.usuarios.criar", "group": "administracao", "label": "Criar usuários", "description": "Criar usuários padrão. Apenas o Administrador Total cria outros administradores."},
@@ -62,6 +63,7 @@ PERMISSION_CATALOG = (
     {"key": "admin.cadastros_mobile.solicitar", "group": "administracao", "label": "Modo Admin no celular", "description": "Criar solicitações de cadastros pelo modo administrativo mobile."},
     {"key": "admin.cadastros_mobile.revisar", "group": "administracao", "label": "Revisar cadastros mobile", "description": "Aprovar ou rejeitar cadastros enviados pelo celular."},
     {"key": "admin.entrada_saldo_mobile.revisar", "group": "administracao", "label": "Revisar entradas de saldo mobile", "description": "Consultar, editar, aprovar ou recusar solicitações de entrada manual de saldo, inclusive no celular."},
+    {"key": "admin.informe_lavoura.revisar", "group": "administracao", "label": "Revisar saída para lavoura", "description": "Editar, aprovar ou recusar informes de saída; a baixa é processada pelo motor oficial."},
     {"key": "admin.inventario.revisar", "group": "administracao", "label": "Revisar itens encontrados", "description": "Aprovar ou rejeitar itens encontrados no inventário."},
     {"key": "admin.estoque.entrada_manual", "group": "administracao", "label": "Entrada manual de saldo no PC", "description": "Registrar entrada administrativa de saldo pelo módulo Movimentos."},
     {"key": "admin.relatorios.usuarios", "group": "administracao", "label": "Relatório de usuários", "description": "Visualizar o relatório administrativo de usuários e permissões."},
