@@ -17,6 +17,7 @@ from app.api.users import router as users_router
 from app.api.inventario_pendencias import router as inventario_pendencias_router
 from app.api.cadastros_mobile import router as cadastros_mobile_router
 from app.api.entrada_saldo_mobile import router as entrada_saldo_mobile_router
+from app.api.informes_lavoura import router as informes_lavoura_router
 from app.api.balanca_live import router as balanca_live_router, garantir_tabela_balanca_remota
 from app.api.integracao_recebimentos import router as recebimentos_integracao_router, garantir_tabela_recebimentos
 from app.api.distribuicao_dfe_manual import router as distribuicao_dfe_manual_router
@@ -104,6 +105,7 @@ app.include_router(users_router)
 app.include_router(inventario_pendencias_router)
 app.include_router(cadastros_mobile_router)
 app.include_router(entrada_saldo_mobile_router)
+app.include_router(informes_lavoura_router)
 app.include_router(balanca_live_router)
 app.include_router(files_router)
 app.include_router(entities_router)
