@@ -7,6 +7,10 @@ export function mobilePageAllowed(user, pageKey) {
   // Mantém a permissão desktop intacta, mas nunca expõe a aba/atalho no mobile.
   if (pageKey === 'pesagem') return false;
 
+  // A antiga Aplicação com OS permanece somente no PC.
+  // No mobile, o atalho agora é Saída para Lavoura, autorizado por permissão própria.
+  if (pageKey === 'aplicacao') return false;
+
   const allowed = user.paginas_permitidas;
   if (!Array.isArray(allowed)) return true;
   return allowed.includes(pageKey);
