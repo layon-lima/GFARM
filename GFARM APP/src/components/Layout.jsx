@@ -14,6 +14,7 @@ import {
   allowedPagesForUser,
   canAccessBalanca,
   canAccessUsuarios,
+  hasAnyPermission,
   podeMonitorarBalancaADM,
   pageKeyForPath,
   userCanAccess,
@@ -68,7 +69,12 @@ export default function Layout() {
         ? canAccessBalanca(user)
         : isMonitorBalanca
           ? podeMonitorarBalancaADM(user)
-          : userCanAccess(user, pageKey);
+          : isMobile && location.pathname === '/aplicacao'
+            ? hasAnyPermission(user, [
+                'mobile.informe_lavoura.solicitar',
+                'admin.informe_lavoura.revisar',
+              ])
+            : userCanAccess(user, pageKey);
 
   const allowed = allowedPagesForUser(user);
 
