@@ -2,6 +2,55 @@
 // A consulta por certificado roda em pagina visivel da extensao, nao no SW.
 // Sem WebContents o Chrome pode cancelar o seletor nativo de certificados.
 const GFARM = 'https://estoque.fazendanovohorizonte.com';
+
+const NATIVE_HOST = 'com.gfarm.certificados';
+
+// Um host Windows autorizado pela extensao lista certificados PUBLICOS e faz
+// TLS usando a chave protegida no repositorio Windows (sem exportacao PFX).
+function chamarPonteWindows(pedido, timeoutMs = 120000) {
+  return new Promise((resolve, reject) => {
+    const pedacos = [];
+    let completo = false;
+    let porta;
+    let timer;
+    const finalizar = (error, result) => {
+      if (completo) return;
+      completo = true;
+      clearTimeout(timer);
+      try { porta?.disconnect(); } catch { /* processo ja saiu */ }
+      if (error) reject(error); else resolve(result);
+    };
+    try { porta = chrome.runtime.connectNative(NATIVE_HOST); }
+    catch {
+      reject(new Error('Ponte de certificados Windows indisponivel. Instale a ponte GFARM v0.3.0.'));
+      return;
+    }
+    porta.onMessage.addListener(msg => {
+      if (msg?.type === 'result') {
+        finalizar(null, msg.value);
+      } else if (msg?.type === 'chunk') {
+        pedacos.push(String(msg.data || ''));
+        if (pedacos.length > 150 || pedacos.join('').length > 22000000) {
+          finalizar(new Error('Resposta da ponte ultrapassou o limite.'));
+        }
+      } else if (msg?.type === 'done') {
+        try { finalizar(null, JSON.parse(pedacos.join(''))); }
+        catch { finalizar(new Error('Resposta da ponte Windows invalida.')); }
+      }
+    });
+    porta.onDisconnect.addListener(() => {
+      if (completo) return;
+      const erro = chrome.runtime.lastError?.message || '';
+      const ausente = /native messaging host not found|specified native messaging host|access to the specified native messaging/i.test(erro);
+      finalizar(new Error(ausente
+        ? 'Ponte de certificados Windows nao instalada/autorizada. Instale a ponte GFARM v0.3.0.'
+        : 'Falha na ponte Windows: ' + (erro || 'processo encerrado.')));
+    });
+    timer = setTimeout(() => finalizar(new Error('A ponte Windows nao respondeu no prazo.')), timeoutMs);
+    porta.postMessage(pedido);
+  });
+}
+
 const MAX_BYTES = 3 * 1024 * 1024;
 const SESSION_TTL_MS = 45 * 60 * 1000;
 
@@ -90,17 +139,23 @@ async function handleBridge(message, sender) {
   if (url.origin !== GFARM || !sender.tab?.id) return { ok: false };
   const tab = String(sender.tab.id);
   if (message.type === 'DFE_PING') {
-    return { ok: true, versao: '0.2.0', dfe: true };
+    return { ok: true, versao: '0.3.0', dfe: true, certificadosWindows: true };
+  }
+  if (message.type === 'DFE_CERTIFICADOS') {
+    try { return await chamarPonteWindows({ op: 'LISTAR' }, 30000); }
+    catch (erro) { return { ok: false, reason: erro.message }; }
   }
   if (message.type === 'DFE_CLOSE') {
     await fecharJanelaDfe();
     return { ok: true };
   }
   if (message.type === 'DFE_CONSULTAR') {
+    const thumbprint = String(message.thumbprint || '').toUpperCase();
     const interessado = String(message.interessado || '');
     const cuf = String(message.cuf || '');
     const anterior = Number(message.anterior_nsu);
-    if (!/^(?:\d{11}|\d{14})$/.test(interessado)
+    if (!/^[A-F0-9]{40}$/.test(thumbprint)
+      || !/^(?:\d{11}|\d{14})$/.test(interessado)
       || !/^\d{2}$/.test(cuf)
       || !Number.isSafeInteger(anterior) || anterior < 0) {
       return { ok: false, reason: 'CPF/CNPJ, UF ou NSU invalido.' };
@@ -113,9 +168,9 @@ async function handleBridge(message, sender) {
       return { ok: false, reason: 'A consulta deste CPF/CNPJ esta em intervalo da SEFAZ. Tente mais tarde.' };
     }
     try {
-      const result = await consultarDfeNaJanela(interessado, cuf, anterior);
+      const result = await chamarPonteWindows({ op: 'CONSULTAR', thumbprint, interessado, cuf, anterior_nsu: anterior });
       if (!result?.ok) {
-        throw new Error(result?.reason || 'A janela nao conseguiu consultar a SEFAZ.');
+        throw new Error(result?.message || result?.reason || 'A ponte nao conseguiu consultar a SEFAZ.');
       }
       let pauseMs = 0;
       if (result.cstat === '656') pauseMs = 125 * 60 * 1000;
@@ -250,4 +305,28 @@ chrome.downloads.onChanged.addListener(async delta => {
       });
     }
   }
+});
+
+
+// Inserir a ponte em abas GFARM que ja estavam abertas quando a extensao foi
+// habilitada/atualizada. A ponte e idempotente, e novas paginas tambem usam o
+// content_script declarado no manifest.
+async function injetarPonte(tab) {
+  if (!Number.isInteger(tab?.id) || !String(tab.url || '').startsWith(GFARM + '/')) return;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['bridge.js'] });
+  } catch { /* Aba protegida, carregando ou permissao do site desativada. */ }
+}
+async function conectarAbasAbertas() {
+  const tabs = await chrome.tabs.query({ url: GFARM + '/*' }).catch(() => []);
+  await Promise.all(tabs.map(injetarPonte));
+}
+chrome.runtime.onInstalled.addListener(() => { conectarAbasAbertas(); });
+chrome.runtime.onStartup.addListener(() => { conectarAbasAbertas(); });
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (tab) injetarPonte(tab);
+});
+chrome.tabs.onUpdated.addListener((_id, changes, tab) => {
+  if (changes.status === 'complete') injetarPonte(tab);
 });
