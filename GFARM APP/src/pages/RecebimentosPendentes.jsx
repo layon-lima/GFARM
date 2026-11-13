@@ -90,7 +90,7 @@ export default function RecebimentosPendentes() {
     setProgressoDfe('Localizando certificados digitais no Windows...');
     try {
       const ping = await consultarExtensaoDfe('DFE_PING', {}, 9000);
-      if (!ping.ok || ping.versao !== '0.3.0') {
+      if (!ping.ok || !ping.versao || ['0.1.0', '0.2.0'].includes(ping.versao)) {
         throw new Error('Atualize a extensão GFARM para a versão 0.3.0.');
       }
       const resultado = await consultarExtensaoDfe('DFE_CERTIFICADOS', {}, 35000);
