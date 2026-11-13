@@ -2,7 +2,7 @@
 
 Somente com GFARM_DFE_ENABLED=1 e certificado A1 (.pfx) privado disponivel
 no container. Nao envia Ciencia da Operacao, manifestacao, ou entradas de
-estoque. Mantem NSU monotono por CNPJ, cache completo/resumo e cooldown.
+estoque. Mantem NSU separado por CPF/CNPJ, cache completo/resumo e cooldown.
 """
 from __future__ import annotations
 
@@ -54,14 +54,11 @@ def habilitada() -> bool:
 
 
 def _configuracoes():
-    """Suporta varios CNPJs sem armazenar senhas/certificados no Git.
+    """Suporta varios titulares CPF/CNPJ sem senha ou certificado no Git.
 
-    Um unico perfil: GFARM_DFE_CNPJ, GFARM_DFE_CUF,
-    GFARM_DFE_CERT_PFX, GFARM_DFE_CERT_PASSWORD.
-
-    Varios: GFARM_DFE_PROFILES='[{"cnpj":"...","cuf":"21",
-    "cert_path":"/seguro/cert.pfx","password_file":"/seguro/cert.pass"}]'.
-    Nenhum formulario, nenhum segredo devolvido via API.
+    Perfil unico GFARM_DFE_CPF ou GFARM_DFE_CNPJ.
+    Multiplos via GFARM_DFE_PROFILES, cada qual com cpf OU cnpj,
+    cuf, cert_path e password_file.
     """
     profiles_raw = os.getenv("GFARM_DFE_PROFILES", "").strip()
     if profiles_raw:
@@ -75,6 +72,7 @@ def _configuracoes():
     else:
         profiles = [{
             "cnpj": os.getenv("GFARM_DFE_CNPJ", ""),
+            "cpf": os.getenv("GFARM_DFE_CPF", ""),
             "cuf": os.getenv("GFARM_DFE_CUF", ""),
             "cert_path": os.getenv("GFARM_DFE_CERT_PFX", ""),
             "password_env": "GFARM_DFE_CERT_PASSWORD",
@@ -86,6 +84,13 @@ def _configuracoes():
         if not isinstance(p, dict):
             continue
         cnpj = str(p.get("cnpj", "")).strip()
+        cpf = str(p.get("cpf", "")).strip()
+        # Exatamente um interessado por perfil; nunca compartilhar NSU.
+        identificador_valido = (
+            bool(re.fullmatch(r"\d{14}", cnpj)) != bool(re.fullmatch(r"\d{11}", cpf))
+            and not (cnpj and cpf)
+        )
+        interessado = cpf or cnpj
         cuf = str(p.get("cuf", "")).strip()
         path = str(p.get("cert_path", "")).strip()
         key = str(p.get("password_env", "")).strip()
@@ -94,19 +99,19 @@ def _configuracoes():
             bool(password_file and Path(password_file).is_file())
             or bool(key and key in os.environ)
         )
-        if (not re.fullmatch(r"\d{14}", cnpj)
+        if (not identificador_valido
                 or not re.fullmatch(r"\d{2}", cuf)
                 or not path or not Path(path).is_file()
                 or not tem_senha
-                or cnpj in seen):
+                or interessado in seen):
             logger.warning(
                 "Central fiscal: perfil incompleto; nao sera consultado."
             )
             continue
-        seen.add(cnpj)
+        seen.add(interessado)
         result.append({
-            "cnpj": cnpj, "cuf": cuf,
-            "cert_path": path, "password_env": key,
+            "cnpj": cnpj, "cpf": cpf, "interessado": interessado,
+            "cuf": cuf, "cert_path": path, "password_env": key,
             "password_file": password_file,
         })
     return result
@@ -143,6 +148,35 @@ def garantir_tabelas_dfe():
         db.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_gfarm_dfe_documentos_chave
             ON gfarm_dfe_documentos (chave, tipo)
+        """))
+        # Tabelas isoladas dos CPFs: sem migrar/regravar documentos ou
+        # cursores CNPJ existentes e sem tocar nas tabelas do estoque.
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS gfarm_dfe_cursores_pf (
+                cpf VARCHAR(11) PRIMARY KEY,
+                ult_nsu BIGINT NOT NULL DEFAULT 0,
+                max_nsu BIGINT NOT NULL DEFAULT 0,
+                proxima_consulta TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                ultimo_status VARCHAR(10),
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS gfarm_dfe_documentos_pf (
+                cpf VARCHAR(11) NOT NULL,
+                nsu BIGINT NOT NULL,
+                chave VARCHAR(44),
+                tipo VARCHAR(16) NOT NULL,
+                schema_xml VARCHAR(120),
+                conteudo_xml BYTEA NOT NULL,
+                sha256 VARCHAR(64) NOT NULL,
+                recebido_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (cpf, nsu)
+            )
+        """))
+        db.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_gfarm_dfe_documentos_pf_chave
+            ON gfarm_dfe_documentos_pf (chave, tipo)
         """))
 
 
@@ -192,7 +226,9 @@ def _ssl_contexto_a1(perfil):
     yield contexto
 
 
-def _envelope(cnpj: str, cuf: str, ult_nsu: int) -> bytes:
+def _envelope(interessado: str, cuf: str, ult_nsu: int) -> bytes:
+    if not re.fullmatch(r"\d{11}|\d{14}", interessado):
+        raise ValueError("Identificador fiscal deve conter 11 ou 14 digitos.")
     # A versao do schema distDFeInt continua 1.01; NT 2014.002 pode
     # atualizar as regras sem alterar essa versao de mensagem.
     soap = ET.Element(f"{{{NS_SOAP}}}Envelope")
@@ -202,7 +238,8 @@ def _envelope(cnpj: str, cuf: str, ult_nsu: int) -> bytes:
     dist = ET.SubElement(msg, f"{{{NS_NFE}}}distDFeInt", versao="1.01")
     ET.SubElement(dist, f"{{{NS_NFE}}}tpAmb").text = "1"
     ET.SubElement(dist, f"{{{NS_NFE}}}cUFAutor").text = cuf
-    ET.SubElement(dist, f"{{{NS_NFE}}}CNPJ").text = cnpj
+    campo = "CPF" if len(interessado) == 11 else "CNPJ"
+    ET.SubElement(dist, f"{{{NS_NFE}}}{campo}").text = interessado
     dn = ET.SubElement(dist, f"{{{NS_NFE}}}distNSU")
     ET.SubElement(dn, f"{{{NS_NFE}}}ultNSU").text = f"{ult_nsu:015d}"
     return ET.tostring(soap, encoding="utf-8", xml_declaration=True)
@@ -253,16 +290,17 @@ def _chave_nfe(xml: bytes) -> tuple[str, str]:
     return (chave if re.fullmatch(r"\d{44}", chave) else ""), tipo
 
 
-def _destinatario_valido(xml: bytes, cnpj: str) -> bool:
+def _destinatario_valido(xml: bytes, interessado: str) -> bool:
     root = _xml_seguro(xml)
     dest = root.find(f".//{{{NS_NFE}}}dest")
     if dest is None:
         return False
-    return _texto(dest, "CNPJ") == cnpj
+    campo = "CPF" if len(interessado) == 11 else "CNPJ"
+    return _texto(dest, campo) == interessado
 
 
 def _consultar_sefaz(perfil, nsu: int):
-    payload = _envelope(perfil["cnpj"], perfil["cuf"], nsu)
+    payload = _envelope(perfil["interessado"], perfil["cuf"], nsu)
     with _ssl_contexto_a1(perfil) as contexto:
         req = Request(
             URL_PRODUCAO, data=payload,
@@ -363,31 +401,40 @@ def aplicar_cache_a_nota_pendente(db, chave: str) -> int:
     if not habilitada() or not re.fullmatch(r"\d{44}", chave or ""):
         return 0
     rows = db.execute(text("""
-        SELECT conteudo_xml, cnpj
+        SELECT conteudo_xml, cnpj AS interessado, recebido_em
           FROM gfarm_dfe_documentos
          WHERE chave=:chave AND tipo='completo'
-         ORDER BY recebido_em DESC LIMIT 3
+        UNION ALL
+        SELECT conteudo_xml, cpf AS interessado, recebido_em
+          FROM gfarm_dfe_documentos_pf
+         WHERE chave=:chave AND tipo='completo'
+         ORDER BY recebido_em DESC LIMIT 20
     """), {"chave": chave}).mappings().all()
     for row in rows:
         xml = bytes(row["conteudo_xml"])
-        if _destinatario_valido(xml, row["cnpj"]):
+        if _destinatario_valido(xml, row["interessado"]):
             return _preencher_pendencias(db, chave, xml)
     return 0
 
 
 def _executar_perfil(db, perfil):
-    """Uma UNICA requisicao por ciclo/CNPJ, mesmo com centenas de XMLs."""
-    cnpj = perfil["cnpj"]
-    db.execute(text("""
-        INSERT INTO gfarm_dfe_cursores (cnpj)
-        VALUES (:cnpj) ON CONFLICT (cnpj) DO NOTHING
-    """), {"cnpj": cnpj})
-    estado = db.execute(text("""
+    """Uma consulta por ciclo/interessado; NSU independente por CPF/CNPJ."""
+    interessado = perfil["interessado"]
+    pf = bool(perfil["cpf"])
+    tabela_cursor = "gfarm_dfe_cursores_pf" if pf else "gfarm_dfe_cursores"
+    tabela_documentos = "gfarm_dfe_documentos_pf" if pf else "gfarm_dfe_documentos"
+    coluna = "cpf" if pf else "cnpj"
+    # Identificadores SQL acima sao constantes internas, nao entradas HTTP.
+    db.execute(text(f"""
+        INSERT INTO {tabela_cursor} ({coluna})
+        VALUES (:interessado) ON CONFLICT ({coluna}) DO NOTHING
+    """), {"interessado": interessado})
+    estado = db.execute(text(f"""
         SELECT ult_nsu, max_nsu
-          FROM gfarm_dfe_cursores
-         WHERE cnpj=:cnpj AND proxima_consulta <= NOW()
+          FROM {tabela_cursor}
+         WHERE {coluna}=:interessado AND proxima_consulta <= NOW()
          FOR UPDATE SKIP LOCKED
-    """), {"cnpj": cnpj}).mappings().first()
+    """), {"interessado": interessado}).mappings().first()
     if estado is None:
         return 0  # aguardando cooldown ou consulta concorrente
     atual_nsu = int(estado["ult_nsu"])
@@ -398,8 +445,8 @@ def _executar_perfil(db, perfil):
         )
     except Exception as exc:
         # Nunca expor certificado, senha, resposta SOAP nem XML nos logs.
-        logger.warning("Central fiscal: falha na consulta do CNPJ final %s: %s",
-                       cnpj[-4:], type(exc).__name__)
+        logger.warning("Central fiscal: falha na consulta do titular final %s: %s",
+                       interessado[-4:], type(exc).__name__)
         status, ult_nsu, max_nsu, documentos = (
             "ERRO", atual_nsu, int(estado["max_nsu"]), []
         )
@@ -420,14 +467,14 @@ def _executar_perfil(db, perfil):
     if status == "138":
         for doc in documentos:
             # Dados fiscalmente sensiveis ficam apenas no PostgreSQL privado.
-            db.execute(text("""
-                INSERT INTO gfarm_dfe_documentos
-                    (cnpj, nsu, chave, tipo, schema_xml, conteudo_xml, sha256)
+            db.execute(text(f"""
+                INSERT INTO {tabela_documentos}
+                    ({coluna}, nsu, chave, tipo, schema_xml, conteudo_xml, sha256)
                 VALUES
-                    (:cnpj, :nsu, :chave, :tipo, :schema, :conteudo, :hash)
-                ON CONFLICT (cnpj, nsu) DO NOTHING
+                    (:interessado, :nsu, :chave, :tipo, :schema, :conteudo, :hash)
+                ON CONFLICT ({coluna}, nsu) DO NOTHING
             """), {
-                "cnpj": cnpj,
+                "interessado": interessado,
                 "nsu": doc["nsu"],
                 "chave": doc["chave"] or None,
                 "tipo": doc["tipo"],
@@ -436,24 +483,24 @@ def _executar_perfil(db, perfil):
                 "hash": hashlib.sha256(doc["xml"]).hexdigest(),
             })
             if (doc["tipo"] == "completo" and doc["chave"]
-                    and _destinatario_valido(doc["xml"], cnpj)):
+                    and _destinatario_valido(doc["xml"], interessado)):
                 preenchidos += _preencher_pendencias(
                     db, doc["chave"], doc["xml"]
                 )
 
-    db.execute(text("""
-        UPDATE gfarm_dfe_cursores
+    db.execute(text(f"""
+        UPDATE {tabela_cursor}
            SET ult_nsu=:ult, max_nsu=:max, ultimo_status=:status,
                proxima_consulta=:proxima, atualizado_em=NOW()
-         WHERE cnpj=:cnpj
+         WHERE {coluna}=:interessado
     """), {
-        "cnpj": cnpj, "ult": ult_nsu, "max": max_nsu,
+        "interessado": interessado, "ult": ult_nsu, "max": max_nsu,
         "status": status, "proxima": agora + proxima,
     })
     logger.info(
         "Central fiscal %s: status %s; %s documentos cacheados; "
         "%s pendencias preenchidas; proximo ciclo apos intervalo.",
-        cnpj[-4:], status, len(documentos), preenchidos,
+        interessado[-4:], status, len(documentos), preenchidos,
     )
     return len(documentos)
 
@@ -475,8 +522,8 @@ def executar_sincronizacao_silenciosa():
                     # Falha de uma empresa nao interfere nas demais.
                     db.rollback()
                     logger.exception(
-                        "Central fiscal: erro interno no CNPJ final %s",
-                        perfil["cnpj"][-4:],
+                        "Central fiscal: erro interno no titular final %s",
+                        perfil["interessado"][-4:],
                     )
     except Exception:
         logger.exception("Central fiscal: agendamento indisponivel.")
