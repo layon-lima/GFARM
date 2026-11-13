@@ -134,10 +134,11 @@ def referencias(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _exigir_solicitar(user)
+    if not (tem_permissao(user, PERM_SOLICITAR) or tem_permissao(user, PERM_REVISAR)):
+        raise HTTPException(403, "Usuário sem permissão para consultar lavouras.")
     lavouras = db.scalars(select(Lavoura).order_by(Lavoura.nome)).all()
     setores = {setor.id: setor for setor in db.scalars(select(Setor)).all()}
-    escopo = setores_mobile_ids(user) if user.role != "admin" else None
+    escopo = setores_mobile_ids(user) if user.role != "admin" and not tem_permissao(user, PERM_REVISAR) else None
     produtos = db.scalars(select(Produto).order_by(Produto.nome)).all()
 
     return {
