@@ -21,7 +21,7 @@ from app.api.users import dep_permissao
 from app.core.access_control import setores_mobile_ids, tem_permissao
 from app.db.database import get_db
 from app.models import (
-    EstoqueDocumento, EstoqueDocumentoItem, EstoqueSaldo,
+    Deposito, Gaveta, EstoqueDocumento, EstoqueDocumentoItem, EstoqueSaldo,
     InformeSaidaLavoura, Lavoura, Produto, Setor, User,
 )
 from app.services.auditoria_erp import registrar_auditoria
@@ -35,6 +35,8 @@ PERM_REVISAR = "admin.informe_lavoura.revisar"
 class ProdutoSolicitado(BaseModel):
     produto_id: str = Field(min_length=1, max_length=100)
     quantidade: Decimal = Field(gt=0, max_digits=18, decimal_places=3, allow_inf_nan=False)
+    deposito_id: str | None = None
+    gaveta_id: str | None = None
 
 
 class DadosInforme(BaseModel):
@@ -87,7 +89,21 @@ def _itens_validados(db: Session, dados: DadosInforme, user: User, *, revisor=Fa
             raise HTTPException(400, f"O produto '{produto.nome}' não pertence aos setores de defensivos ou adubos.")
         if permitidos is not None and produto.setor_id not in permitidos:
             raise HTTPException(403, "Produto fora dos setores liberados para o usuário.")
+        deposito_id = str(item.deposito_id or "").strip() or None
+        gaveta_id = str(item.gaveta_id or "").strip() or None
+        if gaveta_id and not deposito_id:
+            raise HTTPException(400, "Informe o depósito para a gaveta selecionada.")
+        if deposito_id:
+            deposito = db.get(Deposito, deposito_id)
+            if not deposito or (deposito.setor_id and deposito.setor_id != produto.setor_id):
+                raise HTTPException(400, "O depósito não pertence ao setor deste produto.")
+        if gaveta_id:
+            gaveta = db.get(Gaveta, gaveta_id)
+            if not gaveta or gaveta.deposito_id != deposito_id:
+                raise HTTPException(400, "A gaveta não pertence ao depósito selecionado.")
         itens.append({
+            "deposito_id": deposito_id,
+            "gaveta_id": gaveta_id,
             "produto_id": produto.id,
             "produto_nome": produto.nome,
             "unidade": str(produto.unidade or "un"),
@@ -140,6 +156,30 @@ def referencias(
     setores = {setor.id: setor for setor in db.scalars(select(Setor)).all()}
     escopo = setores_mobile_ids(user) if user.role != "admin" and not tem_permissao(user, PERM_REVISAR) else None
     produtos = db.scalars(select(Produto).order_by(Produto.nome)).all()
+    depositos = {dep.id: dep for dep in db.scalars(select(Deposito)).all()}
+    gavetas = {gav.id: gav for gav in db.scalars(select(Gaveta)).all()}
+    saldos = db.scalars(
+        select(EstoqueSaldo).where(EstoqueSaldo.tipo_estoque == "livre")
+    ).all()
+    locais_por_produto = defaultdict(dict)
+    for saldo in saldos:
+        livre = Decimal(str(saldo.quantidade or 0)) - Decimal(str(saldo.quantidade_reservada or 0))
+        if livre <= 0:
+            continue
+        dep = depositos.get(saldo.deposito_id)
+        gav = gavetas.get(saldo.gaveta_id)
+        if not dep:
+            continue
+        chave = (saldo.deposito_id, saldo.gaveta_id or "")
+        nome = " — ".join(filter(None, [
+            str(dep.numero or dep.nome or "Depósito"),
+            str(gav.codigo) if gav else "",
+        ]))
+        locais_por_produto[saldo.produto_id][chave] = {
+            "deposito_id": saldo.deposito_id,
+            "gaveta_id": saldo.gaveta_id or None,
+            "nome": nome,
+        }
 
     return {
         "lavouras": [
@@ -154,6 +194,7 @@ def referencias(
                 "codigo": produto.codigo,
                 "unidade": produto.unidade or "un",
                 "setor": setores[produto.setor_id].nome,
+                "locais": list(locais_por_produto[produto.id].values()),
             }
             for produto in produtos
             if _setor_agricola(setores.get(produto.setor_id))
@@ -342,6 +383,19 @@ def _itens_para_motor(db: Session, item: InformeSaidaLavoura) -> list[dict]:
             livre = Decimal(str(saldo.quantidade or 0)) - Decimal(str(saldo.quantidade_reservada or 0))
             if livre > 0:
                 posicoes[(saldo.deposito_id, saldo.gaveta_id or "")] += livre
+
+        origem_deposito = str(solicitado.get("deposito_id") or "")
+        origem_gaveta = str(solicitado.get("gaveta_id") or "")
+        if origem_deposito:
+            posicoes = {
+                (dep, gav): qtd for (dep, gav), qtd in posicoes.items()
+                if dep == origem_deposito and gav == origem_gaveta
+            }
+        elif len(posicoes) > 1:
+            raise HTTPException(
+                409,
+                f"'{produto.nome}' possui estoque em mais de um local. Edite o informe e selecione o depósito/gaveta.",
+            )
 
         for (deposito_id, gaveta_id), disponivel in posicoes.items():
             if restante <= 0:
