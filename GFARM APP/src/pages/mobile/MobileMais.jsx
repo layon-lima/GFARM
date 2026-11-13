@@ -19,7 +19,7 @@ import { getDisplayInitial, getDisplayName } from '@/lib/userName';
 const LINKS = [
   { key: 'dashboard', to: '/', label: 'Pesquisa de estoque', icon: PackageSearch },
   { key: 'movimentacoes', to: '/movimentacoes', label: 'Movimentos', icon: ArrowLeftRight },
-  { key: 'aplicacao', to: '/aplicacao', label: 'Aplicação', icon: Sprout },
+  { key: 'informes-lavoura', to: '/informes-lavoura', label: 'Saída para Lavoura', icon: Sprout },
   { key: 'pesagem', to: '/pesagem', label: 'Pesagem', icon: Scale },
   { key: 'inventario', to: '/inventario', label: 'Inventário', icon: ClipboardList },
   { key: 'cadastros', to: '/cadastros', label: 'Cadastros', icon: Settings },
@@ -28,7 +28,10 @@ const LINKS = [
 export default function MobileMais() {
   const { user, logout } = useAuth();
 
-  const links = LINKS.filter((item) => mobilePageAllowed(user, item.key));
+  const links = LINKS.filter((item) => item.key === 'informes-lavoura'
+    ? hasPermission(user, 'mobile.informe_lavoura.solicitar')
+      || hasPermission(user, 'admin.informe_lavoura.revisar')
+    : mobilePageAllowed(user, item.key));
 
   return (
     <div className="mobile-page">
