@@ -1,6 +1,6 @@
 /**
- * Chama a extensao GFARM do Chrome/Edge: usa certificado TLS escolhido pelo
- * navegador, mas NUNCA le/exporta chaves privadas do repositorio Windows.
+ * Chama a extensao GFARM: a ponte local do Windows lista certificados publicos
+ * e faz TLS com o certificado escolhido, sem exportar a chave privada.
  */
 export function consultarExtensaoDfe(comando, campos = {}, timeoutMs = 120000) {
   const origem = window.location.origin;
@@ -21,7 +21,7 @@ export function consultarExtensaoDfe(comando, campos = {}, timeoutMs = 120000) {
       window.removeEventListener('message', receber);
       reject(new Error(
         comando === 'DFE_PING'
-          ? 'Extensao GFARM v0.2.0 nao encontrada. Atualize a extensao no Chrome/Edge.'
+          ? 'Extensao GFARM nao respondeu. Ative a versao 0.3.0, permita acesso ao site GFARM e recarregue a aba no Edge/Chrome.'
           : 'A consulta nao respondeu. Confira o certificado e a conexao.'
       ));
     }, timeoutMs);
