@@ -19,7 +19,7 @@ import { consultarExtensaoDfe } from '@/lib/sincronizarDfeNavegador';
 import { formatarValidadeInicial, interpretarValidadeLivre, linkConsultaFiscalNfe } from '@/lib/consultaFiscalNfe';
 const FSIST_URL = 'https://www.fsist.com.br/';
 const EXTENSAO_GFARM_URL =
-  'https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.1.0/gfarm-captura-xml-chrome.zip';
+  'https://github.com/layon-lima/GFARM/releases/download/gfarm-captura-xml-v0.2.0/gfarm-captura-xml-chrome.zip';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 async function request(path, method = 'GET', payload, signal) {
