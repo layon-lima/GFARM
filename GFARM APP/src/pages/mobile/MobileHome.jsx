@@ -11,7 +11,6 @@ import {
   Scale,
   Settings,
   ShieldCheck,
-  Sprout,
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/AuthContext';
@@ -64,11 +63,11 @@ const MOBILE_SHORTCUTS = [
     tone: 'slate',
   },
   {
-    key: 'aplicacao',
-    label: 'Aplicação',
-    description: 'Ordens de aplicação',
-    path: '/aplicacao',
-    icon: Sprout,
+    key: 'informes-lavoura',
+    label: 'Saída para Lavoura',
+    description: 'Informar retirada de defensivos e adubos',
+    path: '/informes-lavoura',
+    icon: Leaf,
     tone: 'green',
   },
   {
@@ -102,25 +101,15 @@ export default function MobileHome() {
   const navigate = useNavigate();
 
   const atalhosPermitidos = MOBILE_SHORTCUTS.filter(
-    (atalho) => mobilePageAllowed(user, atalho.key)
+    (atalho) => atalho.key === 'informes-lavoura'
+      ? hasPermission(user, 'mobile.informe_lavoura.solicitar')
+        || hasPermission(user, 'admin.informe_lavoura.revisar')
+      : mobilePageAllowed(user, atalho.key)
   );
 
   const entradaManualPermitida =
     hasPermission(user, 'mobile.estoque.entrada_manual_saldo')
     || hasPermission(user, 'admin.entrada_saldo_mobile.revisar');
-
-  const informePermitido =
-    hasPermission(user, 'mobile.informe_lavoura.solicitar')
-    || hasPermission(user, 'admin.informe_lavoura.revisar');
-
-  const atalhoInformeLavoura = {
-    key: 'informes-lavoura',
-    label: 'Saída para Lavoura',
-    description: 'Informar retirada de defensivos e adubos',
-    path: '/informes-lavoura',
-    icon: Leaf,
-    tone: 'green',
-  };
 
   const atalhoEntradaManual = {
     key: 'entrada-manual-saldo',
@@ -135,13 +124,9 @@ export default function MobileHome() {
     ? [atalhoEntradaManual, ...atalhosPermitidos]
     : atalhosPermitidos;
 
-  const atalhosComInforme = informePermitido
-    ? [atalhoInformeLavoura, ...atalhosComEntrada]
-    : atalhosComEntrada;
-
   const atalhosComAdmin = user?.role === 'admin'
-    ? [{ key: 'admin-mobile', label: 'Modo Admin', description: 'Cadastros para aprovação', path: '/admin-mobile', icon: ShieldCheck, tone: 'violet' }, ...atalhosComInforme]
-    : atalhosComInforme;
+    ? [{ key: 'admin-mobile', label: 'Modo Admin', description: 'Cadastros para aprovação', path: '/admin-mobile', icon: ShieldCheck, tone: 'violet' }, ...atalhosComEntrada]
+    : atalhosComEntrada;
 
   const { data, loading } = useEntidades({
     Produto: {},
