@@ -183,14 +183,14 @@ function ItensEditor({ itens, onChange, produtos, bloqueado = false }) {
                 onChange={(event) => setBuscaProduto(event.target.value)} />
             </div>
 
-            <div className="mobile-informe-picker-results" role="list">
+            <div className="mobile-informe-picker-results">
               {produtosFiltrados.map((produto) => {
                 const escolhido = produto.id === produtoAtual?.produto_id;
                 const indisponivel = itens.some((item) =>
                   item.key !== selecionando && item.produto_id === produto.id
                 );
                 return (
-                  <button type="button" role="listitem" key={produto.id}
+                  <button type="button" key={produto.id}
                     className={'mobile-informe-picker-result' +
                       (escolhido ? ' is-selected' : '')}
                     disabled={bloqueado || indisponivel}
@@ -542,11 +542,6 @@ export default function MobileInformeLavoura() {
                   </div>
                   <ItensEditor itens={editando.itens} produtos={produtos} bloqueado={busy}
                     onChange={(itens) => setEditando((prev) => ({ ...prev, itens }))} />
-                  <div className="space-y-1.5">
-                    <Label>Observação</Label>
-                    <Textarea rows={2} value={editando.observacao}
-                      onChange={(event) => setEditando((prev) => ({ ...prev, observacao: event.target.value }))} />
-                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Button type="button" variant="outline" disabled={busy} onClick={() => setEditando(null)}>Cancelar</Button>
                     <Button type="button" disabled={busy} onClick={() => executar('editar', item)}>
