@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -85,6 +85,9 @@ def registrar_auditoria(
     detalhe: str | None = None,
 ):
     registro = AuditoriaERP(
+        # Precisão de microssegundos para ordenar criação/edição mesmo
+        # quando realizadas no mesmo segundo (inclusive no SQLite CI).
+        created_date=datetime.now(timezone.utc),
         usuario_id=(
             usuario.id
             if usuario
