@@ -430,7 +430,7 @@ export default function UsuarioPermissoes() {
               onChange={() => toggleList(setPaginas, pagina.key)}
               title={pagina.label}
               description={pagina.key === 'aplicacao'
-                ? 'Ordens de Serviço no computador. No celular, libere Saída para Lavoura abaixo.'
+                ? 'Central de solicitações no computador. Para aprovar, o Sub ADM também precisa da permissão Revisar saída para lavoura.'
                 : 'Acesso ao módulo'}
             />
           ))}
