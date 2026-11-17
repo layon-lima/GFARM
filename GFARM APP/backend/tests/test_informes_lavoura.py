@@ -164,6 +164,44 @@ class InformeSaidaLavouraTest(unittest.TestCase):
             aprovar(item_id, user=self.adm, db=self.db)
         self.assertEqual(ctx.exception.status_code, 409)
 
+    def test_aprovacao_motor_real_baixa_e_valoriza_sem_duplicidade(self):
+        # Integração real com o motor; apenas locks/numeração exclusivos
+        # do PostgreSQL são neutralizados neste banco SQLite de testes.
+        from app.services import motor_estoque
+
+        item_id = self.criar()["id"]
+        with (
+            patch.object(motor_estoque, "_bloquear_chave"),
+            patch.object(
+                motor_estoque, "_proximo_numero_documento",
+                return_value="EST-TESTE-INFORME-01",
+            ),
+        ):
+            resultado = aprovar(item_id, user=self.adm, db=self.db)
+
+        self.assertEqual(resultado["status"], "APROVADO")
+        self.assertEqual(resultado["documento_estoque_id"] is not None, True)
+        saldo = self.db.get(EstoqueSaldo, "saldo-1")
+        self.assertEqual(float(saldo.quantidade), 15)
+        self.assertEqual(float(saldo.valor_total), 750)
+
+        docs = self.db.scalars(select(EstoqueDocumento).where(
+            EstoqueDocumento.origem_modulo == "informe_lavoura",
+        )).all()
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0].status, "contabilizado")
+        self.assertEqual(docs[0].documento_origem_id, item_id)
+        doc_itens = self.db.scalars(select(EstoqueDocumentoItem).where(
+            EstoqueDocumentoItem.documento_id == docs[0].id,
+        )).all()
+        self.assertEqual(sum(float(i.valor_total) for i in doc_itens), 250)
+
+        # Aprovação repetida jamais baixa novamente.
+        with self.assertRaises(HTTPException) as erro:
+            aprovar(item_id, user=self.adm, db=self.db)
+        self.assertEqual(erro.exception.status_code, 409)
+        self.assertEqual(float(self.db.get(EstoqueSaldo, "saldo-1").quantidade), 15)
+
     def test_custos_por_lavoura_usam_documentos_oficiais_e_os_historicas_separadas(self):
         informe = InformeSaidaLavoura(
             id=str(uuid4()), lavoura_id=self.lavoura.id,
