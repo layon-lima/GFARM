@@ -294,6 +294,8 @@ def custos_administrador(
     por_lavoura = defaultdict(lambda: {
         "custo_total": 0.0, "quantidade_informes": 0, "produtos": {},
     })
+    # Agrupa pelo ID, não pelo nome histórico (a lavoura pode ser renomeada).
+    nomes_historicos = {informe.lavoura_id: informe.lavoura_nome for informe in informes}
     detalhes = {informe.id: 0.0 for informe in informes}
     documentos_validos = set()
 
@@ -326,7 +328,7 @@ def custos_administrador(
                 continue
             documentos_validos.add(doc_id)
             valor_float = float(valor or 0)
-            lav = por_lavoura[(informe.lavoura_id, informe.lavoura_nome)]
+            lav = por_lavoura[informe.lavoura_id]
             lav["custo_total"] += valor_float
             detalhes[informe.id] += valor_float
             chave_produto = (produto_id, unidade)
@@ -353,7 +355,7 @@ def custos_administrador(
         documentos_validos.update(docs_contabilizados)
     for doc_id in documentos_validos:
         informe = doc_por_informe[doc_id]
-        por_lavoura[(informe.lavoura_id, informe.lavoura_nome)]["quantidade_informes"] += 1
+        por_lavoura[informe.lavoura_id]["quantidade_informes"] += 1
 
     # Registro histórico legado é somente leitura e fica separado dos
     # informes; não é contado duas vezes nem tratado como baixa nova.
@@ -373,17 +375,17 @@ def custos_administrador(
         dados["quantidade_os"] += 1
 
     resultado = []
-    chaves = set(por_lavoura)
-    for lavoura_id, lavoura in lavouras.items():
-        if lavoura_id in historico_os:
-            chaves.add((lavoura_id, lavoura.nome))
-    for lavoura_id, nome in chaves:
-        dados = por_lavoura[(lavoura_id, nome)]
+    chaves = set(por_lavoura) | set(historico_os)
+    for lavoura_id in chaves:
+        dados = por_lavoura[lavoura_id]
         area = float(lavouras[lavoura_id].hectares or 0) if lavoura_id in lavouras else 0
         legado = historico_os.get(lavoura_id, {"custo_total": 0.0, "quantidade_os": 0})
         resultado.append({
             "lavoura_id": lavoura_id,
-            "lavoura_nome": lavouras[lavoura_id].nome if lavoura_id in lavouras else nome,
+            "lavoura_nome": (
+                lavouras[lavoura_id].nome if lavoura_id in lavouras
+                else nomes_historicos.get(lavoura_id, lavoura_id)
+            ),
             "hectares": area,
             "custo_total": round(dados["custo_total"], 2),
             "quantidade_informes": dados["quantidade_informes"],
