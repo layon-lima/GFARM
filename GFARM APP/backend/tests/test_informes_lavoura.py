@@ -1,5 +1,6 @@
 """Regressões do informe de saída sem criar OS ou contabilidade paralela."""
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -15,8 +16,8 @@ from app.api.informes_lavoura import (
 )
 from app.db.database import Base
 from app.models import (
-    Deposito, EstoqueSaldo, InformeSaidaLavoura,
-    Lavoura, Produto, Setor, User,
+    Deposito, EstoqueDocumento, EstoqueDocumentoItem, EstoqueSaldo,
+    InformeSaidaLavoura, Lavoura, OrdemServicoAplicacao, Produto, Setor, User,
 )
 
 
@@ -162,6 +163,56 @@ class InformeSaidaLavouraTest(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             aprovar(item_id, user=self.adm, db=self.db)
         self.assertEqual(ctx.exception.status_code, 409)
+
+    def test_custos_por_lavoura_usam_documentos_oficiais_e_os_historicas_separadas(self):
+        informe = InformeSaidaLavoura(
+            id=str(uuid4()), lavoura_id=self.lavoura.id,
+            lavoura_nome="Nome antigo da lavoura",
+            itens=[{"produto_id": "prod-1", "quantidade": "5"}],
+            status="APROVADO", documento_estoque_id="documento-validado",
+        )
+        documento = EstoqueDocumento(
+            id="documento-validado",
+            numero="EST-TESTE-0001",
+            tipo_movimento="SAIDA_CONSUMO",
+            status="contabilizado",
+            origem_modulo="informe_lavoura",
+            documento_origem_id=informe.id,
+            usuario_id=self.adm.id,
+        )
+        itens = [
+            EstoqueDocumentoItem(
+                id="doc-item-1", documento_id=documento.id,
+                item_numero=1, produto_id=self.produto.id,
+                quantidade=2, unidade="L", custo_unitario=50, valor_total=100,
+            ),
+            EstoqueDocumentoItem(
+                id="doc-item-2", documento_id=documento.id,
+                item_numero=2, produto_id=self.produto.id,
+                quantidade=3, unidade="L", custo_unitario=50, valor_total=150,
+            ),
+        ]
+        antiga = OrdemServicoAplicacao(
+            id="os-legada-1", numero="OSA-000001", lavoura_id=self.lavoura.id,
+            lavoura_nome=self.lavoura.nome, hectares=100, status="baixada",
+            data=datetime.now(timezone.utc), custo_total=130,
+        )
+        self.db.add_all([informe, documento, *itens, antiga])
+        self.db.commit()
+
+        retorno = custos_administrador(user=self.adm, db=self.db)
+        self.assertEqual(len(retorno["lavouras"]), 1)
+        lav = retorno["lavouras"][0]
+        self.assertEqual(lav["lavoura_nome"], "Lavoura Teste")
+        self.assertEqual(lav["hectares"], 100)
+        self.assertEqual(lav["custo_total"], 250)
+        self.assertEqual(lav["custo_historico_os"], 130)
+        self.assertEqual(lav["quantidade_informes"], 1)
+        self.assertEqual(lav["quantidade_os_historicas"], 1)
+        self.assertEqual(len(lav["produtos"]), 1)
+        self.assertEqual(lav["produtos"][0]["quantidade"], 5)
+        self.assertEqual(lav["produtos"][0]["custo_total"], 250)
+        self.assertEqual(retorno["informes"][informe.id], 250)
 
     def test_custos_bloqueados_para_usuario_comum(self):
         with self.assertRaises(HTTPException) as ctx:
