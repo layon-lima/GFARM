@@ -24,6 +24,7 @@ export const informesLavouraApi = {
   minhas: () => request('/minhas'),
   solicitar: (dados) => request('', json(dados)),
   listaAdmin: () => request('/admin'),
+  historicoAdmin: (id) => request(`/admin/${encodeURIComponent(id)}/historico`),
   custosAdmin: () => request('/admin/custos'),
   editar: (id, dados) => request(`/admin/${encodeURIComponent(id)}`, {
     method: 'PATCH', body: JSON.stringify(dados),
