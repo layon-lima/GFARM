@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from app.api.informes_lavoura import (
     CriarInforme, DadosInforme, RecusarInforme,
     _itens_para_motor, aprovar, custos_administrador, editar,
-    minhas, recusar, solicitar,
+    historico_solicitacao, minhas, recusar, solicitar,
 )
 from app.db.database import Base
 from app.models import (
@@ -251,6 +251,72 @@ class InformeSaidaLavouraTest(unittest.TestCase):
         self.assertEqual(lav["produtos"][0]["quantidade"], 5)
         self.assertEqual(lav["produtos"][0]["custo_total"], 250)
         self.assertEqual(retorno["informes"][informe.id], 250)
+
+    def test_historico_individual_mostra_quem_editou_e_o_antes_depois(self):
+        # Exercita os eventos REAIS de auditoria, sem substituir por mocks.
+        self.audit.stop()
+        original = self.criar()
+        editado = editar(original["id"], self.dados("7"), user=self.adm, db=self.db)
+        self.assertEqual(editado["itens"][0]["quantidade"], "7")
+        detalhes = historico_solicitacao(original["id"], user=self.adm, db=self.db)
+        self.assertEqual(detalhes["solicitacao"]["solicitante_nome"], "Operador")
+        self.assertEqual(len(detalhes["eventos"]), 2)
+        criacao, alteracao = detalhes["eventos"]
+        self.assertEqual(criacao["acao"], "solicitar")
+        self.assertEqual(criacao["usuario_nome"], "Operador")
+        self.assertEqual(alteracao["acao"], "editar")
+        self.assertEqual(alteracao["usuario_nome"], "ADM")
+        self.assertTrue(alteracao["data"])
+        self.assertIn("Defensivo A — Quantidade", [a["campo"] for a in alteracao["alteracoes"]])
+        quantidade = next(a for a in alteracao["alteracoes"] if "Quantidade" in a["campo"])
+        self.assertEqual(quantidade["antes"], "5 L")
+        self.assertEqual(quantidade["depois"], "7 L")
+        self.assertNotIn("financeiro", detalhes)
+
+    def test_historico_sem_auditoria_nao_inventa_edicoes(self):
+        # Dados anteriores à auditoria mantêm autoria da própria solicitação.
+        item = self.criar()
+        detalhes = historico_solicitacao(item["id"], user=self.adm, db=self.db)
+        self.assertFalse(detalhes["auditoria_disponivel"])
+        self.assertEqual(detalhes["eventos"], [])
+        self.assertEqual(detalhes["solicitacao"]["solicitante_nome"], "Operador")
+
+    def test_historico_financeiro_apenas_para_admin_total(self):
+        item = self.criar()
+        documento = EstoqueDocumento(
+            id="doc-custos-historico",
+            numero="EST-001002",
+            tipo_movimento="SAIDA_CONSUMO",
+            status="contabilizado",
+            origem_modulo="informe_lavoura",
+            documento_origem_id=item["id"],
+            usuario_id=self.adm.id,
+        )
+        linha = EstoqueDocumentoItem(
+            id="item-custos-historico", documento_id=documento.id,
+            item_numero=1, produto_id=self.produto.id,
+            quantidade=5, unidade="L", custo_unitario=50, valor_total=250,
+        )
+        self.db.add_all([documento, linha])
+        informe = self.db.get(InformeSaidaLavoura, item["id"])
+        informe.documento_estoque_id = documento.id
+        informe.status = "APROVADO"
+        self.db.commit()
+
+        detalhes_adm = historico_solicitacao(item["id"], user=self.adm, db=self.db)
+        self.assertEqual(detalhes_adm["financeiro"]["custo_total"], 250)
+        self.assertEqual(detalhes_adm["financeiro"]["documento_numero"], "EST-001002")
+
+        revisor = User(
+            id="revisor-secundario", username="revisor",
+            password_hash="hash", display_name="Revisor",
+            role="subadmin", ativo=True,
+        )
+        self.db.add(revisor)
+        self.db.commit()
+        detalhes_revisor = historico_solicitacao(item["id"], user=revisor, db=self.db)
+        self.assertNotIn("financeiro", detalhes_revisor)
+        self.assertNotIn("custo_total", detalhes_revisor["solicitacao"])
 
     def test_custos_bloqueados_para_usuario_comum(self):
         with self.assertRaises(HTTPException) as ctx:
