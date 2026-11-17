@@ -30,6 +30,9 @@ const icones = {
 };
 
 export default function HistoricoInforme({ historico, carregando, erro }) {
+  if (erro) {
+    return <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{erro}</p>;
+  }
   if (carregando || !historico) {
     return (
       <div className="flex items-center gap-2 rounded-xl bg-[#f5faf7] px-3 py-3 text-xs text-slate-500">
@@ -37,10 +40,6 @@ export default function HistoricoInforme({ historico, carregando, erro }) {
       </div>
     );
   }
-  if (erro) {
-    return <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{erro}</p>;
-  }
-
   const { solicitacao, eventos = [], financeiro } = historico;
   return (
     <div className="space-y-3 border-t border-[#e3ede5] pt-3">
