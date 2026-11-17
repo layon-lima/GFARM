@@ -222,6 +222,22 @@ export default function Aplicacao() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  // Acompanha novas solicitações do mobile sem criar um segundo fluxo
+  // de baixa. Não atualiza enquanto há uma decisão/edição em andamento.
+  useEffect(() => {
+    if (!podeRevisar) return undefined;
+    const verificar = () => {
+      if (document.visibilityState !== 'visible' || busy || editando || acao) return;
+      carregar({ silencioso: true });
+    };
+    const timer = window.setInterval(verificar, 45000);
+    window.addEventListener('focus', verificar);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', verificar);
+    };
+  }, [podeRevisar, busy, editando, acao, carregar]);
+
   const contadores = useMemo(() => ({
     pendentes: lista.filter((i) => i.status === 'PENDENTE' || i.status === 'PROCESSANDO').length,
     aprovadas: lista.filter((i) => i.status === 'APROVADO').length,
