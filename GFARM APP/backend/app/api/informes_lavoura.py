@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,6 +30,7 @@ from app.services.motor_estoque import EstoqueErro, movimentar_estoque
 router = APIRouter(prefix="/api/informes-lavoura", tags=["Informes de saída para lavoura"])
 PERM_SOLICITAR = "mobile.informe_lavoura.solicitar"
 PERM_REVISAR = "admin.informe_lavoura.revisar"
+logger = logging.getLogger(__name__)
 
 
 class ProdutoSolicitado(BaseModel):
@@ -571,24 +573,35 @@ def aprovar(
     if item.status != "PENDENTE":
         raise HTTPException(409, "Esta solicitação já foi analisada.")
 
+    # Copiar informações simples ANTES de commit/rollback: consultar
+    # atributos ORM expirados após rollback abriria uma nova transação,
+    # violando o contrato do motor (que inicia with db.begin()).
+    aprovador_id = str(user.id)
+    aprovador_nome = _nome(user)
+
     # Trava a solicitação para impedir aprovação concorrente.
     item.status = "PROCESSANDO"
     db.commit()
 
     try:
-        # A sessão do auth e as leituras não podem entrar na transação do motor.
         item = db.get(InformeSaidaLavoura, item_id)
         movimentos = _itens_para_motor(db, item)
+        observacao_motor = (
+            f"Informe de saída para lavoura {item.lavoura_nome} "
+            f"({item.lavoura_id})."
+        )
+        # O motor de estoque só pode começar com sessão SEM transação ativa.
+        # Nenhum objeto ORM pode ser acessado entre este rollback e o motor.
         db.rollback()
 
         documento = movimentar_estoque(
             db,
             tipo_movimento="SAIDA_CONSUMO",
-            usuario_id=user.id,
+            usuario_id=aprovador_id,
             itens=movimentos,
             origem_modulo="informe_lavoura",
             documento_origem_id=item_id,
-            observacao=f"Informe de saída para lavoura {item.lavoura_nome} ({item.lavoura_id}).",
+            observacao=observacao_motor,
         )
         documento_id = str(documento.id)
         db.rollback()
@@ -596,8 +609,8 @@ def aprovar(
         item = db.get(InformeSaidaLavoura, item_id)
         item.status = "APROVADO"
         item.documento_estoque_id = documento_id
-        item.analisado_por_id = user.id
-        item.analisado_por_nome = _nome(user)
+        item.analisado_por_id = aprovador_id
+        item.analisado_por_nome = aprovador_nome
         item.analisado_em = datetime.now(timezone.utc)
         registrar_auditoria(
             db, usuario=user, acao="aprovar", entidade="InformeSaidaLavoura",
@@ -630,4 +643,10 @@ def aprovar(
             raise error
         if isinstance(error, EstoqueErro):
             raise HTTPException(409, str(error)) from error
-        raise HTTPException(500, "Não foi possível concluir a baixa. Verifique a solicitação antes de tentar novamente.") from error
+        logger.exception(
+            "Falha inesperada na aprovacao do informe %s", item_id,
+            exc_info=error,
+        )
+        raise HTTPException(
+            500, "Falha interna na aprovação. O erro foi registrado nos logs; a situação do informe foi preservada."
+        ) from error
