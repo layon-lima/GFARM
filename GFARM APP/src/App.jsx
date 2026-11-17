@@ -46,8 +46,8 @@ function ResponsiveInventario() {
 
 function ResponsiveAplicacao() {
   const isMobile = useIsMobile();
-  // Quem abrir um link antigo de Aplicação no celular vai para o informe.
-  // Ordens de Serviço permanecem intocadas no computador.
+  // Mesmo endereço, experiências específicas: informe no celular
+  // e central de aprovação e custos no Desktop. As OS antigas ficam no banco.
   return isMobile
     ? <Navigate to="/informes-lavoura" replace />
     : <Aplicacao />;
