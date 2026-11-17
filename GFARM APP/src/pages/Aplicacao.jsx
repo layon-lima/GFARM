@@ -194,6 +194,11 @@ export default function Aplicacao() {
   const [historicoCarregando, setHistoricoCarregando] = useState(false);
   const [historicoErro, setHistoricoErro] = useState('');
   const [historicoVersao, setHistoricoVersao] = useState(0);
+  const [historicoLista, setHistoricoLista] = useState([]);
+  const [historicoTotal, setHistoricoTotal] = useState(null);
+  const [historicoProximoOffset, setHistoricoProximoOffset] = useState(null);
+  const [historicoListaCarregando, setHistoricoListaCarregando] = useState(false);
+  const [historicoListaErro, setHistoricoListaErro] = useState('');
   const [lavouraSelecionada, setLavouraSelecionada] = useState(null);
   const [editando, setEditando] = useState(null);
   const [acao, setAcao] = useState(null);
@@ -243,6 +248,26 @@ export default function Aplicacao() {
     };
   }, [podeRevisar, busy, editando, acao, carregar]);
 
+  async function carregarPaginaHistorico(reiniciar = false) {
+    if (historicoListaCarregando) return;
+    const offset = reiniciar ? 0 : historicoProximoOffset;
+    if (offset === null) return;
+    setHistoricoListaCarregando(true);
+    setHistoricoListaErro('');
+    try {
+      const resposta = await informesLavouraApi.listaHistoricoAdmin(offset);
+      setHistoricoLista((antigos) => reiniciar
+        ? resposta.itens
+        : [...antigos, ...resposta.itens.filter((item) => !antigos.some((a) => a.id === item.id))]);
+      setHistoricoTotal(resposta.total);
+      setHistoricoProximoOffset(resposta.proximo_offset);
+    } catch (error) {
+      setHistoricoListaErro(error.message || 'Erro ao consultar o histórico.');
+    } finally {
+      setHistoricoListaCarregando(false);
+    }
+  }
+
   const contadores = useMemo(() => ({
     pendentes: lista.filter((i) => i.status === 'PENDENTE' || i.status === 'PROCESSANDO').length,
     aprovadas: lista.filter((i) => i.status === 'APROVADO').length,
@@ -251,7 +276,8 @@ export default function Aplicacao() {
 
   const listaFiltrada = useMemo(() => {
     const termo = normalizar(busca.trim());
-    return lista.filter((item) => {
+    const origem = filtro === 'TODOS' ? historicoLista : lista;
+    return origem.filter((item) => {
       if (filtro !== 'TODOS' && (filtro === 'PENDENTE' ? !['PENDENTE', 'PROCESSANDO'].includes(item.status) : item.status !== filtro)) {
         return false;
       }
@@ -261,7 +287,7 @@ export default function Aplicacao() {
         ...(item.itens || []).map((p) => p.produto_nome),
       ].join(' ')).includes(termo);
     });
-  }, [lista, filtro, busca]);
+  }, [lista, historicoLista, filtro, busca]);
   const selecionado = listaFiltrada.find((i) => i.id === selecionadoId) || listaFiltrada[0] || null;
   const selecionadoHistoricoId = selecionado?.id || null;
 
@@ -323,6 +349,7 @@ export default function Aplicacao() {
       setMotivo('');
       await carregar({ silencioso: true });
       setHistoricoVersao((versao) => versao + 1);
+      if (filtro === 'TODOS') carregarPaginaHistorico(true);
       toast({
         title: tipo === 'aprovar' ? 'Baixa contabilizada' : tipo === 'recusar' ? 'Solicitação recusada' : 'Solicitação atualizada',
         description: tipo === 'aprovar'
@@ -363,7 +390,10 @@ export default function Aplicacao() {
               <p className="text-xs text-slate-500">Saídas para lavoura</p>
             </div>
           </div>
-          <button type="button" onClick={() => carregar()} disabled={busy || loading}
+          <button type="button" onClick={() => {
+            carregar();
+            if (filtro === 'TODOS') carregarPaginaHistorico(true);
+          }} disabled={busy || loading || historicoListaCarregando}
             className="flex h-9 items-center gap-2 rounded-xl border border-[#d5e7db] bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-[#edf8f1]">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
@@ -399,9 +429,14 @@ export default function Aplicacao() {
                 { status: 'PENDENTE', nome: 'Pendentes', valor: contadores.pendentes, color: 'text-amber-700' },
                 { status: 'APROVADO', nome: 'Aprovadas', valor: contadores.aprovadas, color: 'text-emerald-700' },
                 { status: 'RECUSADO', nome: 'Recusadas', valor: contadores.recusadas, color: 'text-rose-700' },
-                { status: 'TODOS', nome: 'Histórico', valor: lista.length, color: 'text-[#146344]' },
+                { status: 'TODOS', nome: 'Histórico', valor: historicoTotal ?? lista.length, color: 'text-[#146344]' },
               ].map((card) => (
-                <button key={card.status} type="button" onClick={() => { setFiltro(card.status); setEditando(null); setAcao(null); }}
+                <button key={card.status} type="button" onClick={() => {
+                  setFiltro(card.status);
+                  setEditando(null);
+                  setAcao(null);
+                  if (card.status === 'TODOS') carregarPaginaHistorico(true);
+                }}
                   className={`${estiloCard} flex min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${filtro === card.status ? 'ring-2 ring-emerald-500/50' : 'hover:bg-[#f4fbf6]'}`}>
                   <span className="min-w-0 truncate text-xs font-semibold text-slate-500">{card.nome}</span>
                   <strong className={`text-lg tabular-nums ${card.color}`}>{card.valor}</strong>
@@ -442,6 +477,23 @@ export default function Aplicacao() {
                         <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
                       </button>
                     ))}
+                  </div>
+                )}
+                {filtro === 'TODOS' && (
+                  <div className="border-t border-[#e8f1ea] px-3 py-3">
+                    {historicoListaErro && (
+                      <p role="alert" className="mb-2 text-xs text-rose-700">{historicoListaErro}</p>
+                    )}
+                    {historicoProximoOffset !== null && (
+                      <button type="button" disabled={historicoListaCarregando}
+                        onClick={() => carregarPaginaHistorico(false)}
+                        className="w-full rounded-xl border border-[#d3e6d9] bg-[#f6faf7] px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
+                        {historicoListaCarregando ? 'Carregando...' : 'Carregar solicitações anteriores'}
+                      </button>
+                    )}
+                    {historicoListaCarregando && historicoLista.length === 0 && (
+                      <p className="text-center text-xs text-slate-500">Carregando histórico...</p>
+                    )}
                   </div>
                 )}
               </section>
