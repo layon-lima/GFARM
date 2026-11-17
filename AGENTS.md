@@ -235,6 +235,16 @@ A navegação mobile deve ser dinâmica conforme permissões do usuário.
 - A criação de informes requer `mobile.informe_lavoura.solicitar`; a revisão requer `admin.informe_lavoura.revisar` no catálogo central. Esses poderes são checados obrigatoriamente no backend.
 - Não gerar baixa na solicitação, não criar motor de custos paralelo, não alterar OS, documentos históricos nem saídas já aprovadas diretamente. Estornos posteriores devem usar o fluxo oficial de estoque.
 
+## 5.3 Aplicação no GFARM Desktop — nova central
+
+- A rota `/aplicacao` no Desktop agora apresenta a central de **Solicitações** e **Custos por Lavoura**. Não exibir mais o formulário de Ordem de Serviço nem a fila de baixa por OS nessa página.
+- A rota `/aplicacao` no mobile continua redirecionando para `/informes-lavoura`; a experiência mobile permanece dedicada ao registro rápido.
+- Os dois dispositivos compartilham **a mesma tabela e API** `/api/informes-lavoura`: criar no celular, revisar/editar/aprovar/recusar no Desktop ou no mobile administrativo.
+- Rever e aprovar requer `admin.informe_lavoura.revisar` no backend e a página desktop também respeita a permissão `page.aplicacao`; o Administrador Total tem acesso integral.
+- O relatório financeiro é exclusivo do ADM Total e agrega as saídas por lavoura/produto a partir de `EstoqueDocumentoItem.valor_total` somente de documentos efetivamente contabilizados.
+- As OS antigas **não são excluídas nem migradas**. Seu valor histórico `OrdemServicoAplicacao.custo_total` é exibido de forma **separada** no relatório, sem se misturar aos custos das novas solicitações. Não duplicar lançamentos, não recalcular ou editar o histórico das OS automaticamente.
+- O Desktop faz atualização periódica e ao recuperar o foco, mas suspende isso durante uma edição/aprovação. A baixa segue sendo executada **somente pelo motor oficial** após aprovação.
+
 ## 5.2 PWA
 
 - Mobile deve permanecer PWA instalável.
