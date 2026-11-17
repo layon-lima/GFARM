@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { hasPermission } from '@/lib/permissions';
 import { invalidateEntidade, invalidateEstoque } from '@/lib/useEntidades';
 import { useToast } from '@/components/ui/use-toast';
+import HistoricoInforme from '@/components/aplicacao/HistoricoInforme';
 
 const reais = (valor) => Number(valor || 0).toLocaleString('pt-BR', {
   style: 'currency', currency: 'BRL',
@@ -189,6 +190,10 @@ export default function Aplicacao() {
   const [referencias, setReferencias] = useState({ lavouras: [], produtos: [] });
   const [custos, setCustos] = useState({ lavouras: [], informes: {} });
   const [selecionadoId, setSelecionadoId] = useState(null);
+  const [historico, setHistorico] = useState(null);
+  const [historicoCarregando, setHistoricoCarregando] = useState(false);
+  const [historicoErro, setHistoricoErro] = useState('');
+  const [historicoVersao, setHistoricoVersao] = useState(0);
   const [lavouraSelecionada, setLavouraSelecionada] = useState(null);
   const [editando, setEditando] = useState(null);
   const [acao, setAcao] = useState(null);
@@ -247,7 +252,7 @@ export default function Aplicacao() {
   const listaFiltrada = useMemo(() => {
     const termo = normalizar(busca.trim());
     return lista.filter((item) => {
-      if (filtro === 'PENDENTE' ? !['PENDENTE', 'PROCESSANDO'].includes(item.status) : item.status !== filtro) {
+      if (filtro !== 'TODOS' && (filtro === 'PENDENTE' ? !['PENDENTE', 'PROCESSANDO'].includes(item.status) : item.status !== filtro)) {
         return false;
       }
       if (!termo) return true;
@@ -258,6 +263,24 @@ export default function Aplicacao() {
     });
   }, [lista, filtro, busca]);
   const selecionado = listaFiltrada.find((i) => i.id === selecionadoId) || listaFiltrada[0] || null;
+  const selecionadoHistoricoId = selecionado?.id || null;
+
+  useEffect(() => {
+    if (!podeRevisar || !selecionadoHistoricoId || aba !== 'solicitacoes') {
+      setHistorico(null);
+      setHistoricoErro('');
+      return undefined;
+    }
+    let ativo = true;
+    setHistorico(null);
+    setHistoricoCarregando(true);
+    setHistoricoErro('');
+    informesLavouraApi.historicoAdmin(selecionadoHistoricoId)
+      .then((resultado) => { if (ativo) setHistorico(resultado); })
+      .catch((error) => { if (ativo) setHistoricoErro(error.message || 'Não foi possível consultar o histórico.'); })
+      .finally(() => { if (ativo) setHistoricoCarregando(false); });
+    return () => { ativo = false; };
+  }, [podeRevisar, selecionadoHistoricoId, aba, historicoVersao]);
   const custoTotalNovo = custos.lavouras.reduce((acc, lav) => acc + Number(lav.custo_total || 0), 0);
   const custoTotalOS = custos.lavouras.reduce((acc, lav) => acc + Number(lav.custo_historico_os || 0), 0);
   const lavourasFiltradas = custos.lavouras.filter((lav) => normalizar(lav.lavoura_nome).includes(normalizar(busca)));
@@ -299,6 +322,7 @@ export default function Aplicacao() {
       setAcao(null);
       setMotivo('');
       await carregar({ silencioso: true });
+      setHistoricoVersao((versao) => versao + 1);
       toast({
         title: tipo === 'aprovar' ? 'Baixa contabilizada' : tipo === 'recusar' ? 'Solicitação recusada' : 'Solicitação atualizada',
         description: tipo === 'aprovar'
@@ -370,11 +394,12 @@ export default function Aplicacao() {
           <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-emerald-700" /></div>
         ) : aba === 'solicitacoes' ? (
           <>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[
                 { status: 'PENDENTE', nome: 'Pendentes', valor: contadores.pendentes, color: 'text-amber-700' },
                 { status: 'APROVADO', nome: 'Aprovadas', valor: contadores.aprovadas, color: 'text-emerald-700' },
                 { status: 'RECUSADO', nome: 'Recusadas', valor: contadores.recusadas, color: 'text-rose-700' },
+                { status: 'TODOS', nome: 'Histórico', valor: lista.length, color: 'text-[#146344]' },
               ].map((card) => (
                 <button key={card.status} type="button" onClick={() => { setFiltro(card.status); setEditando(null); setAcao(null); }}
                   className={`${estiloCard} flex min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${filtro === card.status ? 'ring-2 ring-emerald-500/50' : 'hover:bg-[#f4fbf6]'}`}>
@@ -393,7 +418,7 @@ export default function Aplicacao() {
             <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
               <section className={`${estiloCard} min-w-0 overflow-hidden`}>
                 <div className="flex items-center justify-between gap-2 border-b border-[#edf2ee] px-3 py-2.5">
-                  <h2 className="text-sm font-semibold">Solicitações</h2>
+                  <h2 className="text-sm font-semibold">{filtro === 'TODOS' ? 'Histórico de solicitações' : 'Solicitações'}</h2>
                   <span className="text-xs text-slate-500">{listaFiltrada.length} registro(s)</span>
                 </div>
                 {!listaFiltrada.length ? (
@@ -470,6 +495,12 @@ export default function Aplicacao() {
                             <p className="mt-1 text-[11px] text-emerald-700">Aprovado por {selecionado.analisado_por_nome || 'ADM'} em {dataBR(selecionado.analisado_em)}</p>
                           </div>
                         )}
+
+                        <HistoricoInforme
+                          historico={historico?.solicitacao?.id === selecionado.id ? historico : null}
+                          carregando={historicoCarregando}
+                          erro={historicoErro}
+                        />
 
                         {selecionado.status === 'PROCESSANDO' && (
                           <button type="button" disabled={busy}
