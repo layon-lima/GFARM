@@ -12,7 +12,7 @@ import json
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -266,6 +266,28 @@ def listar_admin(
     # Retorna apenas dados operacionais para revisores.
     # Custos são restritos ao Administrador Total no endpoint separado.
     return [_resumo(item) for item in itens]
+
+
+@router.get("/admin/historico/lista")
+def listar_historico_admin(
+    offset: int = Query(default=0, ge=0),
+    limite: int = Query(default=100, ge=1, le=200),
+    _: User = Depends(dep_permissao(PERM_REVISAR)),
+    db: Session = Depends(get_db),
+):
+    """Paginação do histórico para manter disponíveis registros antigos."""
+    total = int(db.scalar(select(func.count()).select_from(InformeSaidaLavoura)) or 0)
+    itens = db.scalars(
+        select(InformeSaidaLavoura)
+        .order_by(InformeSaidaLavoura.created_date.desc(), InformeSaidaLavoura.id.desc())
+        .offset(offset).limit(limite)
+    ).all()
+    proximo_offset = offset + len(itens)
+    return {
+        "itens": [_resumo(item) for item in itens],
+        "total": total,
+        "proximo_offset": proximo_offset if proximo_offset < total else None,
+    }
 
 
 def _snapshot_auditoria(valor: str | None) -> dict:
