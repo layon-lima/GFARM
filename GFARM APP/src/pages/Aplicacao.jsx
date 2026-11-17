@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign,
-  ClipboardCheck, Clock3, Leaf, Loader2, Package, Pencil,
+  Check, CheckCircle2, ChevronRight, CircleDollarSign,
+  ClipboardCheck, Leaf, Loader2, Package, Pencil,
   Plus, RefreshCw, Search, ShieldAlert, Sprout, Trash2, X,
 } from 'lucide-react';
 
