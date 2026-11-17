@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import json
 import logging
 from uuid import UUID
 
@@ -21,7 +22,7 @@ from app.api.users import dep_permissao
 from app.core.access_control import setores_mobile_ids, tem_permissao
 from app.db.database import get_db
 from app.models import (
-    Deposito, Gaveta, EstoqueDocumento, EstoqueDocumentoItem, EstoqueSaldo,
+    AuditoriaERP, Deposito, Gaveta, EstoqueDocumento, EstoqueDocumentoItem, EstoqueSaldo,
     InformeSaidaLavoura, Lavoura, OrdemServicoAplicacao, Produto, Setor, User,
 )
 from app.services.auditoria_erp import registrar_auditoria
@@ -265,6 +266,173 @@ def listar_admin(
     # Retorna apenas dados operacionais para revisores.
     # Custos são restritos ao Administrador Total no endpoint separado.
     return [_resumo(item) for item in itens]
+
+
+def _snapshot_auditoria(valor: str | None) -> dict:
+    """Somente campos operacionais de snapshots de InformeSaidaLavoura."""
+    try:
+        dados = json.loads(valor) if valor else {}
+    except (TypeError, ValueError):
+        dados = {}
+    if not isinstance(dados, dict):
+        return {}
+    permitidos = (
+        "id", "lavoura_id", "lavoura_nome", "itens", "observacao",
+        "status", "solicitante_nome", "created_date", "analisado_por_nome",
+        "analisado_em", "motivo_recusa", "documento_estoque_id",
+    )
+    return {chave: dados[chave] for chave in permitidos if chave in dados}
+
+
+def _alteracoes_registradas(antes: dict, depois: dict) -> list[dict]:
+    """Diferenças reais, inclusive produtos adicionados/removidos."""
+    if not antes or not depois:
+        return []
+    alteracoes = []
+    for campo, rotulo in (
+        ("lavoura_nome", "Lavoura"),
+        ("observacao", "Observação"),
+        ("status", "Situação"),
+        ("motivo_recusa", "Motivo da recusa"),
+    ):
+        if str(antes.get(campo) or "") != str(depois.get(campo) or ""):
+            alteracoes.append({
+                "campo": rotulo,
+                "antes": str(antes.get(campo) or "—"),
+                "depois": str(depois.get(campo) or "—"),
+            })
+
+    anteriores = {
+        str(i.get("produto_id")): i for i in (antes.get("itens") or [])
+        if isinstance(i, dict) and i.get("produto_id")
+    }
+    posteriores = {
+        str(i.get("produto_id")): i for i in (depois.get("itens") or [])
+        if isinstance(i, dict) and i.get("produto_id")
+    }
+    for produto_id in dict.fromkeys([*anteriores, *posteriores]):
+        origem, destino = anteriores.get(produto_id), posteriores.get(produto_id)
+        nome = (destino or origem).get("produto_nome") or produto_id
+        if origem is None:
+            alteracoes.append({
+                "campo": f"Produto adicionado: {nome}", "antes": "—",
+                "depois": f'{destino.get("quantidade", "")} {destino.get("unidade", "")}'.strip(),
+            })
+        elif destino is None:
+            alteracoes.append({
+                "campo": f"Produto removido: {nome}",
+                "antes": f'{origem.get("quantidade", "")} {origem.get("unidade", "")}'.strip(),
+                "depois": "—",
+            })
+        else:
+            for campo, rotulo in (
+                ("quantidade", "Quantidade"),
+                ("deposito_id", "Depósito"),
+                ("gaveta_id", "Gaveta"),
+            ):
+                anterior = str(origem.get(campo) or "")
+                posterior = str(destino.get(campo) or "")
+                if anterior != posterior:
+                    sufixo = f' {destino.get("unidade") or origem.get("unidade") or ""}' if campo == "quantidade" else ""
+                    alteracoes.append({
+                        "campo": f"{nome} — {rotulo}",
+                        "antes": f"{anterior}{sufixo}" if anterior else "—",
+                        "depois": f"{posterior}{sufixo}" if posterior else "—",
+                    })
+    return alteracoes
+
+
+@router.get("/admin/{item_id}/historico")
+def historico_solicitacao(
+    item_id: str,
+    user: User = Depends(dep_permissao(PERM_REVISAR)),
+    db: Session = Depends(get_db),
+):
+    """Histórico auditável, individual e somente leitura.
+
+    Subadministradores recebem dados operacionais, nunca valores financeiros.
+    Valores são derivados do documento oficial, exclusivamente para ADM Total.
+    """
+    item = db.get(InformeSaidaLavoura, item_id)
+    if item is None:
+        raise HTTPException(404, "Informe não encontrado.")
+    eventos_db = db.scalars(
+        select(AuditoriaERP).where(
+            AuditoriaERP.entidade == "InformeSaidaLavoura",
+            AuditoriaERP.registro_id == item_id,
+        ).order_by(AuditoriaERP.created_date.asc(), AuditoriaERP.id.asc())
+    ).all()
+
+    eventos = []
+    for evento in eventos_db:
+        antes = _snapshot_auditoria(evento.antes_json)
+        depois = _snapshot_auditoria(evento.depois_json)
+        eventos.append({
+            "id": evento.id,
+            "acao": evento.acao,
+            "usuario_id": evento.usuario_id,
+            "usuario_nome": evento.usuario_nome or "Usuário não identificado",
+            "data": evento.created_date,
+            "detalhe": evento.detalhe,
+            "alteracoes": _alteracoes_registradas(antes, depois),
+            "estado_antes": antes,
+            "estado_depois": depois,
+        })
+
+    depositos = {d.id: d.numero or d.nome or d.id for d in db.scalars(select(Deposito)).all()}
+    gavetas = {g.id: g.codigo or g.id for g in db.scalars(select(Gaveta)).all()}
+    produtos = {p.id: p for p in db.scalars(select(Produto)).all()}
+    itens_detalhados = []
+    for linha in item.itens or []:
+        produto = produtos.get(linha.get("produto_id"))
+        itens_detalhados.append({
+            **linha,
+            "produto_codigo": produto.codigo if produto else None,
+            "deposito_nome": depositos.get(linha.get("deposito_id")),
+            "gaveta_nome": gavetas.get(linha.get("gaveta_id")),
+        })
+
+    resposta = {
+        "solicitacao": {
+            **_resumo(item), "itens": itens_detalhados,
+            "solicitante_id": item.created_by_id,
+            "atualizado_em": item.updated_date,
+        },
+        "eventos": eventos,
+        "auditoria_disponivel": bool(eventos),
+    }
+
+    if user.role == "admin" and item.documento_estoque_id:
+        documento = db.scalar(select(EstoqueDocumento).where(
+            EstoqueDocumento.id == item.documento_estoque_id,
+            EstoqueDocumento.origem_modulo == "informe_lavoura",
+            EstoqueDocumento.documento_origem_id == item.id,
+            EstoqueDocumento.tipo_movimento == "SAIDA_CONSUMO",
+            EstoqueDocumento.status == "contabilizado",
+        ))
+        if documento is not None:
+            linhas = db.scalars(select(EstoqueDocumentoItem).where(
+                EstoqueDocumentoItem.documento_id == documento.id
+            )).all()
+            resposta["financeiro"] = {
+                "documento_numero": documento.numero,
+                "documento_id": documento.id,
+                "contabilizado_em": documento.contabilizado_em,
+                "custo_total": round(sum(float(l.valor_total or 0) for l in linhas), 2),
+                "itens": [
+                    {
+                        "produto_id": linha.produto_id,
+                        "produto_nome": produtos[linha.produto_id].nome
+                        if linha.produto_id in produtos else linha.produto_id,
+                        "quantidade": float(linha.quantidade or 0),
+                        "unidade": linha.unidade,
+                        "custo_unitario": float(linha.custo_unitario or 0),
+                        "valor_total": float(linha.valor_total or 0),
+                    }
+                    for linha in linhas
+                ],
+            }
+    return resposta
 
 
 @router.get("/admin/custos")
