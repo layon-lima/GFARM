@@ -21,7 +21,7 @@ from app.core.access_control import setores_mobile_ids, tem_permissao
 from app.db.database import get_db
 from app.models import (
     Deposito, Gaveta, EstoqueDocumento, EstoqueDocumentoItem, EstoqueSaldo,
-    InformeSaidaLavoura, Lavoura, Produto, Setor, User,
+    InformeSaidaLavoura, Lavoura, OrdemServicoAplicacao, Produto, Setor, User,
 )
 from app.services.auditoria_erp import registrar_auditoria
 from app.services.motor_estoque import EstoqueErro, movimentar_estoque
@@ -270,29 +270,136 @@ def custos_administrador(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Custos contabilizados dos informes e histórico de OS legado separados.
+
+    Valores dos informes vêm somente dos itens do documento oficial.
+    Valores legados vêm do custo_total gravado na OS antiga; jamais
+    alterá-los nem adicioná-los ao custo oficial dos informes.
+    """
     if user.role != "admin":
         raise HTTPException(403, "Custos disponíveis apenas para Administrador Total.")
-    itens = db.scalars(
+
+    informes = db.scalars(
         select(InformeSaidaLavoura)
         .where(InformeSaidaLavoura.status == "APROVADO")
         .order_by(InformeSaidaLavoura.created_date.desc())
     ).all()
-    custos = _custos_documentos(db, [item.documento_estoque_id for item in itens])
-    por_lavoura = defaultdict(lambda: {"custo_total": 0.0, "quantidade_informes": 0})
-    detalhes = {}
-    for item in itens:
-        valor = custos.get(item.documento_estoque_id, 0.0)
-        dados = por_lavoura[(item.lavoura_id, item.lavoura_nome)]
-        dados["custo_total"] += valor
-        dados["quantidade_informes"] += 1
-        detalhes[item.id] = valor
-    return {
-        "lavouras": [
-            {"lavoura_id": lav_id, "lavoura_nome": nome, **dados}
-            for (lav_id, nome), dados in por_lavoura.items()
-        ],
-        "informes": detalhes,
+    doc_por_informe = {
+        str(informe.documento_estoque_id): informe
+        for informe in informes if informe.documento_estoque_id
     }
+    ids = list(doc_por_informe)
+    lavouras = {lav.id: lav for lav in db.scalars(select(Lavoura)).all()}
+    produtos = {prod.id: prod for prod in db.scalars(select(Produto)).all()}
+    por_lavoura = defaultdict(lambda: {
+        "custo_total": 0.0, "quantidade_informes": 0, "produtos": {},
+    })
+    detalhes = {informe.id: 0.0 for informe in informes}
+    documentos_validos = set()
+
+    if ids:
+        # Lotes/localizações podem criar várias linhas para o mesmo produto;
+        # a soma por produto usa SOMENTE valores efetivamente contabilizados.
+        linhas = db.execute(
+            select(
+                EstoqueDocumentoItem.documento_id,
+                EstoqueDocumentoItem.produto_id,
+                EstoqueDocumentoItem.unidade,
+                func.sum(EstoqueDocumentoItem.quantidade),
+                func.sum(EstoqueDocumentoItem.valor_total),
+            )
+            .join(EstoqueDocumento, EstoqueDocumento.id == EstoqueDocumentoItem.documento_id)
+            .where(
+                EstoqueDocumentoItem.documento_id.in_(ids),
+                EstoqueDocumento.status == "contabilizado",
+                EstoqueDocumento.origem_modulo == "informe_lavoura",
+            )
+            .group_by(
+                EstoqueDocumentoItem.documento_id,
+                EstoqueDocumentoItem.produto_id,
+                EstoqueDocumentoItem.unidade,
+            )
+        ).all()
+        for doc_id, produto_id, unidade, quantidade, valor in linhas:
+            informe = doc_por_informe.get(doc_id)
+            if informe is None:
+                continue
+            documentos_validos.add(doc_id)
+            valor_float = float(valor or 0)
+            lav = por_lavoura[(informe.lavoura_id, informe.lavoura_nome)]
+            lav["custo_total"] += valor_float
+            detalhes[informe.id] += valor_float
+            chave_produto = (produto_id, unidade)
+            produto = lav["produtos"].setdefault(chave_produto, {
+                "produto_id": produto_id,
+                "produto_nome": produtos[produto_id].nome if produto_id in produtos else produto_id,
+                "unidade": unidade,
+                "quantidade": 0.0,
+                "custo_total": 0.0,
+            })
+            produto["quantidade"] += float(quantidade or 0)
+            produto["custo_total"] += valor_float
+
+    # Conta documentos de valor zero também quando efetivamente contabilizados.
+    if ids:
+        docs_contabilizados = set(db.scalars(
+            select(EstoqueDocumento.id)
+            .where(
+                EstoqueDocumento.id.in_(ids),
+                EstoqueDocumento.status == "contabilizado",
+                EstoqueDocumento.origem_modulo == "informe_lavoura",
+            )
+        ).all())
+        documentos_validos.update(docs_contabilizados)
+    for doc_id in documentos_validos:
+        informe = doc_por_informe[doc_id]
+        por_lavoura[(informe.lavoura_id, informe.lavoura_nome)]["quantidade_informes"] += 1
+
+    # Registro histórico legado é somente leitura e fica separado dos
+    # informes; não é contado duas vezes nem tratado como baixa nova.
+    historico_os = defaultdict(lambda: {
+        "custo_total": 0.0, "quantidade_os": 0,
+    })
+    antigas = db.scalars(
+        select(OrdemServicoAplicacao).where(
+            OrdemServicoAplicacao.status.in_(("baixada", "executada"))
+        )
+    ).all()
+    for os in antigas:
+        if not os.lavoura_id:
+            continue
+        dados = historico_os[os.lavoura_id]
+        dados["custo_total"] += float(os.custo_total or 0)
+        dados["quantidade_os"] += 1
+
+    resultado = []
+    chaves = set(por_lavoura)
+    for lavoura_id, lavoura in lavouras.items():
+        if lavoura_id in historico_os:
+            chaves.add((lavoura_id, lavoura.nome))
+    for lavoura_id, nome in chaves:
+        dados = por_lavoura[(lavoura_id, nome)]
+        area = float(lavouras[lavoura_id].hectares or 0) if lavoura_id in lavouras else 0
+        legado = historico_os.get(lavoura_id, {"custo_total": 0.0, "quantidade_os": 0})
+        resultado.append({
+            "lavoura_id": lavoura_id,
+            "lavoura_nome": lavouras[lavoura_id].nome if lavoura_id in lavouras else nome,
+            "hectares": area,
+            "custo_total": round(dados["custo_total"], 2),
+            "quantidade_informes": dados["quantidade_informes"],
+            "custo_historico_os": round(legado["custo_total"], 2),
+            "quantidade_os_historicas": legado["quantidade_os"],
+            "produtos": sorted(
+                (
+                    {**produto, "quantidade": round(produto["quantidade"], 3),
+                     "custo_total": round(produto["custo_total"], 2)}
+                    for produto in dados["produtos"].values()
+                ),
+                key=lambda p: p["custo_total"], reverse=True,
+            ),
+        })
+    resultado.sort(key=lambda lav: lav["custo_total"] + lav["custo_historico_os"], reverse=True)
+    return {"lavouras": resultado, "informes": detalhes}
 
 
 @router.patch("/admin/{item_id}")
